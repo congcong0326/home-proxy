@@ -1,0 +1,27 @@
+# Normalize line endings to LF for text files
+* text eol=lf
+
+# Treat common binary types
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg text eol=lf
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+
+# Preserve CRLF for Windows batch scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Keep shell scripts LF
+*.sh text eol=lf
+
+# Ensure Java sources are treated as text
+*.java text eol=lf
+*.xml  text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.properties text eol=lf
+*.md   text eol=lf

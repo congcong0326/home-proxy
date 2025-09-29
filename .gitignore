@@ -1,0 +1,49 @@
+# Root .gitignore for NasProxy multi-module Maven project
+
+# Maven build outputs
+/target/
+**/target/
+
+# Gradle/other build outputs (in case)
+/out/
+/build/
+
+# IDE files
+/.idea/
+**/*.iml
+/.vscode/
+/.settings/
+/.classpath
+/.project
+
+# Logs
+/logs/
+**/*.log
+
+# OS/system files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.orig
+
+# Compiled classes
+**/*.class
+
+# Keep Maven Wrapper scripts and directory (do not ignore)
+.mvn/
+mvnw
+mvnw.cmd
+
+# Node (if any submodule uses it later)
+/node_modules/
+**/node_modules/
+
+# Dist artifacts outside target (optional)
+# /dist/
+# **/*.zip
+# **/*.tar.gz
