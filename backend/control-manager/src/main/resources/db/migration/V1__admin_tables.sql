@@ -13,26 +13,7 @@ CREATE TABLE IF NOT EXISTS admin_user (
     updated_at DATETIME NOT NULL,
     UNIQUE KEY uk_admin_user_username (username)
 );
--- 插入默认管理员账号
-INSERT INTO admin_user (
-    username,
-    password_hash,
-    roles,
-    must_change_password,
-    ver,
-    status,
-    created_at,
-    updated_at
-) VALUES (
-            'admin',
-             '$2a$10$Dow1qSv7t0hVq6f5iJZ0yeTqkPo2Vv7kP83Yx2YDR6EivEt7Tz7yW',
-             'ADMIN',
-             1,
-             1,
-             1,
-             NOW(),
-             NOW()
-         );
+-- 默认管理员账号将在应用启动时自动创建
 -- 登录历史
 CREATE TABLE IF NOT EXISTS admin_login_history (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,

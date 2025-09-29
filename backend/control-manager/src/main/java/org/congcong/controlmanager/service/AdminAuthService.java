@@ -188,6 +188,32 @@ public class AdminAuthService {
     }
     
     /**
+     * 检查并创建默认管理员账号
+     * 在应用启动时调用，如果没有管理员账号则创建默认的admin账号
+     */
+    public void ensureDefaultAdminExists() {
+        // 检查是否已存在管理员账号
+        long adminCount = userRepo.count();
+        if (adminCount > 0) {
+            return; // 已有管理员，无需创建
+        }
+        
+        // 创建默认管理员账号
+        AdminUser defaultAdmin = new AdminUser();
+        defaultAdmin.setUsername("admin");
+        // 默认密码为 "admin123"，用户首次登录时必须修改
+        defaultAdmin.setPasswordHash(encoder.encode("admin123"));
+        defaultAdmin.setRoles(AdminRole.SUPER_ADMIN.getCode());
+        defaultAdmin.setMustChangePassword(true);
+        defaultAdmin.setVer(1);
+        defaultAdmin.setStatus(1);
+        defaultAdmin.setCreatedAt(LocalDateTime.now());
+        defaultAdmin.setUpdatedAt(LocalDateTime.now());
+        
+        userRepo.save(defaultAdmin);
+    }
+
+    /**
      * 检查用户是否为超级管理员
      */
     private boolean isSuperAdmin(AdminUser user) {
