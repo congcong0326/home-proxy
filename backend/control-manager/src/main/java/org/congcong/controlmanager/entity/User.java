@@ -2,16 +2,13 @@ package org.congcong.controlmanager.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.time.LocalDateTime;
 
 @Data
 @Entity
-@Table(name = "admin_user")
-public class AdminUser {
-    // Getters & Setters
+@Table(name = "users")
+public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -19,20 +16,14 @@ public class AdminUser {
     @Column(nullable = false, unique = true, length = 64)
     private String username;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
-    private String passwordHash;
-
-    @Column(nullable = false, length = 255)
-    private String roles; // 逗号分隔，例如 "ADMIN"
-
-    @Column(name = "must_change_password", nullable = false)
-    private boolean mustChangePassword = true;
+    @Column(length = 255)
+    private String credential;
 
     @Column(nullable = false)
-    private int ver = 1;
+    private Integer status = 1; // 1=enabled, 0=disabled
 
-    @Column(nullable = false)
-    private int status = 1; // 1=启用，0=禁用
+    @Column(length = 255)
+    private String remark;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -51,5 +42,4 @@ public class AdminUser {
     public void preUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
 }

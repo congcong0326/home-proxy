@@ -1,0 +1,76 @@
+package org.congcong.controlmanager.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import lombok.Data;
+import org.congcong.common.enums.ProtocolType;
+
+import java.util.List;
+
+/**
+ * 创建入站配置请求DTO
+ */
+@Data
+public class InboundConfigCreateRequest {
+
+    /**
+     * 配置名称
+     */
+    @NotBlank(message = "配置名称不能为空")
+    private String name;
+
+    /**
+     * 协议类型
+     */
+    @NotNull(message = "协议类型不能为空")
+    private ProtocolType protocol;
+
+    /**
+     * 监听IP
+     */
+    @NotBlank(message = "监听IP不能为空")
+    private String listenIp = "0.0.0.0";
+
+    /**
+     * 端口
+     */
+    @NotNull(message = "端口不能为空")
+    @Positive(message = "端口必须为正数")
+    private Integer port;
+
+    /**
+     * 是否启用TLS
+     */
+    private Boolean tlsEnabled = false;
+
+    /**
+     * 是否启用嗅探
+     */
+    private Boolean sniffEnabled = false;
+
+    /**
+     * Shadowsocks加密方法
+     */
+    private String ssMethod;
+
+    /**
+     * 允许的用户ID列表
+     */
+    private List<String> allowedUserIds;
+
+    /**
+     * 路由ID列表
+     */
+    private List<String> routeIds;
+
+    /**
+     * 状态
+     */
+    private Integer status = 1;
+
+    /**
+     * 备注
+     */
+    private String notes;
+}

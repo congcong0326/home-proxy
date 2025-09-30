@@ -21,6 +21,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <spring-restdocs.version>3.0.0</spring-restdocs.version>
     <lombok.version>1.18.32</lombok.version>
+    <nas-proxy-version>2.0</nas-proxy-version>
   </properties>
 
   <!--  聚合工程不要生成jar，所以指定前模块最终打包的类型为POM-->
@@ -44,6 +45,7 @@
         <type>pom</type>
         <scope>import</scope>
       </dependency>
+
     </dependencies>
   </dependencyManagement>
 
