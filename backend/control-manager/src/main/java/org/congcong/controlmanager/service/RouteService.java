@@ -26,6 +26,7 @@ import java.util.Optional;
 public class RouteService {
 
     private final RouteRepository routeRepository;
+    private final AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询路由列表
@@ -81,6 +82,10 @@ public class RouteService {
         route.setNotes(request.getNotes());
 
         Route savedRoute = routeRepository.save(route);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedRoute);
     }
 
@@ -133,6 +138,10 @@ public class RouteService {
         }
 
         Route savedRoute = routeRepository.save(route);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedRoute);
     }
 
@@ -150,6 +159,9 @@ public class RouteService {
         // }
 
         routeRepository.delete(route);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
     }
 
     /**

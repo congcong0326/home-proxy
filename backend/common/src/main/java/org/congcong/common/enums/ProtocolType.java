@@ -7,6 +7,7 @@ public enum ProtocolType {
     SOCKS5("socks5", "SOCKS5协议"),
     HTTPS_CONNECT("https_connect", "HTTPS CONNECT协议"),
     SOCKS5_HTTPS("socks5_https", "SOCKS5+HTTPS混合协议"),
+    NONE("none", "直接转发"),
     SS("ss", "Shadowsocks协议");
 
     private final String value;

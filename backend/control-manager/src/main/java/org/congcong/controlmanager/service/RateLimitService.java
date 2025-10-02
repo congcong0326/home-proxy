@@ -24,10 +24,10 @@ import java.util.Optional;
  */
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class RateLimitService {
 
     private final RateLimitRepository rateLimitRepository;
+    private final AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询限流策略列表
@@ -55,6 +55,10 @@ public class RateLimitService {
         validateRateLimit(rateLimit);
         
         RateLimit savedRateLimit = rateLimitRepository.save(rateLimit);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedRateLimit);
     }
 
@@ -72,6 +76,10 @@ public class RateLimitService {
         validateRateLimit(existingRateLimit);
 
         RateLimit savedRateLimit = rateLimitRepository.save(existingRateLimit);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedRateLimit);
     }
 
@@ -83,6 +91,9 @@ public class RateLimitService {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "限流策略不存在: " + id);
         }
         rateLimitRepository.deleteById(id);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
     }
 
     /**

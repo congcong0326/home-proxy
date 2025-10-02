@@ -25,7 +25,9 @@ public class SecurityConfig {
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/admin/login").permitAll()
-                .anyRequest().authenticated()
+                    .requestMatchers("/api/config/aggregate").permitAll()
+                    .requestMatchers("/api/config/hash").permitAll()
+                    .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {

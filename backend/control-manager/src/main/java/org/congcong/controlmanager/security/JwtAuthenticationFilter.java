@@ -36,7 +36,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
-        if ("/admin/login".equals(path)) { chain.doFilter(request, response); return; }
+        // 跳过公开端点的JWT验证
+        if ("/admin/login".equals(path) || 
+            "/api/config/aggregate".equals(path) || 
+            "/api/config/hash".equals(path)) { 
+            chain.doFilter(request, response); 
+            return; 
+        }
         String auth = Optional.ofNullable(request.getHeader("Authorization")).orElse("");
         if (!auth.startsWith("Bearer ")) { unauthorized(response, "UNAUTHORIZED", "invalid or expired token"); return; }
         String token = auth.substring(7);

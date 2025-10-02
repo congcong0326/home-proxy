@@ -10,18 +10,19 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
 
 @Service
-@Transactional
 public class UserService {
 
     @Autowired
     private UserRepository userRepository;
+    
+    @Autowired
+    private AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询用户列表
@@ -99,6 +100,10 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在: " + user.getUsername());
         }
         User savedUser = userRepository.save(user);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedUser);
     }
 
@@ -126,6 +131,10 @@ public class UserService {
         existingUser.setRemark(updatedUser.getRemark());
 
         User savedUser = userRepository.save(existingUser);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedUser);
     }
 
@@ -143,6 +152,9 @@ public class UserService {
         // 如果被引用，应该抛出 ResponseStatusException(HttpStatus.CONFLICT, "用户被入站配置引用，无法删除")
 
         userRepository.delete(user);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
     }
 
     /**
@@ -167,6 +179,10 @@ public class UserService {
 
         user.setCredential(newCredential);
         User savedUser = userRepository.save(user);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedUser);
     }
 
@@ -183,6 +199,10 @@ public class UserService {
 
         user.setStatus(status);
         User savedUser = userRepository.save(user);
+        
+        // 刷新聚合配置缓存
+        aggregateConfigService.refreshConfigCache();
+        
         return convertToDTO(savedUser);
     }
 
