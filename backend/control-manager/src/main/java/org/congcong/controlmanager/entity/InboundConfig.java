@@ -41,11 +41,11 @@ public class InboundConfig {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "allowed_user_ids", columnDefinition = "JSON")
-    private List<String> allowedUserIds;
+    private List<Long> allowedUserIds;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "route_ids", columnDefinition = "JSON")
-    private List<String> routeIds;
+    private List<Long> routeIds;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

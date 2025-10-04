@@ -1,15 +1,11 @@
 package org.congcong.common.enums;
 
-/**
- * 协议类型枚举
- */
 public enum ProtocolType {
-    SOCKS5("socks5", "SOCKS5协议"),
-    HTTPS_CONNECT("https_connect", "HTTPS CONNECT协议"),
-    SOCKS5_HTTPS("socks5_https", "SOCKS5+HTTPS混合协议"),
-    NONE("none", "直接转发"),
-    SS("ss", "Shadowsocks协议");
-
+    SOCKS5("SOCKS5", "SOCKS5协议"),
+    HTTPS_CONNECT("HTTPS_CONNECT", "HTTPS CONNECT协议"),
+    SOCKS5_HTTPS("SOCKS5_HTTPS", "SOCKS5+HTTPS混合协议"),
+    NONE("NONE", "直接转发"),
+    SS("SS", "Shadowsocks协议");
     private final String value;
     private final String description;
 
@@ -28,7 +24,7 @@ public enum ProtocolType {
 
     public static ProtocolType fromValue(String value) {
         for (ProtocolType type : values()) {
-            if (type.value.equals(value)) {
+            if (type.value.equalsIgnoreCase(value)) {
                 return type;
             }
         }

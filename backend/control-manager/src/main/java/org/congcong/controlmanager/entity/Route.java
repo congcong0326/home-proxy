@@ -25,6 +25,7 @@ public class Route {
     @Column(name = "rules_json", nullable = false, columnDefinition = "JSON")
     private List<RouteRule> rules;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private RoutePolicy policy;
 

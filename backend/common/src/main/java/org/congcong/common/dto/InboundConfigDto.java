@@ -57,12 +57,12 @@ public class InboundConfigDto {
     /**
      * 允许的用户ID列表
      */
-    private List<String> allowedUserIds;
+    private List<Long> allowedUserIds;
 
     /**
      * 路由ID列表
      */
-    private List<String> routeIds;
+    private List<Long> routeIds;
 
     /**
      * 状态（1-启用，0-禁用）

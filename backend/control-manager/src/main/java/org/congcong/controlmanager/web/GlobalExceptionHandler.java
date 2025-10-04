@@ -62,8 +62,8 @@ public class GlobalExceptionHandler {
         return body(status, code, msg);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Map<String,Object>> handleOther(Exception ex) {
-        return body(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "server error");
-    }
+//    @ExceptionHandler(Exception.class)
+//    public ResponseEntity<Map<String,Object>> handleOther(Exception ex) {
+//        return body(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "server error");
+//    }
 }

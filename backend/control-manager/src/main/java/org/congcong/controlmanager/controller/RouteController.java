@@ -44,7 +44,7 @@ public class RouteController {
         
         Sort.Direction sortDirection = "asc".equalsIgnoreCase(direction) ? 
             Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page, size, Sort.by(sortDirection, sort));
+        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(sortDirection, sort));
         
         PageResponse<RouteDTO> response = routeService.getRoutes(pageable, name, policy, status);
         return ResponseEntity.ok(response);

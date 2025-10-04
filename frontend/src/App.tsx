@@ -9,8 +9,12 @@ import { getCurrentUserAsync } from './store/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 import ChangePassword from './pages/ChangePassword';
-import Dashboard from './pages/Dashboard';
+import ProxyConfig from './pages/ProxyConfig';
+import UserManagement from './pages/UserManagement';
+import RouteManagement from './pages/RouteManagement';
 import './App.css';
+import RateLimitManagement from './pages/RateLimitManagement';
+import InboundManagement from './pages/InboundManagement';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -36,7 +40,7 @@ const AppContent: React.FC = () => {
               user?.mustChangePassword ? (
                 <Navigate to="/change-password" replace />
               ) : (
-                <Navigate to="/dashboard" replace />
+                <Navigate to="/config/users" replace />
               )
             ) : (
               <Login />
@@ -56,29 +60,39 @@ const AppContent: React.FC = () => {
           } 
         />
         
-        {/* 受保护的仪表板页面 */}
+
+        
+        {/* 受保护的代理配置页面 */}
         <Route 
-          path="/dashboard" 
+          path="/config" 
           element={
             <ProtectedRoute>
-              <Dashboard />
+              <ProxyConfig />
             </ProtectedRoute>
-          } 
-        />
+          }
+        >
+          {/* 用户管理子页面 */}
+          <Route path="users" element={<UserManagement />} />
+          {/* 路由管理子页面 */}
+          <Route path="routing" element={<RouteManagement />} />
+          {/* 其他配置子页面占位符 */}
+          <Route path="inbound" element={<InboundManagement />} />
+          <Route path="ratelimit" element={<RateLimitManagement />} />
+        </Route>
         
         {/* 默认路由重定向 */}
         <Route 
           path="/" 
           element={
-            <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />
+            <Navigate to={isAuthenticated ? "/config/users" : "/login"} replace />
           } 
         />
         
-        {/* 404页面 - 重定向到仪表板或登录页 */}
+        {/* 404页面 - 重定向到用户管理或登录页 */}
         <Route 
           path="*" 
           element={
-            <Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />
+            <Navigate to={isAuthenticated ? "/config/users" : "/login"} replace />
           } 
         />
       </Routes>

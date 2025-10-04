@@ -19,8 +19,8 @@ public class InboundConfigDTO {
     private Boolean tlsEnabled;
     private Boolean sniffEnabled;
     private String ssMethod;
-    private List<String> allowedUserIds;
-    private List<String> routeIds;
+    private List<Long> allowedUserIds;
+    private List<Long> routeIds;
     private Integer status;
     private String notes;
     private LocalDateTime createdAt;

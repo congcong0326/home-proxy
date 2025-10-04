@@ -176,8 +176,8 @@ class AggregateConfigControllerIntegrationTest {
         testInbound.setPort(8080);
         testInbound.setTlsEnabled(false);
         testInbound.setSniffEnabled(false);
-        testInbound.setAllowedUserIds(List.of(String.valueOf(testUser.getId())));
-        testInbound.setRouteIds(List.of(String.valueOf(testRoute.getId()))); // 引用路由ID
+        testInbound.setAllowedUserIds(List.of((testUser.getId())));
+        testInbound.setRouteIds(List.of((testRoute.getId()))); // 引用路由ID
         testInbound.setStatus(1);
         testInbound = inboundConfigRepository.save(testInbound);
     }
@@ -290,7 +290,6 @@ class AggregateConfigControllerIntegrationTest {
         testRoute.setName("updated-route");
         // 创建新的RouteRule并设置到rules列表中
         RouteRule rule = new RouteRule();
-        rule.setDomain("updated.com");
         testRoute.setRules(List.of(rule));
         testRoute.setUpdatedAt(LocalDateTime.now());
         routeRepository.save(testRoute);

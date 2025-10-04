@@ -4,8 +4,8 @@ package org.congcong.common.enums;
  * 限流范围类型枚举
  */
 public enum RateLimitScopeType {
-    GLOBAL("global", "全局"),
-    USERS("users", "指定用户");
+    GLOBAL("GLOBAL", "全局"),
+    USERS("USERS", "指定用户");
 
     private final String value;
     private final String description;
@@ -25,7 +25,7 @@ public enum RateLimitScopeType {
 
     public static RateLimitScopeType fromValue(String value) {
         for (RateLimitScopeType type : values()) {
-            if (type.value.equals(value)) {
+            if (type.value.equalsIgnoreCase(value)) {
                 return type;
             }
         }

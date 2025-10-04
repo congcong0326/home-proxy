@@ -14,6 +14,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.cors.CorsUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
@@ -36,6 +37,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
+        // 跳过 CORS 预检请求（OPTIONS），否则浏览器不会继续发送真实请求
+        if (CorsUtils.isPreFlightRequest(request)) {
+            chain.doFilter(request, response);
+            return;
+        }
         // 跳过公开端点的JWT验证
         if ("/admin/login".equals(path) || 
             "/api/config/aggregate".equals(path) || 
@@ -74,7 +80,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.getContext().setAuthentication(authentication);
             chain.doFilter(request, response);
         } catch (Exception e) {
-            unauthorized(response, "UNAUTHORIZED", "invalid or expired token");
+            logger.error("", e);
+            unauthorized(response, "UNAUTHORIZED", e.getMessage());
         }
     }
 
