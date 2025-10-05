@@ -1,0 +1,463 @@
+/* 代理配置页面样式 */
+.proxy-config-layout {
+  min-height: 100vh;
+  background: #f0f2f5;
+}
+
+/* 侧边栏样式 */
+.proxy-config-sider {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.proxy-config-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* Logo区域 */
+.proxy-config-logo {
+  display: flex;
+  align-items: center;
+  padding: 24px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logo-icon {
+  font-size: 32px;
+  color: #1890ff;
+  margin-right: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logo-text {
+  flex: 1;
+  opacity: 1;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.logo-title {
+  color: #fff !important;
+  margin: 0 !important;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.logo-subtitle {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  display: block;
+  margin-top: 2px;
+}
+
+/* 菜单样式 */
+.proxy-config-menu {
+  flex: 1;
+  border-right: none;
+  background: transparent;
+  padding: 16px 0;
+}
+
+.proxy-config-menu .ant-menu-item {
+  margin: 4px 8px;
+  border-radius: 8px;
+  height: 48px;
+  line-height: 48px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.proxy-config-menu .ant-menu-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(24, 144, 255, 0.1), rgba(24, 144, 255, 0.05));
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.proxy-config-menu .ant-menu-item:hover::before {
+  opacity: 1;
+}
+
+.proxy-config-menu .ant-menu-item-selected {
+  background: linear-gradient(135deg, #1890ff, #40a9ff) !important;
+  color: #fff !important;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+  transform: translateX(4px);
+}
+
+.proxy-config-menu .ant-menu-item-selected .anticon {
+  color: #fff;
+}
+
+.proxy-config-menu .ant-menu-item .anticon {
+  font-size: 16px;
+  margin-right: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 主内容区域 */
+.proxy-config-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* 头部样式 */
+.proxy-config-header {
+  background: #fff;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  z-index: 10;
+  position: relative;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.collapse-btn {
+  font-size: 18px;
+  color: #666;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.collapse-btn:hover {
+  color: #1890ff;
+  background: rgba(24, 144, 255, 0.1);
+}
+
+.header-breadcrumb {
+  font-size: 14px;
+}
+
+.header-breadcrumb .ant-breadcrumb-link {
+  color: #666;
+  transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.header-breadcrumb .ant-breadcrumb-link:hover {
+  color: #1890ff;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.welcome-text {
+  color: #666;
+  font-size: 14px;
+}
+
+.user-btn {
+  height: 40px;
+  border-radius: 20px;
+  padding: 0 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.user-btn:hover {
+  background: rgba(24, 144, 255, 0.1);
+  color: #1890ff;
+}
+
+/* 内容区域 */
+.proxy-config-content {
+  flex: 1;
+  padding: 24px;
+  background: #f0f2f5;
+  overflow-y: auto;
+}
+
+.content-wrapper {
+  width: 100%;
+  margin: 0;
+  min-height: calc(100vh - 112px);
+  padding: 0;
+}
+
+/* 配置概览样式 */
+.config-overview {
+  background: #fff;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.overview-title {
+  color: #262626 !important;
+  margin-bottom: 8px !important;
+  font-weight: 600;
+  text-align: center;
+}
+
+.overview-description {
+  color: #8c8c8c;
+  font-size: 16px;
+  text-align: center;
+  display: block;
+  margin-bottom: 32px;
+}
+
+.config-cards {
+  margin-top: 32px;
+}
+
+.config-card {
+  border-radius: 12px;
+  border: 1px solid #f0f0f0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.config-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(24, 144, 255, 0.05), rgba(24, 144, 255, 0.02));
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.config-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-color: #1890ff;
+}
+
+.config-card:hover::before {
+  opacity: 1;
+}
+
+.card-content {
+  text-align: center;
+  padding: 24px 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.card-icon {
+  font-size: 48px;
+  color: #1890ff;
+  margin-bottom: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.config-card:hover .card-icon {
+  transform: scale(1.1);
+  color: #40a9ff;
+}
+
+.card-title {
+  color: #262626 !important;
+  margin-bottom: 8px !important;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.card-description {
+  color: #8c8c8c;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* 动画效果 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .proxy-config-header {
+    padding: 0 16px;
+  }
+  
+  .header-left {
+    gap: 8px;
+  }
+  
+  .welcome-text {
+    display: none;
+  }
+  
+  .proxy-config-content {
+    padding: 16px;
+  }
+  
+  .config-overview {
+    padding: 24px 16px;
+  }
+  
+  .overview-title {
+    font-size: 24px !important;
+  }
+  
+  .overview-description {
+    font-size: 14px;
+  }
+  
+  .card-content {
+    padding: 20px 12px;
+  }
+  
+  .card-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+  }
+  
+  .card-title {
+    font-size: 16px !important;
+  }
+  
+  .card-description {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 576px) {
+  .proxy-config-sider {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 1000;
+  }
+  
+  .proxy-config-main {
+    margin-left: 0;
+  }
+  
+  .config-cards .ant-col {
+    margin-bottom: 16px;
+  }
+  
+  .header-breadcrumb {
+    display: none;
+  }
+}
+
+/* 暗色主题适配 */
+@media (prefers-color-scheme: dark) {
+  .proxy-config-layout {
+    background: #141414;
+  }
+  
+  .proxy-config-header {
+    background: #1f1f1f;
+    border-bottom: 1px solid #303030;
+  }
+  
+  .proxy-config-content {
+    background: #141414;
+  }
+  
+  .config-overview {
+    background: #1f1f1f;
+    border: 1px solid #303030;
+  }
+  
+  .config-card {
+    background: #1f1f1f;
+    border-color: #303030;
+  }
+  
+  .config-card:hover {
+    border-color: #1890ff;
+  }
+}
+
+/* 加载状态 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-spinner {
+  font-size: 32px;
+  color: #1890ff;
+  margin-bottom: 16px;
+}
+
+.loading-text {
+  color: #8c8c8c;
+  font-size: 14px;
+}
+
+/* 错误状态 */
+.error-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+  flex-direction: column;
+}
+
+.error-icon {
+  font-size: 64px;
+  color: #ff4d4f;
+  margin-bottom: 16px;
+}
+
+.error-title {
+  color: #262626 !important;
+  margin-bottom: 8px !important;
+  font-size: 20px;
+}
+
+.error-description {
+  color: #8c8c8c;
+  font-size: 14px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+}
