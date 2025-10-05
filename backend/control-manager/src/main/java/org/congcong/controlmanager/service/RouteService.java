@@ -8,6 +8,7 @@ import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.Route;
 import org.congcong.controlmanager.repository.RouteRepository;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,6 @@ import java.util.Optional;
 public class RouteService {
 
     private final RouteRepository routeRepository;
-    private final AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询路由列表
@@ -61,7 +61,7 @@ public class RouteService {
     /**
      * 创建路由
      */
-    @Transactional
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RouteDTO createRoute(CreateRouteRequest request) {
         // 检查名称是否已存在
         if (routeRepository.existsByName(request.getName())) {
@@ -82,17 +82,14 @@ public class RouteService {
         route.setNotes(request.getNotes());
 
         Route savedRoute = routeRepository.save(route);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedRoute);
     }
 
     /**
      * 更新路由
      */
-    @Transactional
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RouteDTO updateRoute(Long id, UpdateRouteRequest request) {
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
@@ -138,17 +135,14 @@ public class RouteService {
         }
 
         Route savedRoute = routeRepository.save(route);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedRoute);
     }
 
     /**
      * 删除路由
      */
-    @Transactional
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteRoute(Long id) {
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
@@ -159,9 +153,6 @@ public class RouteService {
         // }
 
         routeRepository.delete(route);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
     }
 
     /**

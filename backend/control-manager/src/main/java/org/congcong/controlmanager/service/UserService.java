@@ -7,6 +7,7 @@ import org.congcong.controlmanager.entity.User;
 import org.congcong.controlmanager.repository.UserRepository;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -21,9 +22,6 @@ public class UserService {
 
     @Autowired
     private UserRepository userRepository;
-    
-    @Autowired
-    private AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询用户列表
@@ -103,15 +101,13 @@ public class UserService {
      * @return 创建的用户
      * @throws ResponseStatusException 如果用户名已存在
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public UserDTO createUser(User user) {
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在: " + user.getUsername());
         }
         User savedUser = userRepository.save(user);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedUser);
     }
 
@@ -122,6 +118,7 @@ public class UserService {
      * @return 更新后的用户
      * @throws ResponseStatusException 如果用户不存在或用户名冲突
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public UserDTO updateUser(Long id, User updatedUser) {
         User existingUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
@@ -139,10 +136,7 @@ public class UserService {
         existingUser.setRemark(updatedUser.getRemark());
 
         User savedUser = userRepository.save(existingUser);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedUser);
     }
 
@@ -151,6 +145,7 @@ public class UserService {
      * @param id 用户ID
      * @throws ResponseStatusException 如果用户不存在或用户被入站配置引用
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
@@ -160,9 +155,6 @@ public class UserService {
         // 如果被引用，应该抛出 ResponseStatusException(HttpStatus.CONFLICT, "用户被入站配置引用，无法删除")
 
         userRepository.delete(user);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
     }
 
     /**
@@ -181,6 +173,7 @@ public class UserService {
      * @return 更新后的用户
      * @throws ResponseStatusException 如果用户不存在
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public UserDTO resetCredential(Long id, String newCredential) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
@@ -189,8 +182,6 @@ public class UserService {
         User savedUser = userRepository.save(user);
         
         // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
         return convertToDTO(savedUser);
     }
 
@@ -201,16 +192,13 @@ public class UserService {
      * @return 更新后的用户
      * @throws ResponseStatusException 如果用户不存在
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public UserDTO updateStatus(Long id, Integer status) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
 
         user.setStatus(status);
         User savedUser = userRepository.save(user);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
         return convertToDTO(savedUser);
     }
 

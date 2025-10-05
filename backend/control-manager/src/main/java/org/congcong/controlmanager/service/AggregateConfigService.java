@@ -3,8 +3,6 @@ package org.congcong.controlmanager.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.*;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,8 +17,8 @@ import java.util.List;
  */
 @Service
 @RequiredArgsConstructor
-@Slf4j
 @Transactional(readOnly = true)
+@Slf4j
 public class AggregateConfigService {
 
     private final InboundConfigService inboundConfigService;
@@ -35,10 +33,7 @@ public class AggregateConfigService {
      * 
      * @return 聚合配置响应
      */
-    @Cacheable(value = "aggregateConfig", key = "'config'")
     public AggregateConfigResponse getAggregateConfig() {
-        log.debug("开始聚合配置数据");
-        
         // 获取所有启用的配置
         List<InboundConfigDTO> inbounds = getEnabledInboundConfigs();
         List<RouteDTO> routes = getEnabledRoutes();
@@ -47,23 +42,16 @@ public class AggregateConfigService {
         
         // 计算配置哈希值
         String configHash = calculateConfigHash(inbounds, routes, rateLimits, users);
-        
-        log.debug("聚合配置完成，包含 {} 个入站配置，{} 个路由，{} 个限流策略，{} 个用户", 
-                inbounds.size(), routes.size(), rateLimits.size(), users.size());
-        
+
         return AggregateConfigResponse.of(inbounds, routes, rateLimits, users, configHash);
     }
 
     /**
-     * 获取当前配置的哈希值
      * 用于ETag缓存机制，基于所有启用配置的内容生成
      * 
      * @return 配置内容的哈希值
      */
-    @Cacheable(value = "configHash", key = "'hash'")
     public String getCurrentConfigHash() {
-        log.debug("计算当前配置哈希值");
-        
         // 获取所有启用的配置
         List<InboundConfigDTO> inbounds = getEnabledInboundConfigs();
         List<RouteDTO> routes = getEnabledRoutes();
@@ -73,14 +61,6 @@ public class AggregateConfigService {
         return calculateConfigHash(inbounds, routes, rateLimits, users);
     }
 
-    /**
-     * 刷新配置缓存
-     * 当配置发生变更时调用，重新计算配置哈希值
-     */
-    @CacheEvict(value = {"aggregateConfig", "configHash"}, allEntries = true)
-    public void refreshConfigCache() {
-        log.debug("刷新配置缓存");
-    }
 
     /**
      * 获取所有启用的入站配置

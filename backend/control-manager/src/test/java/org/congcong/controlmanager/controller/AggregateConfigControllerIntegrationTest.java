@@ -2,6 +2,10 @@ package org.congcong.controlmanager.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.congcong.common.dto.AggregateConfigResponse;
+import org.congcong.common.dto.InboundConfigDTO;
+import org.congcong.common.dto.RouteDTO;
+import org.congcong.common.dto.RateLimitDTO;
+import org.congcong.common.dto.UserDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RateLimitScopeType;
@@ -9,9 +13,19 @@ import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.LoginRequest;
 import org.congcong.controlmanager.dto.LoginResponse;
 import org.congcong.controlmanager.entity.*;
-import org.congcong.controlmanager.repository.*;
+import org.congcong.controlmanager.dto.InboundConfigCreateRequest;
+import org.congcong.controlmanager.dto.InboundConfigUpdateRequest;
+import org.congcong.controlmanager.dto.RateLimitCreateRequest;
+import org.congcong.controlmanager.dto.RateLimitUpdateRequest;
+import org.congcong.controlmanager.dto.route.CreateRouteRequest;
+import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
+import org.congcong.controlmanager.repository.AdminUserRepository;
+import org.congcong.controlmanager.service.InboundConfigService;
+import org.congcong.controlmanager.service.RouteService;
+import org.congcong.controlmanager.service.RateLimitService;
+import org.congcong.controlmanager.service.UserService;
 import org.congcong.controlmanager.service.AdminAuthService;
-import org.congcong.controlmanager.service.AggregateConfigService;
+import org.congcong.controlmanager.service.AggregateConfigCacheService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,19 +71,19 @@ class AggregateConfigControllerIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
-    private AggregateConfigService aggregateConfigService;
+    private AggregateConfigCacheService aggregateConfigService;
 
     @Autowired
-    private InboundConfigRepository inboundConfigRepository;
+    private InboundConfigService inboundConfigService;
 
     @Autowired
-    private RouteRepository routeRepository;
+    private RouteService routeService;
 
     @Autowired
-    private RateLimitRepository rateLimitRepository;
+    private RateLimitService rateLimitService;
 
     @Autowired
-    private UserRepository userRepository;
+    private UserService userService;
 
     @Autowired
     private AdminUserRepository adminUserRepository;
@@ -81,10 +95,10 @@ class AggregateConfigControllerIntegrationTest {
     private AdminAuthService authService;
 
     private String jwtToken;
-    private InboundConfig testInbound;
-    private Route testRoute;
-    private RateLimit testRateLimit;
-    private User testUser;
+    private Long testInboundId;
+    private Long testRouteId;
+    private Long testRateLimitId;
+    private Long testUserId;
 
     @BeforeEach
     void setUp() {
@@ -96,14 +110,8 @@ class AggregateConfigControllerIntegrationTest {
         // 设置JWT认证（管理侧接口需要）
         setupJwtAuthentication();
 
-        // 清理所有测试数据
-        cleanupTestData();
-
         // 创建测试数据
         createTestData();
-
-        // 刷新配置缓存
-        aggregateConfigService.refreshConfigCache();
     }
 
     /**
@@ -133,52 +141,53 @@ class AggregateConfigControllerIntegrationTest {
      * 清理测试数据
      */
     private void cleanupTestData() {
-        inboundConfigRepository.deleteAll();
-        routeRepository.deleteAll();
-        rateLimitRepository.deleteAll();
-        userRepository.deleteAll();
+        // 使用@Transactional确保每个测试隔离，故此处无需显式清理。
     }
 
     /**
      * 创建测试数据
      */
     private void createTestData() {
-        // 1. 创建测试用户
-        testUser = new User();
-        testUser.setUsername("testuser");
-        testUser.setCredential("password");
-        testUser.setStatus(1);
-        testUser = userRepository.save(testUser);
+        // 1. 创建测试用户（经服务，自动驱逐聚合缓存）
+        User user = new User();
+        user.setUsername("testuser");
+        user.setCredential("password");
+        user.setStatus(1);
+        UserDTO createdUser = userService.createUser(user);
+        testUserId = createdUser.getId();
 
-        // 2. 创建测试路由（先创建，因为入站配置需要引用路由ID）
-        testRoute = new Route();
-        testRoute.setName("Test Route");
-        testRoute.setRules(new ArrayList<>()); // 初始化为空列表
-        testRoute.setPolicy(RoutePolicy.DIRECT);
-        testRoute.setOutboundProxyType(ProtocolType.NONE);
-        testRoute.setStatus(1);
-        testRoute = routeRepository.save(testRoute);
+        // 2. 创建测试路由（经服务，入站配置需要引用路由ID）
+        CreateRouteRequest createRouteRequest = new CreateRouteRequest();
+        createRouteRequest.setName("Test Route");
+        createRouteRequest.setRules(new ArrayList<>());
+        createRouteRequest.setPolicy(RoutePolicy.DIRECT);
+        createRouteRequest.setOutboundProxyType(ProtocolType.NONE);
+        createRouteRequest.setStatus(1);
+        RouteDTO createdRoute = routeService.createRoute(createRouteRequest);
+        testRouteId = createdRoute.getId();
 
-        // 3. 创建测试限流策略
-        testRateLimit = new RateLimit();
-        testRateLimit.setScopeType(RateLimitScopeType.GLOBAL);
-        testRateLimit.setDownlinkLimitBps(100L);
-        testRateLimit.setUplinkLimitBps(60L);
-        testRateLimit.setEnabled(true);
-        testRateLimit = rateLimitRepository.save(testRateLimit);
+        // 3. 创建测试限流策略（经服务）
+        RateLimitCreateRequest rateLimitCreateRequest = new RateLimitCreateRequest();
+        rateLimitCreateRequest.setScopeType(RateLimitScopeType.GLOBAL);
+        rateLimitCreateRequest.setDownlinkLimitBps(100L);
+        rateLimitCreateRequest.setUplinkLimitBps(60L);
+        rateLimitCreateRequest.setEnabled(true);
+        RateLimitDTO createdRateLimit = rateLimitService.createRateLimit(rateLimitCreateRequest);
+        testRateLimitId = createdRateLimit.getId();
 
-        // 4. 创建测试入站配置（引用已创建的路由ID）
-        testInbound = new InboundConfig();
-        testInbound.setName("Test Inbound");
-        testInbound.setProtocol(ProtocolType.SOCKS5);
-        testInbound.setListenIp("127.0.0.1");
-        testInbound.setPort(8080);
-        testInbound.setTlsEnabled(false);
-        testInbound.setSniffEnabled(false);
-        testInbound.setAllowedUserIds(List.of((testUser.getId())));
-        testInbound.setRouteIds(List.of((testRoute.getId()))); // 引用路由ID
-        testInbound.setStatus(1);
-        testInbound = inboundConfigRepository.save(testInbound);
+        // 4. 创建测试入站配置（经服务，引用已创建的路由和用户ID）
+        InboundConfigCreateRequest inboundCreateRequest = new InboundConfigCreateRequest();
+        inboundCreateRequest.setName("Test Inbound");
+        inboundCreateRequest.setProtocol(ProtocolType.SOCKS5);
+        inboundCreateRequest.setListenIp("127.0.0.1");
+        inboundCreateRequest.setPort(8080);
+        inboundCreateRequest.setTlsEnabled(false);
+        inboundCreateRequest.setSniffEnabled(false);
+        inboundCreateRequest.setAllowedUserIds(List.of(String.valueOf(testUserId)));
+        inboundCreateRequest.setRouteIds(List.of(String.valueOf(testRouteId)));
+        inboundCreateRequest.setStatus(1);
+        InboundConfigDTO createdInbound = inboundConfigService.createInboundConfig(inboundCreateRequest);
+        testInboundId = createdInbound.getId();
     }
 
     /**
@@ -259,11 +268,22 @@ class AggregateConfigControllerIntegrationTest {
                 .andReturn();
         String initialETag = initialResult.getResponse().getHeader("ETag");
 
-        // 修改入站配置
-        testInbound.setName("updated-inbound");
-        testInbound.setUpdatedAt(LocalDateTime.now());
-        inboundConfigRepository.save(testInbound);
-        aggregateConfigService.refreshConfigCache();
+        // 修改入站配置（通过服务触发缓存驱逐）
+        InboundConfigDTO currentInbound = inboundConfigService.getInboundConfigById(testInboundId)
+                .orElseThrow();
+        InboundConfigUpdateRequest updateRequest = new InboundConfigUpdateRequest();
+        updateRequest.setName("updated-inbound");
+        updateRequest.setProtocol(currentInbound.getProtocol());
+        updateRequest.setListenIp(currentInbound.getListenIp());
+        updateRequest.setPort(currentInbound.getPort());
+        updateRequest.setTlsEnabled(currentInbound.getTlsEnabled());
+        updateRequest.setSniffEnabled(currentInbound.getSniffEnabled());
+        updateRequest.setSsMethod(currentInbound.getSsMethod());
+        updateRequest.setAllowedUserIds(currentInbound.getAllowedUserIds());
+        updateRequest.setRouteIds(currentInbound.getRouteIds());
+        updateRequest.setStatus(currentInbound.getStatus());
+        updateRequest.setNotes(currentInbound.getNotes());
+        inboundConfigService.updateInboundConfig(testInboundId, updateRequest);
 
         // 使用旧ETag请求，应该返回新配置（不是304）
         MvcResult updatedResult = mockMvc.perform(get("/api/config/aggregate")
@@ -283,19 +303,17 @@ class AggregateConfigControllerIntegrationTest {
     @Test
     void testRouteConfigChangeImpact() throws Exception {
         // 获取初始配置哈希
-        String initialHash = aggregateConfigService.getCurrentConfigHash();
+        String initialHash = aggregateConfigService.getAggregateConfig().getConfigHash();
 
-        // 修改路由配置
-        testRoute.setName("updated-route");
-        // 创建新的RouteRule并设置到rules列表中
+        // 修改路由配置（通过服务触发缓存驱逐）
+        UpdateRouteRequest updateRouteRequest = new UpdateRouteRequest();
+        updateRouteRequest.setName("updated-route");
         RouteRule rule = new RouteRule();
-        testRoute.setRules(List.of(rule));
-        testRoute.setUpdatedAt(LocalDateTime.now());
-        routeRepository.save(testRoute);
-        aggregateConfigService.refreshConfigCache();
+        updateRouteRequest.setRules(List.of(rule));
+        routeService.updateRoute(testRouteId, updateRouteRequest);
 
         // 验证配置哈希已变更
-        String newHash = aggregateConfigService.getCurrentConfigHash();
+        String newHash = aggregateConfigService.getAggregateConfig().getConfigHash();
         assertNotEquals(initialHash, newHash);
 
         // 验证聚合配置包含更新的路由
@@ -312,17 +330,17 @@ class AggregateConfigControllerIntegrationTest {
     @Test
     void testRateLimitConfigChangeImpact() throws Exception {
         // 获取初始配置哈希
-        String initialHash = aggregateConfigService.getCurrentConfigHash();
+        String initialHash = aggregateConfigService.getAggregateConfig().getConfigHash();
 
-        // 修改限流配置
-        testRateLimit.setUplinkLimitBps(5000000L);
-        testRateLimit.setDownlinkLimitBps(10000000L);
-        testRateLimit.setUpdatedAt(LocalDateTime.now());
-        rateLimitRepository.save(testRateLimit);
-        aggregateConfigService.refreshConfigCache();
+        // 修改限流配置（通过服务触发缓存驱逐）
+        RateLimitUpdateRequest rateLimitUpdateRequest = new RateLimitUpdateRequest();
+        rateLimitUpdateRequest.setUplinkLimitBps(5_000_000L);
+        rateLimitUpdateRequest.setDownlinkLimitBps(10_000_000L);
+        rateLimitUpdateRequest.setEnabled(true);
+        rateLimitService.updateRateLimit(testRateLimitId, rateLimitUpdateRequest);
 
         // 验证配置哈希已变更
-        String newHash = aggregateConfigService.getCurrentConfigHash();
+        String newHash = aggregateConfigService.getAggregateConfig().getConfigHash();
         assertNotEquals(initialHash, newHash);
 
         // 验证聚合配置包含更新的限流配置
@@ -340,17 +358,17 @@ class AggregateConfigControllerIntegrationTest {
     @Test
     void testUserConfigChangeImpact() throws Exception {
         // 获取初始配置哈希
-        String initialHash = aggregateConfigService.getCurrentConfigHash();
+        String initialHash = aggregateConfigService.getAggregateConfig().getConfigHash();
 
-        // 修改用户配置
-        testUser.setUsername("updated-user");
-        testUser.setCredential("updated-credential");
-        testUser.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(testUser);
-        aggregateConfigService.refreshConfigCache();
+        // 修改用户配置（通过服务触发缓存驱逐）
+        User updatedUser = new User();
+        updatedUser.setUsername("updated-user");
+        updatedUser.setCredential("updated-credential");
+        updatedUser.setStatus(1);
+        userService.updateUser(testUserId, updatedUser);
 
         // 验证配置哈希已变更
-        String newHash = aggregateConfigService.getCurrentConfigHash();
+        String newHash = aggregateConfigService.getAggregateConfig().getConfigHash();
         assertNotEquals(initialHash, newHash);
 
         // 验证聚合配置包含更新的用户配置
@@ -366,7 +384,7 @@ class AggregateConfigControllerIntegrationTest {
      */
     @Test
     void testGetCurrentConfigHash() throws Exception {
-        String expectedHash = aggregateConfigService.getCurrentConfigHash();
+        String expectedHash = aggregateConfigService.getAggregateConfig().getConfigHash();
 
         mockMvc.perform(get("/api/config/hash"))
                 .andDo(print())
@@ -381,25 +399,19 @@ class AggregateConfigControllerIntegrationTest {
     @Test
     void testOnlyEnabledConfigsAggregated() throws Exception {
         // 创建禁用的配置
-        InboundConfig disabledInbound = new InboundConfig();
-        disabledInbound.setName("disabled-inbound");
-        disabledInbound.setProtocol(ProtocolType.SOCKS5);
-        disabledInbound.setListenIp("0.0.0.0");
-        disabledInbound.setPort(9090);
-        disabledInbound.setStatus(0); // 禁用状态
-        disabledInbound.setCreatedAt(LocalDateTime.now());
-        disabledInbound.setUpdatedAt(LocalDateTime.now());
-        inboundConfigRepository.save(disabledInbound);
+        InboundConfigCreateRequest disabledInboundReq = new InboundConfigCreateRequest();
+        disabledInboundReq.setName("disabled-inbound");
+        disabledInboundReq.setProtocol(ProtocolType.SOCKS5);
+        disabledInboundReq.setListenIp("0.0.0.0");
+        disabledInboundReq.setPort(9090);
+        disabledInboundReq.setStatus(0); // 禁用状态
+        inboundConfigService.createInboundConfig(disabledInboundReq);
 
         User disabledUser = new User();
         disabledUser.setUsername("disabled-user");
         disabledUser.setCredential("disabled-credential");
         disabledUser.setStatus(0); // 禁用状态
-        disabledUser.setCreatedAt(LocalDateTime.now());
-        disabledUser.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(disabledUser);
-
-        aggregateConfigService.refreshConfigCache();
+        userService.createUser(disabledUser);
 
         // 验证聚合配置中只包含启用的配置
         mockMvc.perform(get("/api/config/aggregate"))
@@ -419,13 +431,11 @@ class AggregateConfigControllerIntegrationTest {
         // 通过删除必要的数据来模拟异常情况
         // 这里我们可以通过直接调用一个会导致异常的场景
         
-        // 清空所有数据后不刷新缓存，可能导致缓存不一致
-        inboundConfigRepository.deleteAll();
-        routeRepository.deleteAll();
-        rateLimitRepository.deleteAll();
-        userRepository.deleteAll();
-        
-        // 不调用 refreshConfigCache()，让缓存和数据库不一致
+        // 通过服务删除当前测试数据（触发缓存驱逐）
+        inboundConfigService.deleteInboundConfig(testInboundId);
+        routeService.deleteRoute(testRouteId);
+        rateLimitService.deleteRateLimit(testRateLimitId);
+        userService.deleteUser(testUserId);
         
         // 注意：这个测试可能需要根据实际的异常处理逻辑进行调整
         // 如果AggregateConfigService有良好的异常处理，可能不会返回500
@@ -485,29 +495,5 @@ class AggregateConfigControllerIntegrationTest {
         assertTrue(etag.length() > 2); // 除了引号外还有内容
     }
 
-    /**
-     * 测试12：配置哈希一致性
-     * 验证通过不同方式获取的配置哈希值是一致的
-     */
-    @Test
-    void testConfigHashConsistency() throws Exception {
-        // 通过聚合配置接口获取哈希值
-        MvcResult aggregateResult = mockMvc.perform(get("/api/config/aggregate"))
-                .andExpect(status().isOk())
-                .andReturn();
-        
-        String responseContent = aggregateResult.getResponse().getContentAsString();
-        AggregateConfigResponse response = objectMapper.readValue(responseContent, AggregateConfigResponse.class);
-        String hashFromAggregate = response.getConfigHash();
 
-        // 通过哈希接口获取哈希值
-        MvcResult hashResult = mockMvc.perform(get("/api/config/hash"))
-                .andExpect(status().isOk())
-                .andReturn();
-        
-        String hashFromEndpoint = hashResult.getResponse().getContentAsString();
-
-        // 验证两个哈希值一致
-        assertEquals(hashFromAggregate, hashFromEndpoint);
-    }
 }

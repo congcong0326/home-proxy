@@ -9,11 +9,11 @@ import org.congcong.controlmanager.dto.RateLimitUpdateRequest;
 import org.congcong.controlmanager.entity.RateLimit;
 import org.congcong.controlmanager.repository.RateLimitRepository;
 import org.springframework.beans.BeanUtils;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -27,7 +27,6 @@ import java.util.Optional;
 public class RateLimitService {
 
     private final RateLimitRepository rateLimitRepository;
-    private final AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询限流策略列表
@@ -48,6 +47,7 @@ public class RateLimitService {
     /**
      * 创建限流策略
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RateLimitDTO createRateLimit(RateLimitCreateRequest request) {
         RateLimit rateLimit = convertFromCreateRequest(request);
         
@@ -55,16 +55,14 @@ public class RateLimitService {
         validateRateLimit(rateLimit);
         
         RateLimit savedRateLimit = rateLimitRepository.save(rateLimit);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedRateLimit);
     }
 
     /**
      * 更新限流策略
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RateLimitDTO updateRateLimit(Long id, RateLimitUpdateRequest request) {
         RateLimit existingRateLimit = rateLimitRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "限流策略不存在: " + id));
@@ -76,24 +74,19 @@ public class RateLimitService {
         validateRateLimit(existingRateLimit);
 
         RateLimit savedRateLimit = rateLimitRepository.save(existingRateLimit);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedRateLimit);
     }
 
     /**
      * 删除限流策略
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteRateLimit(Long id) {
         if (!rateLimitRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "限流策略不存在: " + id);
         }
         rateLimitRepository.deleteById(id);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
     }
 
     /**

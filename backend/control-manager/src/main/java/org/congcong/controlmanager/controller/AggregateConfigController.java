@@ -3,6 +3,7 @@ package org.congcong.controlmanager.controller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.AggregateConfigResponse;
+import org.congcong.controlmanager.service.AggregateConfigCacheService;
 import org.congcong.controlmanager.service.AggregateConfigService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -19,7 +20,8 @@ import org.springframework.web.bind.annotation.*;
 @Slf4j
 public class AggregateConfigController {
 
-    private final AggregateConfigService aggregateConfigService;
+
+    private final AggregateConfigCacheService aggregateConfigCacheService;
 
     /**
      * 获取聚合配置
@@ -36,7 +38,10 @@ public class AggregateConfigController {
             log.debug("获取聚合配置请求，If-None-Match: {}", ifNoneMatch);
             
             // 获取当前配置哈希值
-            String currentConfigHash = aggregateConfigService.getCurrentConfigHash();
+            AggregateConfigResponse aggregateConfig = aggregateConfigCacheService.getAggregateConfig();
+
+
+            String currentConfigHash = aggregateConfig.getConfigHash();
             
             // 检查客户端缓存是否有效
             if (ifNoneMatch != null && ifNoneMatch.equals("\"" + currentConfigHash + "\"")) {
@@ -47,15 +52,14 @@ public class AggregateConfigController {
             }
             
             // 获取聚合配置
-            AggregateConfigResponse response = aggregateConfigService.getAggregateConfig();
-            
+
             log.debug("返回聚合配置，ETag: {}", currentConfigHash);
             
             // 返回配置并设置缓存头
             return ResponseEntity.ok()
                     .eTag("\"" + currentConfigHash + "\"")
-                    .lastModified(response.getGeneratedAt().atZone(java.time.ZoneId.systemDefault()).toInstant())
-                    .body(response);
+                    .lastModified(aggregateConfig.getGeneratedAt().atZone(java.time.ZoneId.systemDefault()).toInstant())
+                    .body(aggregateConfig);
                     
         } catch (Exception e) {
             log.error("获取聚合配置失败", e);
@@ -63,20 +67,4 @@ public class AggregateConfigController {
         }
     }
 
-    /**
-     * 获取当前配置哈希值
-     * 用于客户端检查配置是否有更新
-     * 
-     * @return 当前配置的哈希值
-     */
-    @GetMapping("/hash")
-    public ResponseEntity<String> getCurrentConfigHash() {
-        try {
-            String configHash = aggregateConfigService.getCurrentConfigHash();
-            return ResponseEntity.ok(configHash);
-        } catch (Exception e) {
-            log.error("获取配置哈希值失败", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
-        }
-    }
 }

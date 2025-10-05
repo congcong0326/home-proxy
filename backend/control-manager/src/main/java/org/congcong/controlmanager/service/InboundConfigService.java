@@ -9,6 +9,7 @@ import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.InboundConfig;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
 import org.springframework.beans.BeanUtils;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -26,7 +27,6 @@ import java.util.Optional;
 public class InboundConfigService {
 
     private final InboundConfigRepository inboundConfigRepository;
-    private final AggregateConfigService aggregateConfigService;
 
     /**
      * 分页查询入站配置列表
@@ -48,6 +48,7 @@ public class InboundConfigService {
     /**
      * 创建入站配置
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public InboundConfigDTO createInboundConfig(InboundConfigCreateRequest request) {
         // 业务校验
         validateInboundConfig(request);
@@ -58,16 +59,14 @@ public class InboundConfigService {
         validateInboundConfigEntity(inboundConfig);
         
         InboundConfig savedInboundConfig = inboundConfigRepository.save(inboundConfig);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedInboundConfig);
     }
 
     /**
      * 更新入站配置
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public InboundConfigDTO updateInboundConfig(Long id, InboundConfigUpdateRequest request) {
         InboundConfig existingInboundConfig = inboundConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "入站配置不存在: " + id));
@@ -79,24 +78,19 @@ public class InboundConfigService {
         validateInboundConfigEntity(existingInboundConfig);
 
         InboundConfig savedInboundConfig = inboundConfigRepository.save(existingInboundConfig);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
-        
+
         return convertToDTO(savedInboundConfig);
     }
 
     /**
      * 删除入站配置
      */
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteInboundConfig(Long id) {
         if (!inboundConfigRepository.existsById(id)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "入站配置不存在: " + id);
         }
         inboundConfigRepository.deleteById(id);
-        
-        // 刷新聚合配置缓存
-        aggregateConfigService.refreshConfigCache();
     }
 
     /**
