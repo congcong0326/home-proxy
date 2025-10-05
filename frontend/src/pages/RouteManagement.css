@@ -1,0 +1,232 @@
+.route-management {
+  padding: 24px;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.page-header {
+  margin-bottom: 24px;
+}
+
+.page-header .ant-typography {
+  margin-bottom: 16px;
+  color: #1890ff;
+}
+
+.stats-row {
+  margin-bottom: 0;
+}
+
+.stats-row .ant-card {
+  text-align: center;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.stats-row .ant-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+}
+
+.operation-bar {
+  margin-bottom: 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.operation-bar .ant-row {
+  align-items: center;
+}
+
+.route-management .ant-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.route-management .ant-table-wrapper {
+  background: white;
+  border-radius: 8px;
+}
+
+.route-management .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+  color: #262626;
+  border-bottom: 2px solid #f0f0f0;
+}
+
+.route-management .ant-table-tbody > tr:hover > td {
+  background-color: #f5f5f5;
+}
+
+.route-management .ant-btn {
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.route-management .ant-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.route-management .ant-btn-primary {
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+  border: none;
+}
+
+.route-management .ant-btn-primary:hover {
+  background: linear-gradient(135deg, #40a9ff 0%, #1890ff 100%);
+}
+
+.route-management .ant-btn-danger {
+  background: linear-gradient(135deg, #ff4d4f 0%, #f5222d 100%);
+  border: none;
+}
+
+.route-management .ant-btn-danger:hover {
+  background: linear-gradient(135deg, #ff7875 0%, #ff4d4f 100%);
+}
+
+.route-management .ant-tag {
+  border-radius: 4px;
+  font-weight: 500;
+  padding: 2px 8px;
+}
+
+.route-management .ant-input-search {
+  border-radius: 6px;
+}
+
+.route-management .ant-select {
+  border-radius: 6px;
+}
+
+.route-management .ant-select .ant-select-selector {
+  border-radius: 6px;
+}
+
+.route-management .ant-pagination {
+  margin-top: 16px;
+  text-align: right;
+}
+
+.route-management .ant-statistic {
+  padding: 8px 0;
+}
+
+.route-management .ant-statistic-title {
+  font-size: 14px;
+  color: #8c8c8c;
+  margin-bottom: 4px;
+}
+
+.route-management .ant-statistic-content {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.route-management .ant-badge {
+  font-weight: 500;
+}
+
+.route-management .ant-space-vertical {
+  width: 100%;
+}
+
+/* 响应式设计 */
+@media (max-width: 1200px) {
+  .stats-row .ant-col {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .route-management {
+    padding: 16px;
+  }
+  
+  .operation-bar .ant-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .operation-bar .ant-col {
+    margin-bottom: 16px;
+  }
+  
+  .operation-bar .ant-space {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .stats-row {
+    flex-direction: column;
+  }
+  
+  .stats-row .ant-col {
+    width: 100%;
+    margin-bottom: 8px;
+  }
+}
+
+/* 加载状态样式 */
+.route-management .ant-spin-container {
+  min-height: 400px;
+}
+
+/* 空状态样式 */
+.route-management .ant-empty {
+  padding: 40px 0;
+}
+
+/* 模态框样式 */
+.route-management .ant-modal {
+  border-radius: 8px;
+}
+
+.route-management .ant-modal-header {
+  border-radius: 8px 8px 0 0;
+  background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+}
+
+.route-management .ant-modal-title {
+  color: white;
+  font-weight: 600;
+}
+
+.route-management .ant-modal-close {
+  color: white;
+}
+
+.route-management .ant-modal-close:hover {
+  color: #f0f0f0;
+}
+
+/* 工具提示样式 */
+.route-management .ant-tooltip {
+  max-width: 300px;
+}
+
+/* 下拉菜单样式 */
+.route-management .ant-dropdown {
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.route-management .ant-dropdown-menu {
+  border-radius: 6px;
+}
+
+.route-management .ant-dropdown-menu-item {
+  transition: all 0.3s ease;
+}
+
+.route-management .ant-dropdown-menu-item:hover {
+  background-color: #f5f5f5;
+}
+
+.route-management .ant-dropdown-menu-item-danger:hover {
+  background-color: #fff2f0;
+  color: #ff4d4f;
+}

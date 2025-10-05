@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.UserDTO;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.entity.User;
 import org.congcong.controlmanager.service.UserService;

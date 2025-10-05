@@ -1,4 +1,4 @@
-package org.congcong.controlmanager.dto;
+package org.congcong.common.dto;
 
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;

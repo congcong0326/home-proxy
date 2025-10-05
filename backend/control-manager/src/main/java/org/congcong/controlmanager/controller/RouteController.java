@@ -2,9 +2,9 @@ package org.congcong.controlmanager.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
-import org.congcong.controlmanager.dto.route.RouteDTO;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.service.RouteService;

@@ -1,10 +1,10 @@
 package org.congcong.controlmanager.service;
 
 import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.RateLimitDTO;
 import org.congcong.common.enums.RateLimitScopeType;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.dto.RateLimitCreateRequest;
-import org.congcong.controlmanager.dto.RateLimitDTO;
 import org.congcong.controlmanager.dto.RateLimitUpdateRequest;
 import org.congcong.controlmanager.entity.RateLimit;
 import org.congcong.controlmanager.repository.RateLimitRepository;

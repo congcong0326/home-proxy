@@ -1,9 +1,9 @@
 package org.congcong.controlmanager.service;
 
 import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.InboundConfigDTO;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.controlmanager.dto.InboundConfigCreateRequest;
-import org.congcong.controlmanager.dto.InboundConfigDTO;
 import org.congcong.controlmanager.dto.InboundConfigUpdateRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.InboundConfig;
@@ -31,8 +31,8 @@ public class InboundConfigService {
     /**
      * 分页查询入站配置列表
      */
-    public PageResponse<InboundConfigDTO> getInboundConfigs(Pageable pageable, ProtocolType protocol, 
-                                                          Integer port, Boolean tlsEnabled, Integer status) {
+    public PageResponse<InboundConfigDTO> getInboundConfigs(Pageable pageable, ProtocolType protocol,
+                                                            Integer port, Boolean tlsEnabled, Integer status) {
         Page<InboundConfig> inboundPage = inboundConfigRepository.findByConditions(protocol, port, tlsEnabled, status, pageable);
         return convertToPageResponse(inboundPage);
     }

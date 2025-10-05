@@ -2,6 +2,7 @@ package org.congcong.controlmanager.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
 import org.hibernate.annotations.JdbcTypeCode;

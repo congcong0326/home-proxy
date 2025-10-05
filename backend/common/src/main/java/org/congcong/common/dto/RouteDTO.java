@@ -1,9 +1,8 @@
-package org.congcong.controlmanager.dto.route;
+package org.congcong.common.dto;
 
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.controlmanager.entity.RouteRule;
 
 import java.time.LocalDateTime;
 import java.util.List;

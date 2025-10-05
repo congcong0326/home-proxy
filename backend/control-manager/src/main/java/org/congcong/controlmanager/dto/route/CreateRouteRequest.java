@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.controlmanager.entity.RouteRule;
+import org.congcong.common.dto.RouteRule;
 
 import java.util.List;
 

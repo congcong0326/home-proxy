@@ -28,22 +28,22 @@ public class AggregateConfigResponse {
     /**
      * 入站配置列表
      */
-    private List<InboundConfigDto> inbounds;
+    private List<InboundConfigDTO> inbounds;
 
     /**
      * 路由配置列表
      */
-    private List<RouteDto> routes;
+    private List<RouteDTO> routes;
 
     /**
      * 限流配置列表
      */
-    private List<RateLimitDto> rateLimits;
+    private List<RateLimitDTO> rateLimits;
 
     /**
      * 用户配置列表
      */
-    private List<UserDto> users;
+    private List<UserDtoWithCredential> users;
 
     /**
      * 配置哈希值（用于ETag缓存机制）
@@ -53,10 +53,10 @@ public class AggregateConfigResponse {
     /**
      * 创建聚合配置响应
      */
-    public static AggregateConfigResponse of(List<InboundConfigDto> inbounds,
-                                           List<RouteDto> routes,
-                                           List<RateLimitDto> rateLimits,
-                                           List<UserDto> users,
+    public static AggregateConfigResponse of(List<InboundConfigDTO> inbounds,
+                                           List<RouteDTO> routes,
+                                           List<RateLimitDTO> rateLimits,
+                                           List<UserDtoWithCredential> users,
                                            String configHash) {
         AggregateConfigResponse response = new AggregateConfigResponse();
         response.setVersion("1.0");

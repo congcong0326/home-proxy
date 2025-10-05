@@ -1,4 +1,4 @@
-package org.congcong.controlmanager.entity;
+package org.congcong.common.dto;
 
 import lombok.Data;
 import org.congcong.common.enums.MatchOp;

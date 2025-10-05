@@ -1,7 +1,8 @@
 package org.congcong.controlmanager.service;
 
+import org.congcong.common.dto.UserDTO;
+import org.congcong.common.dto.UserDtoWithCredential;
 import org.congcong.controlmanager.dto.PageResponse;
-import org.congcong.controlmanager.dto.UserDTO;
 import org.congcong.controlmanager.entity.User;
 import org.congcong.controlmanager.repository.UserRepository;
 import org.springframework.beans.BeanUtils;
@@ -66,6 +67,13 @@ public class UserService {
         List<User> users = userRepository.findByStatus(status);
         return users.stream()
                 .map(this::convertToDTO)
+                .toList();
+    }
+
+    public List<UserDtoWithCredential> findUserDTOWithCredentialByStatus(Integer status) {
+        List<User> users = userRepository.findByStatus(status);
+        return users.stream()
+                .map(this::convertToDTOWithCredential)
                 .toList();
     }
 
@@ -211,6 +219,12 @@ public class UserService {
      */
     private UserDTO convertToDTO(User user) {
         UserDTO dto = new UserDTO();
+        BeanUtils.copyProperties(user, dto);
+        return dto;
+    }
+
+    private UserDtoWithCredential convertToDTOWithCredential(User user) {
+        UserDtoWithCredential dto = new UserDtoWithCredential();
         BeanUtils.copyProperties(user, dto);
         return dto;
     }
