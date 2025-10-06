@@ -34,7 +34,7 @@ public abstract class ProxyServer {
 
     public void start() throws InterruptedException {
         if (!running.compareAndSet(false, true)) {
-            log.info("{} already running on {}:{}", getServerName(), getIp(), getPort());
+            log.info("{} 代理服务器已经运行在 {}:{}", getServerName(), getIp(), getPort());
             return;
         }
 
@@ -66,7 +66,7 @@ public abstract class ProxyServer {
             if (bossGroup != null) {
                 bossGroup.shutdownGracefully().sync();
             }
-            log.info("{} Server stopped on {}:{}", getServerName(), getIp(), getPort());
+            log.info("{} 代理服务器停止{}:{}", getServerName(), getIp(), getPort());
         }
     }
 

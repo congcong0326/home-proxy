@@ -65,7 +65,6 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
             //                "Proxy-agent: https://github.com/cong/cong\r\n" +
             //                "\r\n";
             // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
-            // todo 这里是可能的扩展点
             if (future.isSuccess()) {
                 // 连接成功设置中继服务器
                 setRelay(ctx.channel(), outboundChannel, proxyTunnelRequest);

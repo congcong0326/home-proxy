@@ -10,7 +10,7 @@ import org.congcong.proxyworker.router.RouterService;
 
 public abstract class AbstractChannelInitializer extends ChannelInitializer<SocketChannel> {
 
-    private InboundConfig inboundConfig;
+    private final InboundConfig inboundConfig;
 
     protected AbstractChannelInitializer(InboundConfig inboundConfig) {
         this.inboundConfig = inboundConfig;

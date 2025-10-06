@@ -1,13 +1,10 @@
 package org.congcong.proxyworker.outbound.direct;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelOption;
+import io.netty.channel.*;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.Promise;
 import org.congcong.proxyworker.outbound.OutboundConnector;
-import org.congcong.proxyworker.protocol.DirectClientHandler;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 public class DirectOutboundConnector implements OutboundConnector {
@@ -33,5 +30,26 @@ public class DirectOutboundConnector implements OutboundConnector {
                         }
                     }
                 });
+    }
+
+
+    private static class DirectClientHandler extends ChannelInboundHandlerAdapter {
+
+        private final Promise<Channel> promise;
+
+        public DirectClientHandler(Promise<Channel> promise) {
+            this.promise = promise;
+        }
+
+        @Override
+        public void channelActive(ChannelHandlerContext ctx) {
+            promise.setSuccess(ctx.channel());
+            ctx.pipeline().remove(this);
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable throwable) {
+            promise.setFailure(throwable);
+        }
     }
 }
