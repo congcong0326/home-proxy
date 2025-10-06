@@ -12,18 +12,19 @@ export enum MatchOp {
 
 // 路由规则类型（与后端实体保持字段名一致）
 export interface RouteRule {
-  domain: RouteConditionType; // 条件类型：DOMAIN / GEO
-  geo: MatchOp;               // 匹配操作：IN / NOT_IN
+  conditionType: RouteConditionType; // 条件类型：DOMAIN / GEO
+  op: MatchOp;                        // 匹配操作：IN / NOT_IN
   value: string;              // 具体值：域名或地理位置
 }
 
-// 协议类型枚举
+// 协议类型枚举（与后端保持一致）
 export enum ProtocolType {
   SOCKS5 = 'SOCKS5',
   HTTPS_CONNECT = 'HTTPS_CONNECT',
   SOCKS5_HTTPS = 'SOCKS5_HTTPS',
   NONE = 'NONE',
-  SS = 'SS'
+  SHADOW_SOCKS = 'SHADOW_SOCKS',
+  SS = 'SHADOW_SOCKS',
 }
 
 // 协议类型标签映射
@@ -32,8 +33,12 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.HTTPS_CONNECT]: 'HTTPS CONNECT协议',
   [ProtocolType.SOCKS5_HTTPS]: 'SOCKS5+HTTPS混合协议',
   [ProtocolType.NONE]: '直接转发',
-  [ProtocolType.SS]: 'Shadowsocks协议'
+  [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议',
+  [ProtocolType.SS]: 'Shadowsocks协议',
 };
+
+// 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）
+export type OutboundProxyEncAlgo = 'aes_256_gcm' | 'aes_128_gcm' | 'chacha20_ietf_poly1305';
 
 // 路由策略枚举
 export enum RoutePolicy {
@@ -89,6 +94,7 @@ export interface RouteDTO {
   outboundProxyPort?: number;
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
+  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
   status: number;
   notes?: string;
   createdAt: string;
@@ -106,6 +112,7 @@ export interface CreateRouteRequest {
   outboundProxyPort?: number;
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
+  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
   status?: number;
   notes?: string;
 }
@@ -121,6 +128,7 @@ export interface UpdateRouteRequest {
   outboundProxyPort?: number;
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
+  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
   status?: number;
   notes?: string;
 }

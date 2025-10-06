@@ -1,6 +1,7 @@
 package org.congcong.proxyworker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.AggregateConfigResponse;
@@ -76,6 +77,8 @@ public class ProxyWorkerApplication {
 
             ObjectMapper mapper = new ObjectMapper();
             mapper.registerModule(new JavaTimeModule());
+            // 忽略来源对象中在目标类中不存在的字段（如 allowedUserIds、routeIds 等）
+            mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
             Map<Long, UserDtoWithCredential> userMap = new HashMap<>();
             Map<Long, RouteDTO> routeMap = new HashMap<>();

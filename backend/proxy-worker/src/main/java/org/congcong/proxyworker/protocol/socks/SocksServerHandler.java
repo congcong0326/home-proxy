@@ -79,31 +79,18 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
         // 认证都通过了，处理命令请求（交由后续handler处理，这里仅透传并记录）
         if (socksMessage instanceof Socks5CommandRequest) {
             Socks5CommandRequest cmdReq = (Socks5CommandRequest) socksMessage;
-            log.debug("SOCKS5 command: {} {}:{}", cmdReq.type(), cmdReq.dstAddr(), cmdReq.dstPort());
-            // 清理握手相关解码器，后续不再需要解析 SOCKS5 消息，避免误解码应用层数据
-            try {               
-                if (channelHandlerContext.pipeline().get("socks5PasswordAuthDecoder") != null) {
-                    channelHandlerContext.pipeline().remove("socks5PasswordAuthDecoder");
-                }
-            } catch (Exception ignore) {}
-            try {
-                if (channelHandlerContext.pipeline().get("socks5CommandReqDecoder") != null) {
-                    channelHandlerContext.pipeline().remove("socks5CommandReqDecoder");
-                }
-            } catch (Exception ignore) {}
-            try {
-                if (channelHandlerContext.pipeline().get(Socks5InitialRequestDecoder.class) != null) {
-                    channelHandlerContext.pipeline().remove(Socks5InitialRequestDecoder.class);
-                }
-            } catch (Exception ignore) {}
+            //log.debug("SOCKS5 command: {} {}:{}", cmdReq.type(), cmdReq.dstAddr(), cmdReq.dstPort());
+
+            // 移除当前处理器，后续仅由隧道与转发处理器接管
+            channelHandlerContext.pipeline().remove("socks5PasswordAuthDecoder");
+            channelHandlerContext.pipeline().remove("socks5CommandReqDecoder");
+            channelHandlerContext.pipeline().remove(Socks5InitialRequestDecoder.class);
+            channelHandlerContext.pipeline().remove(this);
+
             // 封装为通用隧道请求对象；首包目前为空，后续若存在首包数据由下游处理器填充
             UserConfig authedUser = ChannelAttributes.getAuthenticatedUser(channelHandlerContext.channel());
             ProxyTunnelRequest tunnelRequest = ProxyTunnelRequest.fromSocks5(cmdReq, inboundConfig, authedUser, null);
             channelHandlerContext.fireChannelRead(tunnelRequest);
-            // 移除当前处理器，后续仅由隧道与转发处理器接管
-            try {
-                channelHandlerContext.pipeline().remove(channelHandlerContext.name());
-            } catch (Exception ignore) {}
             return;
         }
 

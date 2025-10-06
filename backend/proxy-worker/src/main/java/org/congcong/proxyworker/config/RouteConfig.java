@@ -3,6 +3,7 @@ package org.congcong.proxyworker.config;
 import lombok.Data;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 
 import java.util.List;
@@ -29,5 +30,8 @@ public class RouteConfig {
     private String outboundProxyUsername;
 
     private String outboundProxyPassword;
+
+    private ProxyEncAlgo outboundProxyEncAlgo;
+
 
 }

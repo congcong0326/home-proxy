@@ -4,6 +4,7 @@ import io.netty.buffer.ByteBuf;
 import lombok.Getter;
 import lombok.Setter;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
@@ -28,6 +29,24 @@ public class ProxyTunnelRequest {
     private final UserConfig user;
     private final InboundConfig inboundConfig;
     private final ByteBuf initialPayload; // 可选首包载荷（某些客户端可能会在握手后立即发送）
+
+
+    public String getFinalTargetHost() {
+        if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
+            if (routeConfig.getOutboundProxyHost() != null) {
+                return routeConfig.getOutboundProxyHost();
+            }
+        }
+        return targetHost;
+    }
+    public int getFinalTargetPort() {
+        if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
+            if (routeConfig.getOutboundProxyPort() != null) {
+                return routeConfig.getOutboundProxyPort();
+            }
+        }
+        return targetPort;
+    }
 
     public ProxyTunnelRequest(ProtocolType protocolType,
                               String targetHost,

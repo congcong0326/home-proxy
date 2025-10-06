@@ -34,6 +34,9 @@ import {
   RouteRule,
   RouteConditionType,
   MatchOp,
+  ProtocolType,
+  PROTOCOL_TYPE_LABELS,
+  OutboundProxyEncAlgo,
 } from '../types/route';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
@@ -53,10 +56,12 @@ interface FormValues {
   policy: RoutePolicy;
   rules: RouteRule[];
   outboundTag?: string;
+  outboundProxyType?: ProtocolType;
   outboundProxyHost?: string;
   outboundProxyPort?: number;
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
+  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
   status: RouteStatus;
   notes?: string;
 }
@@ -73,8 +78,10 @@ const RouteForm: React.FC<RouteFormProps> = ({
   const [rules, setRules] = useState<RouteRule[]>(
     initialValues?.rules?.length
       ? initialValues.rules
-      : [{ domain: RouteConditionType.DOMAIN, geo: MatchOp.IN, value: '' }]
+      : [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }]
   );
+  // 监听代理类型以控制加密算法下拉框的显示
+  const outboundProxyTypeWatch = Form.useWatch('outboundProxyType', form);
 
   useEffect(() => {
     if (initialValues) {
@@ -83,10 +90,12 @@ const RouteForm: React.FC<RouteFormProps> = ({
         policy: initialValues.policy,
         rules: initialValues.rules,
         outboundTag: initialValues.outboundTag,
+        outboundProxyType: initialValues.outboundProxyType,
         outboundProxyHost: initialValues.outboundProxyHost,
         outboundProxyPort: initialValues.outboundProxyPort,
         outboundProxyUsername: initialValues.outboundProxyUsername,
         outboundProxyPassword: initialValues.outboundProxyPassword,
+        outboundProxyEncAlgo: initialValues.outboundProxyEncAlgo,
         status: initialValues.status,
         notes: initialValues.notes,
       });
@@ -108,16 +117,18 @@ const RouteForm: React.FC<RouteFormProps> = ({
       // 直连或阻断清空所有出站配置
       form.setFieldsValue({
         outboundTag: undefined,
+        outboundProxyType: undefined,
         outboundProxyHost: undefined,
         outboundProxyPort: undefined,
         outboundProxyUsername: undefined,
         outboundProxyPassword: undefined,
+        outboundProxyEncAlgo: undefined,
       });
     }
   };
 
   const handleAddRule = () => {
-    const newRules = [...rules, { domain: RouteConditionType.DOMAIN, geo: MatchOp.IN, value: '' }];
+    const newRules = [...rules, { conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }];
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
   };
@@ -138,14 +149,14 @@ const RouteForm: React.FC<RouteFormProps> = ({
 
   const handleRuleConditionChange = (index: number, value: RouteConditionType) => {
     const newRules = [...rules];
-    newRules[index] = { ...newRules[index], domain: value };
+    newRules[index] = { ...newRules[index], conditionType: value };
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
   };
 
   const handleRuleOpChange = (index: number, value: MatchOp) => {
     const newRules = [...rules];
-    newRules[index] = { ...newRules[index], geo: value };
+    newRules[index] = { ...newRules[index], op: value };
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
   };
@@ -157,15 +168,17 @@ const RouteForm: React.FC<RouteFormProps> = ({
         policy: values.policy,
         rules: rules
           .filter(r => r.value && r.value.trim())
-          .map(r => ({ domain: r.domain, geo: r.geo, value: r.value.trim() })),
+          .map(r => ({ conditionType: r.conditionType, op: r.op, value: r.value.trim() })),
         status: values.status,
         notes: values.notes,
         ...(values.policy === RoutePolicy.OUTBOUND_PROXY && {
           outboundTag: values.outboundTag,
+          outboundProxyType: values.outboundProxyType,
           outboundProxyHost: values.outboundProxyHost,
           outboundProxyPort: values.outboundProxyPort,
           outboundProxyUsername: values.outboundProxyUsername,
           outboundProxyPassword: values.outboundProxyPassword,
+          outboundProxyEncAlgo: values.outboundProxyEncAlgo,
         }),
         ...(values.policy === RoutePolicy.DESTINATION_OVERRIDE && {
           outboundTag: values.outboundTag,
@@ -196,7 +209,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
       initialValues={{
         policy: RoutePolicy.DIRECT,
         status: RouteStatus.ENABLED,
-        rules: [{ domain: RouteConditionType.DOMAIN, geo: MatchOp.IN, value: '' }],
+        rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }],
       }}
     >
       <Row gutter={16}>
@@ -278,7 +291,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
             <Row key={index} gutter={8} style={{ marginBottom: 8 }}>
               <Col>
                 <Select
-                  value={rule.domain}
+                  value={rule.conditionType}
                   onChange={(val) => handleRuleConditionChange(index, val as RouteConditionType)}
                   style={{ width: 120 }}
                   options={[
@@ -289,7 +302,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
               </Col>
               <Col>
                 <Select
-                  value={rule.geo}
+                  value={rule.op}
                   onChange={(val) => handleRuleOpChange(index, val as MatchOp)}
                   style={{ width: 120 }}
                   options={[
@@ -300,7 +313,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
               </Col>
               <Col flex="auto">
                 <Input
-                  placeholder={rule.domain === RouteConditionType.DOMAIN ? '请输入域名，如：*.example.com' : '请输入地理位置，如：CN/US'}
+                  placeholder={rule.conditionType === RouteConditionType.DOMAIN ? '请输入域名，如：*.example.com' : '请输入地理位置，如：CN/US'}
                   value={rule.value}
                   onChange={(e) => handleRuleValueChange(index, e.target.value)}
                   addonBefore={`规则 ${index + 1}`}
@@ -339,6 +352,43 @@ const RouteForm: React.FC<RouteFormProps> = ({
         <>
           <Divider orientation="left">代理配置</Divider>
           
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name="outboundProxyType"
+                label="代理类型"
+                rules={[{ required: true, message: '请选择代理类型' }]}
+              >
+                <Select
+                  placeholder="请选择代理类型"
+                  options={[
+                    { value: ProtocolType.SOCKS5, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5] },
+                    { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
+                    { value: ProtocolType.SHADOW_SOCKS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SHADOW_SOCKS] },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            {outboundProxyTypeWatch === ProtocolType.SHADOW_SOCKS && (
+              <Col span={12}>
+                <Form.Item
+                  name="outboundProxyEncAlgo"
+                  label="加密算法（Shadowsocks）"
+                  rules={[{ required: true, message: '请选择加密算法' }]}
+                >
+                  <Select
+                    placeholder="请选择加密算法"
+                    options={[
+                      { value: 'aes_256_gcm', label: 'aes_256_gcm' },
+                      { value: 'aes_128_gcm', label: 'aes_128_gcm' },
+                      { value: 'chacha20_ietf_poly1305', label: 'chacha20_ietf_poly1305' },
+                    ]}
+                  />
+                </Form.Item>
+              </Col>
+            )}
+          </Row>
+
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item

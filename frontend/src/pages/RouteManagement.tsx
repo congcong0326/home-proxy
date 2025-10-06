@@ -92,7 +92,7 @@ const RouteManagement: React.FC = () => {
     {
       id: 1,
       name: '默认直连',
-      rules: [{ domain: RouteConditionType.DOMAIN, geo: MatchOp.IN, value: '*.local' }],
+      rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '*.local' }],
       policy: RoutePolicy.DIRECT,
       status: RouteStatus.ENABLED,
       notes: '本地域名直连',
@@ -102,7 +102,7 @@ const RouteManagement: React.FC = () => {
     {
       id: 2,
       name: '广告拦截',
-      rules: [{ domain: RouteConditionType.DOMAIN, geo: MatchOp.NOT_IN, value: '*.ads.com' }],
+      rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.NOT_IN, value: '*.ads.com' }],
       policy: RoutePolicy.BLOCK,
       status: RouteStatus.ENABLED,
       notes: '拦截广告域名',
@@ -112,7 +112,7 @@ const RouteManagement: React.FC = () => {
     {
       id: 3,
       name: '代理转发',
-      rules: [{ domain: RouteConditionType.DOMAIN, geo: MatchOp.IN, value: '*.example.com' }],
+      rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '*.example.com' }],
       policy: RoutePolicy.OUTBOUND_PROXY,
       outboundTag: 'proxy-1',
       outboundProxyHost: 'proxy.example.com',
@@ -342,10 +342,12 @@ const RouteManagement: React.FC = () => {
           rules: values.rules,
           policy: values.policy,
           outboundTag: values.outboundTag,
+          outboundProxyType: values.outboundProxyType,
           outboundProxyHost: values.outboundProxyHost,
           outboundProxyPort: values.outboundProxyPort,
           outboundProxyUsername: values.outboundProxyUsername,
           outboundProxyPassword: values.outboundProxyPassword,
+          outboundProxyEncAlgo: values.outboundProxyEncAlgo,
           status: values.status ?? RouteStatus.ENABLED,
           notes: values.notes,
           createdAt: new Date().toISOString(),
@@ -444,8 +446,8 @@ const RouteManagement: React.FC = () => {
   <ul>
             {route.rules.map((rule, index) => (
               <li key={index}>
-                {rule.domain === RouteConditionType.DOMAIN ? '域名' : '地理位置'}{' '}
-                {rule.geo === MatchOp.IN ? '属于' : '不属于'}{' '}
+                {rule.conditionType === RouteConditionType.DOMAIN ? '域名' : '地理位置'}{' '}
+                {rule.op === MatchOp.IN ? '属于' : '不属于'}{' '}
                 {rule.value}
               </li>
             ))}
@@ -453,6 +455,14 @@ const RouteManagement: React.FC = () => {
           {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DESTINATION_OVERRIDE) && (
             <>
               <p><strong>出站标签：</strong>{route.outboundTag}</p>
+              {route.policy === RoutePolicy.OUTBOUND_PROXY && (
+                <>
+                  <p><strong>代理类型：</strong>{route.outboundProxyType}</p>
+                  {route.outboundProxyType === 'SHADOW_SOCKS' && (
+                    <p><strong>加密算法：</strong>{route.outboundProxyEncAlgo || '未设置'}</p>
+                  )}
+                </>
+              )}
               <p><strong>{route.policy === RoutePolicy.OUTBOUND_PROXY ? '代理地址' : '目标地址'}：</strong>{route.outboundProxyHost}:{route.outboundProxyPort}</p>
             </>
           )}

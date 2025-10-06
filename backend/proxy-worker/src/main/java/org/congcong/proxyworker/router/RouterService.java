@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.RouteConditionType;
+import org.congcong.proxyworker.config.DefaultRouteConfig;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
@@ -19,6 +20,8 @@ import java.util.Optional;
 @ChannelHandler.Sharable
 @Slf4j
 public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelRequest>  {
+
+
 
     private RouterService() {
 
@@ -52,6 +55,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             boolean matchCondition = matchGeo(country, value);
                             boolean matched = (op == MatchOp.IN) == matchCondition;
                             if (matched) {
+                                log.debug("地理路由策略命中 {}", route.getName());
                                 proxyTunnelRequest.setRouteConfig(route);
                                 channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                                 return;
@@ -66,6 +70,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                         boolean matchCondition = matchDomain(host, value);
                         boolean matched = (op == MatchOp.IN) == matchCondition;
                         if (matched) {
+                            log.debug("域名路由策略命中 {}", route.getName());
                             proxyTunnelRequest.setRouteConfig(route);
                             channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                             return;
@@ -78,8 +83,11 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         }
 
         // 未命中任何路由，继续向下传递请求
+        proxyTunnelRequest.setRouteConfig(DefaultRouteConfig.getInstance());
         channelHandlerContext.fireChannelRead(proxyTunnelRequest);
     }
+
+
 
     private void locationLookup(ProxyTunnelRequest proxyTunnelRequest) {
         Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
@@ -111,17 +119,56 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         return p;
     }
 
+    /**
+     * 支持域名匹配，如：example.com
+     * 支持通配符匹配，如：*.example.com
+     * 支持子域名匹配，如：sub.example.com
+     * todo 这里如何设计一个全匹配
+     * @param host
+     * @param value
+     * @return
+     */
     private boolean matchDomain(String host, String value) {
         if (host == null || value == null) {
             return false;
         }
-        String h = host.trim().toLowerCase();
+        String h = normalizeHost(host);
+        String v = normalizeHost(value);
 
-        if (value.startsWith("*.")) {
-            String suffix = value.substring(1); // 包含前导点，如 .example.com
-            return h.endsWith(suffix) && h.length() > suffix.length();
-        } else {
-            return h.equals(value);
+        // 全匹配：任意非空 host
+        if ("*".equals(v)) {
+            return !h.isEmpty();
         }
+
+        // 后缀匹配（含主域）：".example.com" -> 匹配 example.com 与 *.example.com
+        if (v.startsWith(".")) {
+            String base = v.substring(1);       // "example.com"
+            String suffix = v;                  // ".example.com"
+            return h.equals(base) || (h.endsWith(suffix) && h.length() > suffix.length());
+        }
+
+        // 仅子域通配： "*.example.com" 不匹配主域
+        if (v.startsWith("*.")) {
+            String suffix = v.substring(1);     // ".example.com"
+            return h.endsWith(suffix) && h.length() > suffix.length();
+        }
+
+        // 精确匹配
+        return h.equals(v);
+    }
+
+    private String normalizeHost(String input) {
+        String s = input.trim();
+        // 去掉 FQDN 末尾点
+        if (s.endsWith(".")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        // 统一小写并处理 IDN
+        try {
+            s = java.net.IDN.toASCII(s.toLowerCase());
+        } catch (IllegalArgumentException e) {
+            s = s.toLowerCase();
+        }
+        return s;
     }
 }

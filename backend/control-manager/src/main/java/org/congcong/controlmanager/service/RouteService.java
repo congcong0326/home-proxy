@@ -78,6 +78,7 @@ public class RouteService {
         route.setOutboundProxyPort(request.getOutboundProxyPort());
         route.setOutboundProxyUsername(request.getOutboundProxyUsername());
         route.setOutboundProxyPassword(request.getOutboundProxyPassword());
+        route.setOutboundProxyEncAlgo(request.getOutboundProxyEncAlgo());
         route.setStatus(request.getStatus() != null ? request.getStatus() : 1);
         route.setNotes(request.getNotes());
 

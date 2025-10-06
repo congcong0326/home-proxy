@@ -3,6 +3,7 @@ package org.congcong.controlmanager.dto.route;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.common.dto.RouteRule;
 
@@ -36,6 +37,8 @@ public class UpdateRouteRequest {
     
     @Size(max = 255, message = "代理密码长度不能超过255个字符")
     private String outboundProxyPassword;
+
+    private ProxyEncAlgo outboundProxyEncAlgo;
     
     private Integer status;
     

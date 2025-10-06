@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.common.dto.RouteRule;
 
@@ -42,9 +43,13 @@ public class CreateRouteRequest {
     
     @Size(max = 255, message = "代理密码长度不能超过255个字符")
     private String outboundProxyPassword;
+
+    private ProxyEncAlgo outboundProxyEncAlgo;
     
     private Integer status;
     
     @Size(max = 255, message = "备注长度不能超过255个字符")
     private String notes;
+
+
 }

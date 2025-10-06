@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS routes (
   outbound_proxy_port INT NULL,
   outbound_proxy_username VARCHAR(64) NULL,
   outbound_proxy_password VARCHAR(255) NULL,
+  outbound_proxy_enc_algo VARCHAR(32)  NULL,
   status TINYINT NOT NULL DEFAULT 1,
   notes VARCHAR(255) NULL,
   created_at DATETIME NOT NULL,

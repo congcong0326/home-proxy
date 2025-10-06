@@ -2,6 +2,7 @@ package org.congcong.common.dto;
 
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 
 import java.time.LocalDateTime;
@@ -32,7 +33,9 @@ public class RouteDTO {
     private String outboundProxyUsername;
     
     private String outboundProxyPassword;
-    
+
+    private ProxyEncAlgo outboundProxyEncAlgo;
+
     private Integer status;
     
     private String notes;

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -48,6 +49,10 @@ public class Route {
 
     @Column(name = "outbound_proxy_password", length = 255)
     private String outboundProxyPassword;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "outbound_proxy_enc_algo", nullable = false)
+    private ProxyEncAlgo outboundProxyEncAlgo;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

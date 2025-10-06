@@ -1,11 +1,18 @@
 package org.congcong.proxyworker.protocol;
 
-import io.netty.channel.ChannelHandler;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.*;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.socksx.v5.DefaultSocks5CommandResponse;
+import io.netty.handler.codec.socksx.v5.Socks5AddressType;
+import io.netty.handler.codec.socksx.v5.Socks5CommandStatus;
+import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.InboundConfig;
+import org.congcong.proxyworker.outbound.OutboundConnector;
+import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
+import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 @ChannelHandler.Sharable
@@ -26,14 +33,60 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
-        InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-        ProtocolType protocol = inboundConfig.getProtocol();
-        // todo 根据 ProxyTunnelRequest 中的相关内容，建立与代理服务器之间的连接
-        // 需要注意 SOCKS5 在建立连接成功后根据协议会写回成功 DefaultSocks5CommandResponse
-        // HTTPS_CONNECT 协议会写回 "HTTP/1.1 200 Connection Established\r\n" +
-        //                "Proxy-agent: https://github.com/cong/cong\r\n" +
-        //                "\r\n";
-        // shadowsock不需要写回数据，但是可能需要处理 initialPayload
-        // 还需要注意 initialPayload 可能并不完成，与目标服务器建立连接也是一个异步过程，是否许需要一个前置的处理器，在与目标服务器建立成功前需要持续接受 initialPayload
+        Channel inboundChannel = channelHandlerContext.channel();
+
+        // 用统一的 promise 承载成功/失败，交由 getRelayPromise 处理中继与协议响应
+        Promise<Channel> relayPromise = getRelayPromise(channelHandlerContext, proxyTunnelRequest);
+
+        // 根据路由策略挑选出站连接器（直连 / 上游代理 / SS 等）
+        OutboundConnector connector = OutboundConnectorFactory.create(proxyTunnelRequest);
+
+        // 执行出站连接；出站连接器内部负责在失败时设置 promise.setFailure(...)
+        connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
     }
+
+    /**
+     * 设置连接目标服务器成功与失败的回调，这里需要处理：
+     * 1. 成功场景，则将channel进行绑定，根据协议不同，可能需要给客户端返回成功，也许不需要返回
+     * 2. 失败场景，根据协议不同，返回失败
+     * @param ctx
+     * @param proxyTunnelRequest
+     * @return
+     */
+    protected Promise<Channel> getRelayPromise(ChannelHandlerContext ctx, ProxyTunnelRequest proxyTunnelRequest) {
+        Promise<Channel> promise = ctx.executor().newPromise();
+        promise.addListener(future -> {
+            Channel outboundChannel = (Channel) future.getNow();
+            InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
+            ProtocolType protocol = inboundConfig.getProtocol();
+            ProtocolStrategy strategy = ProtocolStrategyRegistry.get(protocol);
+            // 需要注意 SOCKS5 在建立连接成功后根据协议会写回成功 DefaultSocks5CommandResponse，失败的时候也有响应返回
+            // HTTPS_CONNECT 协议会写回 "HTTP/1.1 200 Connection Established\r\n" +
+            //                "Proxy-agent: https://github.com/cong/cong\r\n" +
+            //                "\r\n";
+            // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
+            // todo 这里是可能的扩展点
+            if (future.isSuccess()) {
+                // 连接成功设置中继服务器
+                setRelay(ctx.channel(), outboundChannel, proxyTunnelRequest);
+                // 写回成功
+                strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
+            }
+            // 连接失败
+            else {
+                Throwable cause = future.cause();
+                strategy.onConnectFailure(ctx, outboundChannel, proxyTunnelRequest, cause);
+            }
+        });
+        return promise;
+    }
+
+    protected void setRelay(Channel inboundChannel, Channel outboundChannel, ProxyTunnelRequest proxyTunnelRequest) {
+        inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel));
+        outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel));
+        if (proxyTunnelRequest.getInitialPayload() != null) {
+            outboundChannel.writeAndFlush(proxyTunnelRequest.getInitialPayload());
+        }
+    }
+
 }
