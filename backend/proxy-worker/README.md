@@ -37,6 +37,8 @@ proxy-worker/
 - **Jackson**: 用于 JSON 序列化/反序列化
 - **SLF4J + Logback**: 日志框架
 - **Common 模块**: 共享的 DTO 类定义
+ - **Guava**: 可选缓存（GeoIP 查询性能优化）
+ - **MaxMind GeoIP2**: 通过 GeoLite2-City.mmdb 解析 IP 地理位置（国家/城市）
 
 ## 配置说明
 
@@ -55,6 +57,15 @@ config.fetch.interval=30
 # HTTP客户端超时配置（毫秒）
 http.client.connect.timeout=5000
 http.client.read.timeout=10000
+
+## GeoIP2（可选）
+
+若提供 GeoLite2-City.mmdb，将启用地理位置解析与缓存。mmdb 默认查找顺序：
+- 显式传入路径（代码构造函数参数）
+- 工作目录 `data/GeoLite2-City.mmdb`
+- 环境变量 `GEOIP2_MMDB_PATH`
+
+未找到 mmdb 时，地理位置不可用，但域名/IP 解析仍可用。
 ```
 
 ## 使用方法
@@ -89,6 +100,14 @@ configService.start();
 
 // 获取当前配置
 AggregateConfigResponse currentConfig = configService.getCurrentConfig();
+
+// GeoIP 使用示例
+GeoIPUtil geo = GeoIPUtil.createDefault();
+if (geo.isAvailable()) {
+    geo.lookup("www.example.com").ifPresent(loc -> {
+        System.out.println("Country=" + loc.getCountry() + ", City=" + loc.getCity());
+    });
+}
 ```
 
 ## HTTP 304 缓存机制

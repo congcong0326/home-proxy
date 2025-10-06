@@ -13,9 +13,9 @@ public class RouteRule {
     /**
      * 支持属于，不属于某个域名或者地理位置
      */
-    private RouteConditionType domain;
+    private RouteConditionType conditionType;
 
-    private MatchOp geo;
+    private MatchOp op;
 
     private String value;
 }
