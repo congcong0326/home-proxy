@@ -6,6 +6,7 @@ import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 public final class ChannelAttributes {
 
@@ -16,6 +17,22 @@ public final class ChannelAttributes {
 
     public static final AttributeKey<ProxyContext> PROXY_CONTEXT_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_CONTEXT_ATTRIBUTE_KEY");
     public static final AttributeKey<ProxyTimeContext> PROXY_TIME_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_TIME_ATTRIBUTE_KEY");
+
+    public static final AttributeKey<ProxyTunnelRequest> ProxyTunnelRequest = AttributeKey.valueOf("ProxyTunnelRequest");
+
+    public static ProxyTunnelRequest getProxyTunnelRequest(Channel channel) {
+        return channel.attr(ChannelAttributes.ProxyTunnelRequest).get();
+    }
+
+    public static void setProxyTunnelRequest(Channel channel, ProxyTunnelRequest proxyContext) {
+        channel.attr(ChannelAttributes.ProxyTunnelRequest).set(proxyContext);
+    }
+
+
+    public static void removeProxyTunnelRequest(Channel channel) {
+        channel.attr(ChannelAttributes.ProxyTunnelRequest).set(null);
+    }
+
 
     public static ProxyContext getProxyContext(Channel channel) {
         return channel.attr(ChannelAttributes.PROXY_CONTEXT_ATTRIBUTE_KEY).get();

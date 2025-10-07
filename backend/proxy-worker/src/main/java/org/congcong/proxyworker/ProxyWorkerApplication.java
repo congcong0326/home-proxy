@@ -8,6 +8,7 @@ import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.common.dto.InboundConfigDTO;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.UserDtoWithCredential;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
@@ -40,15 +41,16 @@ public class ProxyWorkerApplication {
         
         // 设置配置变更监听器
         configService.setConfigChangeListener(new ConfigChangeListener());
-        
+        // 日志服务启动
+        AccessLogUtil.start();
         // 启动配置服务
         configService.start();
-        
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("应用程序正在关闭...");
             configService.stop();
             PROXY_CONTEXT.closeAll();
+            AccessLogUtil.stop();
         }));
         
         // 主线程保持运行

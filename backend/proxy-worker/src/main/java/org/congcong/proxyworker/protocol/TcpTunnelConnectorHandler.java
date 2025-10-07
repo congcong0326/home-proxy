@@ -4,6 +4,7 @@ import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
@@ -38,21 +39,35 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
 
         // 执行出站连接；出站连接器内部负责在失败时设置 promise.setFailure(...)
         ChannelFuture connect = connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
-        // 关注失败回调
+        //
         connect.addListener((ChannelFutureListener) future -> {
+            // 第一次请求的生命周期结束
+            proxyTunnelRequest.setStatus(ProxyTunnelRequest.Status.finish);
             if (!future.isSuccess()) {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
                 relayPromise.setFailure(future.cause());
+                if (proxyTunnelRequest.getInitialPayload() != null) {
+                    proxyTunnelRequest.getInitialPayload().release();
+                }
+                // 连接目标服务器失败
+                AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
                 // 确保释放出站资源
                 Channel ch = future.channel();
                 if (ch != null && ch.isOpen()) {
                     ch.close();
                 }
+            } else {
+                if (proxyTunnelRequest.getInitialPayload() != null) {
+                    future.channel().writeAndFlush(proxyTunnelRequest.getInitialPayload());
+                }
             }
         });
-        // 关注成功回调
-        ChannelFuture channelFuture = connect.channel().closeFuture().addListener((ChannelFutureListener) future -> {
-
+        //
+        channelHandlerContext.channel().closeFuture().addListener(f -> {
+            if (f.isSuccess()) {
+                // 只有在正常关闭的情况下才记录成功日志
+                AccessLogUtil.logSuccess(channelHandlerContext.channel());
+            }
         });
     }
 
@@ -78,7 +93,7 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
             // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
             if (future.isSuccess()) {
                 // 连接成功设置中继服务器
-                setRelay(ctx.channel(), outboundChannel, proxyTunnelRequest);
+                setRelay(ctx.channel(), outboundChannel);
                 // 写回成功
                 strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
             }
@@ -91,12 +106,10 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         return promise;
     }
 
-    protected void setRelay(Channel inboundChannel, Channel outboundChannel, ProxyTunnelRequest proxyTunnelRequest) {
+    protected void setRelay(Channel inboundChannel, Channel outboundChannel) {
         inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel, true));
         outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel, false));
-        if (proxyTunnelRequest.getInitialPayload() != null) {
-            outboundChannel.writeAndFlush(proxyTunnelRequest.getInitialPayload());
-        }
     }
+
 
 }

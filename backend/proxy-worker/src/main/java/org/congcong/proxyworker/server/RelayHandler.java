@@ -10,6 +10,7 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 
 
@@ -56,7 +57,11 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         relayChannel.write(msg).addListener(future -> {
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
-                log.warn("Relaying write failed: {}", cause == null ? "unknown" : cause.getMessage());
+                log.warn("Relaying write failed: {}", cause.getMessage());
+                Channel contextChannel = isClient ? ctx.channel() : relayChannel;
+                if (contextChannel != null) {
+                    AccessLogUtil.logFailure(contextChannel, 500, "WRITE_ERROR", cause.getMessage());
+                }
                 closeOnFlush(ctx.channel());
                 closeOnFlush(relayChannel);
             } else if (bytes > 0) {
@@ -98,10 +103,16 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception{
         log.warn("Exception in RelayHandler: {}", cause.getMessage(), cause);
+        // 增加访问日志记录
+        Channel contextChannel = isClient ? ctx.channel() : relayChannel;
+        if (contextChannel != null) {
+            AccessLogUtil.logFailure(contextChannel, 500, "RELAY_ERROR", cause.getMessage());
+        }
         closeOnFlush(ctx.channel());
         closeOnFlush(relayChannel);
+        super.exceptionCaught(ctx, cause);
     }
 
     @Override

@@ -9,6 +9,7 @@ import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
+import org.congcong.proxyworker.protocol.RequestAppendHandler;
 
 /**
  * 通用的隧道建立请求对象，统一 SOCKS/HTTPS/SS 等协议的入站隧道参数。
@@ -28,8 +29,11 @@ public class ProxyTunnelRequest {
     private boolean isLocationResolveSuccess;
     private final UserConfig user;
     private final InboundConfig inboundConfig;
-    private final ByteBuf initialPayload; // 可选首包载荷（某些客户端可能会在握手后立即发送）
-
+    @Setter
+    private ByteBuf initialPayload; // 可选首包载荷（某些客户端可能会在握手后立即发送）
+    @Getter
+    @Setter
+    private Status status = Status.init;
 
     public String getFinalTargetHost() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
@@ -74,6 +78,10 @@ public class ProxyTunnelRequest {
                 inboundConfig,
                 initialPayload
         );
+    }
+
+    public enum Status {
+        init,append,finish;
     }
 
 }

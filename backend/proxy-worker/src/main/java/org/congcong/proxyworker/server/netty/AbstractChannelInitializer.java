@@ -5,6 +5,7 @@ import io.netty.channel.socket.SocketChannel;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
+import org.congcong.proxyworker.protocol.RequestAppendHandler;
 import org.congcong.proxyworker.protocol.TcpTunnelConnectorHandler;
 import org.congcong.proxyworker.router.RouterService;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
@@ -28,7 +29,11 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
         // 添加根据各个协议的channelHandler
         // 认证相关的处理器
         init(socketChannel);
+        // 路由处理器
         socketChannel.pipeline().addLast(RouterService.getInstance());
+        // 处理握手请求还携带payload的场景
+        socketChannel.pipeline().addLast(RequestAppendHandler.getInstance());
+        // 连接目标服务器
         socketChannel.pipeline().addLast(TcpTunnelConnectorHandler.getInstance());
     }
 

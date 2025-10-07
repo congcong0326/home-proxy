@@ -69,8 +69,19 @@ public class ProxyWorkerConfig {
     public String getControlBaseUrl() {
         return controlBaseUrl;
     }
-    
+
     public String getAggregateConfigUrl() {
         return controlBaseUrl + "/api/config/aggregate";
+    }
+
+    /**
+     * 日志发送端点（管理端提供）
+     */
+    public String getAccessLogUrl() {
+        return controlBaseUrl + "/api/logs/access";
+    }
+
+    public String getAuthLogUrl() {
+        return controlBaseUrl + "/api/logs/auth";
     }
 }
