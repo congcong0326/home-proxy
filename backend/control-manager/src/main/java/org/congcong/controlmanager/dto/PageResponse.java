@@ -1,20 +1,14 @@
 package org.congcong.controlmanager.dto;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
-
 import java.util.List;
 
 @Data
+@AllArgsConstructor
 public class PageResponse<T> {
     private List<T> items;
-    private long total;
     private int page;
-    private int pageSize;
-
-    public PageResponse(List<T> items, long total, int page, int pageSize) {
-        this.items = items;
-        this.total = total;
-        this.page = page;
-        this.pageSize = pageSize;
-    }
+    private int size;
+    private long total;
 }

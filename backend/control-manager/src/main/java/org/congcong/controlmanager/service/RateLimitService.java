@@ -197,9 +197,9 @@ public class RateLimitService {
 
         return new PageResponse<>(
                 rateLimitDTOs,
-                rateLimitPage.getTotalElements(),
                 rateLimitPage.getNumber() + 1, // Spring Data JPA页码从0开始，转换为从1开始
-                rateLimitPage.getSize()
+                rateLimitPage.getSize(),
+                rateLimitPage.getTotalElements()
         );
     }
 }

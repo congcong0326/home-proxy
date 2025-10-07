@@ -227,9 +227,9 @@ public class UserService {
         
         return new PageResponse<>(
                 userDTOs,
-                userPage.getTotalElements(),
                 userPage.getNumber() + 1, // Spring Data JPA页码从0开始，转换为从1开始
-                userPage.getSize()
+                userPage.getSize(),
+                userPage.getTotalElements()
         );
     }
 }

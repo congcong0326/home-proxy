@@ -210,9 +210,9 @@ public class InboundConfigService {
 
         return new PageResponse<>(
                 inboundDTOs,
-                inboundPage.getTotalElements(),
                 inboundPage.getNumber() + 1, // Spring Data JPA页码从0开始，转换为从1开始
-                inboundPage.getSize()
+                inboundPage.getSize(),
+                inboundPage.getTotalElements()
         );
     }
 }
