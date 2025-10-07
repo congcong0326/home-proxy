@@ -1,12 +1,16 @@
 package org.congcong.proxyworker.server;
 
 import io.netty.buffer.Unpooled;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufHolder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyContext;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 
 
 /**
@@ -18,8 +22,11 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
 
     private final Channel relayChannel;
 
-    public RelayHandler(Channel relayChannel) {
+    private final boolean isClient;
+
+    public RelayHandler(Channel relayChannel, boolean isClient) {
         this.relayChannel = relayChannel;
+        this.isClient = isClient;
     }
 
     /**
@@ -42,13 +49,35 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
             ctx.channel().config().setAutoRead(false);
         }
 
-        // 写到对端，失败则关闭双端
+        // 计算本次转发的字节数（仅当消息为 ByteBuf 或持有 ByteBuf 的对象）
+        final int bytes = readableBytes(msg);
+
+        // 写到对端，失败则关闭双端；成功时累加字节统计
         relayChannel.write(msg).addListener(future -> {
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
                 log.warn("Relaying write failed: {}", cause == null ? "unknown" : cause.getMessage());
                 closeOnFlush(ctx.channel());
                 closeOnFlush(relayChannel);
+            } else if (bytes > 0) {
+                // 依据方向选择绑定了上下文的通道：
+                // isClient=true 表示处理客户端->代理的流，上下文在入站通道（ctx.channel）
+                // isClient=false 表示处理服务端->代理的流，上下文在入站通道（relayChannel）
+                Channel contextChannel = isClient ? ctx.channel() : relayChannel;
+                ProxyContext proxyContext = ChannelAttributes.getProxyContext(contextChannel);
+                if (proxyContext == null) {
+                    // 作为兜底，再尝试另一侧通道，避免上下文缺失
+                    proxyContext = ChannelAttributes.getProxyContext(isClient ? relayChannel : ctx.channel());
+                }
+                if (proxyContext != null) {
+                    if (isClient) {
+                        // 来自客户端的数据（client -> proxy -> server）累加到 bytesIn
+                        proxyContext.setBytesIn(proxyContext.getBytesIn() + bytes);
+                    } else {
+                        // 来自服务端的数据（server -> proxy -> client）累加到 bytesOut
+                        proxyContext.setBytesOut(proxyContext.getBytesOut() + bytes);
+                    }
+                }
             }
         });
     }
@@ -93,5 +122,16 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         if (ch != null && ch.isOpen()) {
             ch.writeAndFlush(Unpooled.EMPTY_BUFFER).addListener(ChannelFutureListener.CLOSE);
         }
+    }
+
+    private static int readableBytes(Object msg) {
+        if (msg instanceof ByteBuf buf) {
+            return buf.readableBytes();
+        }
+        if (msg instanceof ByteBufHolder holder) {
+            ByteBuf content = holder.content();
+            return content != null ? content.readableBytes() : 0;
+        }
+        return 0;
     }
 }

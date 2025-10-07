@@ -1,11 +1,6 @@
 package org.congcong.proxyworker.protocol;
 
-import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
-import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.socksx.v5.DefaultSocks5CommandResponse;
-import io.netty.handler.codec.socksx.v5.Socks5AddressType;
-import io.netty.handler.codec.socksx.v5.Socks5CommandStatus;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProtocolType;
@@ -42,7 +37,23 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         OutboundConnector connector = OutboundConnectorFactory.create(proxyTunnelRequest);
 
         // 执行出站连接；出站连接器内部负责在失败时设置 promise.setFailure(...)
-        connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
+        ChannelFuture connect = connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
+        // 关注失败回调
+        connect.addListener((ChannelFutureListener) future -> {
+            if (!future.isSuccess()) {
+                // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
+                relayPromise.setFailure(future.cause());
+                // 确保释放出站资源
+                Channel ch = future.channel();
+                if (ch != null && ch.isOpen()) {
+                    ch.close();
+                }
+            }
+        });
+        // 关注成功回调
+        ChannelFuture channelFuture = connect.channel().closeFuture().addListener((ChannelFutureListener) future -> {
+
+        });
     }
 
     /**
@@ -81,8 +92,8 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
     }
 
     protected void setRelay(Channel inboundChannel, Channel outboundChannel, ProxyTunnelRequest proxyTunnelRequest) {
-        inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel));
-        outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel));
+        inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel, true));
+        outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel, false));
         if (proxyTunnelRequest.getInitialPayload() != null) {
             outboundChannel.writeAndFlush(proxyTunnelRequest.getInitialPayload());
         }

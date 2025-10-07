@@ -112,7 +112,7 @@ public class GeoIPUtil implements AutoCloseable {
             if (city == null && response.getCity() != null) {
                 city = response.getCity().getName();
             }
-            GeoLocation result = new GeoLocation(country, city);
+            GeoLocation result = new GeoLocation(country, city, ip);
             if (cacheEnabled && cache != null) {
                 cache.put(ip, result);
             }

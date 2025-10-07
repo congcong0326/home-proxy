@@ -7,6 +7,7 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.socksx.SocksMessage;
 import io.netty.handler.codec.socksx.v5.*;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
@@ -89,6 +90,10 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
 
             // 封装为通用隧道请求对象；首包目前为空，后续若存在首包数据由下游处理器填充
             UserConfig authedUser = ChannelAttributes.getAuthenticatedUser(channelHandlerContext.channel());
+            ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
+            proxyContext.setUserId(authedUser.getId());
+            proxyContext.setUserName(authedUser.getUsername());
+
             ProxyTunnelRequest tunnelRequest = ProxyTunnelRequest.fromSocks5(cmdReq, inboundConfig, authedUser, null);
             channelHandlerContext.fireChannelRead(tunnelRequest);
             return;

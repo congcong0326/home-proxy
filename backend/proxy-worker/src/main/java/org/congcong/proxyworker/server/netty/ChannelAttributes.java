@@ -2,6 +2,8 @@ package org.congcong.proxyworker.server.netty;
 
 import io.netty.channel.Channel;
 import io.netty.util.AttributeKey;
+import org.congcong.common.dto.ProxyContext;
+import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
 
@@ -11,6 +13,26 @@ public final class ChannelAttributes {
 
     public static final AttributeKey<InboundConfig> INBOUND_CONFIG = AttributeKey.valueOf("inboundConfig");
     public static final AttributeKey<UserConfig> AUTHENTICATED_USER = AttributeKey.valueOf("authenticatedUser");
+
+    public static final AttributeKey<ProxyContext> PROXY_CONTEXT_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_CONTEXT_ATTRIBUTE_KEY");
+    public static final AttributeKey<ProxyTimeContext> PROXY_TIME_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_TIME_ATTRIBUTE_KEY");
+
+    public static ProxyContext getProxyContext(Channel channel) {
+        return channel.attr(ChannelAttributes.PROXY_CONTEXT_ATTRIBUTE_KEY).get();
+    }
+
+    public static void setProxyContext(Channel channel, ProxyContext proxyContext) {
+        channel.attr(ChannelAttributes.PROXY_CONTEXT_ATTRIBUTE_KEY).set(proxyContext);
+    }
+
+    public static ProxyTimeContext getProxyTimeContext(Channel channel) {
+        return channel.attr(ChannelAttributes.PROXY_TIME_ATTRIBUTE_KEY).get();
+    }
+
+    public static void setProxyTimeContext(Channel channel, ProxyTimeContext proxyTimeContext) {
+        channel.attr(ChannelAttributes.PROXY_TIME_ATTRIBUTE_KEY).set(proxyTimeContext);
+    }
+
 
     public static InboundConfig getInboundConfig(Channel channel) {
         return channel.attr(ChannelAttributes.INBOUND_CONFIG).get();

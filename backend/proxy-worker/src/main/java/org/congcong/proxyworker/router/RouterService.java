@@ -4,16 +4,20 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.proxyworker.config.DefaultRouteConfig;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.GeoIPUtil;
 import org.congcong.proxyworker.util.GeoLocation;
+import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
+import java.net.SocketAddress;
 import java.util.List;
 import java.util.Optional;
 
@@ -40,8 +44,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
         List<RouteConfig> routes = inboundConfig.getRoutes();
-        locationLookup(proxyTunnelRequest);
-
+        locationLookupAndContextFill(channelHandlerContext, proxyTunnelRequest);
         for (RouteConfig route : routes) {
             List<RouteRule> rules = route.getRules();
             for (RouteRule rule : rules) {
@@ -56,6 +59,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             boolean matched = (op == MatchOp.IN) == matchCondition;
                             if (matched) {
                                 log.debug("地理路由策略命中 {}", route.getName());
+                                ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
                                 proxyTunnelRequest.setRouteConfig(route);
                                 channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                                 return;
@@ -71,6 +75,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                         boolean matched = (op == MatchOp.IN) == matchCondition;
                         if (matched) {
                             log.debug("域名路由策略命中 {}", route.getName());
+                            ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
                             proxyTunnelRequest.setRouteConfig(route);
                             channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                             return;
@@ -84,12 +89,13 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
         // 未命中任何路由，继续向下传递请求
         proxyTunnelRequest.setRouteConfig(DefaultRouteConfig.getInstance());
+        ProxyContextFillUtil.proxyContextRouteFill(proxyTunnelRequest.getRouteConfig(), ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
         channelHandlerContext.fireChannelRead(proxyTunnelRequest);
     }
 
 
 
-    private void locationLookup(ProxyTunnelRequest proxyTunnelRequest) {
+    private void locationLookupAndContextFill(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) {
         Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
         GeoLocation geoLocation = null;
         if (lookup.isPresent()) {
@@ -98,6 +104,48 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             proxyTunnelRequest.setCountry(geoLocation.getCountry());
             proxyTunnelRequest.setLocationResolveSuccess(true);
         }
+        // 获取客户端源地址信息（IP/端口）
+        java.net.InetSocketAddress remote = null;
+        SocketAddress remoteAddr = channelHandlerContext.channel().remoteAddress();
+        if (remoteAddr instanceof java.net.InetSocketAddress) {
+            remote = (java.net.InetSocketAddress) remoteAddr;
+        }
+
+        String clientIp = null;
+        Integer clientPort = null;
+        if (remote != null) {
+            clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : null;
+            clientPort = remote.getPort();
+        }
+
+        // 解析客户端地理位置
+        GeoLocation srcGeo = clientIp != null ? GeoIPUtil.getInstance().lookup(clientIp).orElse(null) : null;
+
+        // 准备目标 IP（无论 GeoIP 是否成功都尽量解析）
+        String dstIp = null;
+        if (geoLocation != null) {
+            dstIp = geoLocation.getIp();
+        } else {
+            dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
+        }
+
+        // 填充 ProxyContext
+        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
+        if (srcGeo != null) {
+            proxyContext.setSrcGeoCity(srcGeo.getCity());
+            proxyContext.setSrcGeoCountry(srcGeo.getCountry());
+        }
+        if (geoLocation != null) {
+            proxyContext.setDstGeoCity(geoLocation.getCity());
+            proxyContext.setDstGeoCountry(geoLocation.getCountry());
+        }
+        proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
+        proxyContext.setOriginalTargetIP(dstIp);
+        proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
+
+        proxyContext.setClientIp(clientIp);
+        proxyContext.setClientPort(clientPort == null ? 0 : clientPort);
+
     }
 
     private boolean matchGeo(String country, String value) {

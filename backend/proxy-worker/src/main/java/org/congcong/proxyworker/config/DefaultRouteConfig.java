@@ -24,6 +24,7 @@ public class DefaultRouteConfig extends RouteConfig {
         static {
             INSTANCE.setName("DefaultRouteConfig");
             INSTANCE.setPolicy(RoutePolicy.DIRECT);
+            INSTANCE.setId(-1L);
             RouteRule routeRule = new RouteRule();
             routeRule.setConditionType(RouteConditionType.DOMAIN);
             routeRule.setOp(MatchOp.IN);
