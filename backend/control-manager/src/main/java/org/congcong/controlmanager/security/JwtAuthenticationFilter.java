@@ -45,7 +45,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // 跳过公开端点的JWT验证
         if ("/admin/login".equals(path) || 
             "/api/config/aggregate".equals(path) || 
-            "/api/config/hash".equals(path)) { 
+            "/api/config/hash".equals(path) ||
+                "/api/logs/access".equals(path) ||
+                "/api/logs/auth".equals(path)) {
             chain.doFilter(request, response); 
             return; 
         }

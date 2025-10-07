@@ -28,6 +28,7 @@ public class SecurityConfig {
                 .requestMatchers("/admin/login").permitAll()
                     .requestMatchers("/api/config/aggregate").permitAll()
                     .requestMatchers("/api/config/hash").permitAll()
+                    .requestMatchers("/api/logs/**").permitAll()
                     .requestMatchers("/error").permitAll()
                     .anyRequest().authenticated()
             )

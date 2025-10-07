@@ -1,7 +1,7 @@
 package org.congcong.proxyworker.audit;
 
-import org.congcong.proxyworker.audit.dto.AuthLog;
-import org.congcong.proxyworker.audit.dto.AccessLog;
+import org.congcong.common.dto.AuthLog;
+import org.congcong.common.dto.AccessLog;
 
 /**
  * 日志发布接口

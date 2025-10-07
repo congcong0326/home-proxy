@@ -3,7 +3,7 @@ package org.congcong.proxyworker.audit;
 import io.netty.channel.Channel;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
-import org.congcong.proxyworker.audit.dto.AccessLog;
+import org.congcong.common.dto.AccessLog;
 import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import java.util.concurrent.atomic.AtomicLong;

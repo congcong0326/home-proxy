@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.audit.dto;
+package org.congcong.common.dto;
 
 import lombok.Data;
 import java.time.Instant;

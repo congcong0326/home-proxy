@@ -9,7 +9,6 @@ import org.congcong.proxyworker.server.netty.ChannelAttributes;
 public class ProxyContextFillUtil {
 
 
-
     public static void proxyContextRouteFill(RouteConfig route, ProxyContext context) {
         context.setRoutePolicyName(route.getName());
         context.setRoutePolicyId(route.getId());

@@ -8,6 +8,7 @@ import io.netty.handler.codec.socksx.SocksMessage;
 import io.netty.handler.codec.socksx.v5.*;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
+import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
@@ -36,6 +37,8 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
         Map<String, UserConfig> usersMap = inboundConfig.getUsersMap();
         // 第一次请求过来，协商认证方式，目前只支持用户名加密码
         if (socksMessage instanceof Socks5InitialRequest) {
+            ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+            proxyTimeContext.setConnectStartTime(System.currentTimeMillis());
             Socks5InitialRequest req = (Socks5InitialRequest) socksMessage;
             if (req.authMethods().contains(Socks5AuthMethod.PASSWORD)) {
                 // 选择用户名/密码认证，并准备解析后续认证请求
@@ -95,6 +98,8 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
             proxyContext.setUserName(authedUser.getUsername());
 
             ProxyTunnelRequest tunnelRequest = ProxyTunnelRequest.fromSocks5(cmdReq, inboundConfig, authedUser, null);
+            ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+            proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
             channelHandlerContext.fireChannelRead(tunnelRequest);
             return;
         }

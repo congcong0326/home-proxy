@@ -3,12 +3,14 @@ package org.congcong.proxyworker.protocol;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.server.RelayHandler;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 @ChannelHandler.Sharable
@@ -29,6 +31,8 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
+        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+        proxyTimeContext.setConnectTargetStartTime(System.currentTimeMillis());
         Channel inboundChannel = channelHandlerContext.channel();
 
         // 用统一的 promise 承载成功/失败，交由 getRelayPromise 处理中继与协议响应
@@ -42,6 +46,7 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         //
         connect.addListener((ChannelFutureListener) future -> {
             // 第一次请求的生命周期结束
+            proxyTimeContext.setConnectTargetEndTime(System.currentTimeMillis());
             proxyTunnelRequest.setStatus(ProxyTunnelRequest.Status.finish);
             if (!future.isSuccess()) {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
