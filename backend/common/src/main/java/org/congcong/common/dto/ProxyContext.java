@@ -16,14 +16,14 @@ public class ProxyContext {
     // 原访问目标
     private String originalTargetHost;
     private String originalTargetIP;
-    private int originalTargetPort;
+    private Integer originalTargetPort;
     // 改写目标
     private String rewriteTargetHost;
-    private int rewriteTargetPort;
+    private Integer rewriteTargetPort;
 
     // 源IP地址
     private String clientIp;
-    private int clientPort;
+    private Integer clientPort;
 
     // 地理位置信息
     private String srcGeoCountry;
