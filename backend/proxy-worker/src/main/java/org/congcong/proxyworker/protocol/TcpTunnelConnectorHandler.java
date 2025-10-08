@@ -56,14 +56,12 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
                 }
                 // 连接目标服务器失败
                 AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
+                log.debug("连接目标服务器失败" +
+                        " {}", future.cause().getMessage());
                 // 确保释放出站资源
                 Channel ch = future.channel();
                 if (ch != null && ch.isOpen()) {
                     ch.close();
-                }
-            } else {
-                if (proxyTunnelRequest.getInitialPayload() != null) {
-                    future.channel().writeAndFlush(proxyTunnelRequest.getInitialPayload());
                 }
             }
         });
@@ -99,13 +97,20 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
             if (future.isSuccess()) {
                 // 连接成功设置中继服务器
                 setRelay(ctx.channel(), outboundChannel);
+                log.debug("设置中继服务器成功");
                 // 写回成功
                 strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
+                log.debug("执行成功回调");
+                if (proxyTunnelRequest.getInitialPayload() != null) {
+                    log.debug("写入首次负载");
+                    outboundChannel.writeAndFlush(proxyTunnelRequest.getInitialPayload());
+                }
             }
             // 连接失败
             else {
                 Throwable cause = future.cause();
                 strategy.onConnectFailure(ctx, outboundChannel, proxyTunnelRequest, cause);
+                log.debug("因为{}执行失败回调", cause.getMessage());
             }
         });
         return promise;

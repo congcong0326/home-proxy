@@ -19,7 +19,7 @@ import java.util.Objects;
 
 public abstract class AbstractChannelInitializer extends ChannelInitializer<SocketChannel> {
 
-    private final InboundConfig inboundConfig;
+    protected final InboundConfig inboundConfig;
 
     protected AbstractChannelInitializer(InboundConfig inboundConfig) {
         this.inboundConfig = inboundConfig;

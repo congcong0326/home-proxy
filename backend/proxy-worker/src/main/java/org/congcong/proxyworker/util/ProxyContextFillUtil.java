@@ -24,28 +24,7 @@ public class ProxyContextFillUtil {
         context.setProxyId(inboundConfig.getId() == null ? 0 : inboundConfig.getId());
         context.setProxyName(inboundConfig.getName());
         context.setInboundProtocolType(inboundConfig.getProtocol());
-
-        // 入站加密算法（如为 SS，解析 ssMethod 到枚举）
-        ProxyEncAlgo encAlgo = null;
-        String ssMethod = inboundConfig.getSsMethod();
-        if (ssMethod != null) {
-            String normalized = ssMethod.trim().toLowerCase().replace('-', '_');
-            switch (normalized) {
-                case "aes_256_gcm":
-                    encAlgo = ProxyEncAlgo.aes_256_gcm;
-                    break;
-                case "aes_128_gcm":
-                    encAlgo = ProxyEncAlgo.aes_128_gcm;
-                    break;
-                case "chacha20_ietf_poly1305":
-                    encAlgo = ProxyEncAlgo.chacha20_ietf_poly1305;
-                    break;
-                default:
-                    // 未知或不支持的算法，保持为空
-                    break;
-            }
-        }
-        context.setInboundProxyEncAlgo(encAlgo);
+        context.setInboundProxyEncAlgo(inboundConfig.getSsMethod());
     }
 
 }

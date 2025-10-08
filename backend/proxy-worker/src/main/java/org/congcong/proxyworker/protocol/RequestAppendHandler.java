@@ -46,7 +46,7 @@ public class RequestAppendHandler extends ChannelInboundHandlerAdapter {
                     } else {
                         request.setInitialPayload(buf.retain());
                     }
-                    ctx.fireChannelRead(msg);
+                    //ctx.fireChannelRead(msg);
                     return;
                 }
                 // 有可能第二次数据包过来，客户端连接已经建立，此时需要移除第一次请求的对象，并且向下传播请求

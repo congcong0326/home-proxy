@@ -136,7 +136,7 @@ public class InboundConfigService {
 
         // 校验Shadowsocks协议的特殊要求
         if (inboundConfig.getProtocol() == ProtocolType.SHADOW_SOCKS) {
-            if (inboundConfig.getSsMethod() == null || inboundConfig.getSsMethod().trim().isEmpty()) {
+            if (inboundConfig.getSsMethod() == null) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                         "Shadowsocks协议必须指定加密方法");
             }

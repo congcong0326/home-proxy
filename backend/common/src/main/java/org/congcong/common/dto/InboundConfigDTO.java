@@ -2,6 +2,7 @@ package org.congcong.common.dto;
 
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,7 +19,7 @@ public class InboundConfigDTO {
     private Integer port;
     private Boolean tlsEnabled;
     private Boolean sniffEnabled;
-    private String ssMethod;
+    private ProxyEncAlgo ssMethod;
     private List<Long> allowedUserIds;
     private List<Long> routeIds;
     private Integer status;

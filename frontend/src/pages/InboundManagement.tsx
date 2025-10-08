@@ -33,6 +33,7 @@ import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateReques
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO, UserStatus, USER_STATUS_LABELS } from '../types/user';
 import { RouteDTO } from '../types/route';
+import { ProxyEncAlgo, PROXY_ENC_ALGO_LABELS } from '../types/proxyEncAlgo';
 
 const { Title, Text } = Typography;
 
@@ -99,6 +100,13 @@ const InboundManagement: React.FC = () => {
   const routeSelectOptions = useMemo(() => (
     routeOptions.map(r => ({ value: r.id, label: r.name }))
   ), [routeOptions]);
+
+  // Shadowsocks 加密算法选项
+  const ssMethodSelectOptions = useMemo(() => ([
+    { value: ProxyEncAlgo.AES_256_GCM, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.AES_256_GCM] },
+    { value: ProxyEncAlgo.AES_128_GCM, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.AES_128_GCM] },
+    { value: ProxyEncAlgo.CHACHA20_IETF_POLY1305, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.CHACHA20_IETF_POLY1305] },
+  ]), []);
 
   const loadUsersAndRoutes = useCallback(async () => {
     try {
@@ -339,7 +347,9 @@ const InboundManagement: React.FC = () => {
             {() => (
               createForm.getFieldValue('protocol') === ProtocolType.SS ? (
                 <Row gutter={16}>
-                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}><Input placeholder="aes-256-gcm" /></Form.Item></Col>
+                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}>
+                    <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
+                  </Form.Item></Col>
                   <Col span={12}><Form.Item name="allowedUserIds" label="绑定用户(仅1个)" rules={[{ required: true }]}>
                     <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                   </Form.Item></Col>
@@ -390,7 +400,9 @@ const InboundManagement: React.FC = () => {
             {() => (
               editForm.getFieldValue('protocol') === ProtocolType.SS ? (
                 <Row gutter={16}>
-                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}><Input /></Form.Item></Col>
+                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}>
+                    <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
+                  </Form.Item></Col>
                   <Col span={12}><Form.Item name="allowedUserIds" label="绑定用户(仅1个)" rules={[{ required: true }]}>
                     <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                   </Form.Item></Col>

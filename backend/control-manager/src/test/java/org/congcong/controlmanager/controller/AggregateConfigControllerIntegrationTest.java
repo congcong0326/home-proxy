@@ -183,8 +183,8 @@ class AggregateConfigControllerIntegrationTest {
         inboundCreateRequest.setPort(8080);
         inboundCreateRequest.setTlsEnabled(false);
         inboundCreateRequest.setSniffEnabled(false);
-        inboundCreateRequest.setAllowedUserIds(List.of(String.valueOf(testUserId)));
-        inboundCreateRequest.setRouteIds(List.of(String.valueOf(testRouteId)));
+        inboundCreateRequest.setAllowedUserIds(List.of((testUserId)));
+        inboundCreateRequest.setRouteIds(List.of((testRouteId)));
         inboundCreateRequest.setStatus(1);
         InboundConfigDTO createdInbound = inboundConfigService.createInboundConfig(inboundCreateRequest);
         testInboundId = createdInbound.getId();

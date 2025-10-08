@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 
 import java.util.List;
 
@@ -52,17 +53,17 @@ public class InboundConfigCreateRequest {
     /**
      * Shadowsocks加密方法
      */
-    private String ssMethod;
+    private ProxyEncAlgo ssMethod;
 
     /**
      * 允许的用户ID列表
      */
-    private List<String> allowedUserIds;
+    private List<Long> allowedUserIds;
 
     /**
      * 路由ID列表
      */
-    private List<String> routeIds;
+    private List<Long> routeIds;
 
     /**
      * 状态

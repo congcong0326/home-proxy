@@ -1,4 +1,5 @@
 import { ProtocolType } from './route';
+import { ProxyEncAlgo } from './proxyEncAlgo';
 
 export interface InboundConfigDTO {
   id: number;
@@ -8,7 +9,7 @@ export interface InboundConfigDTO {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
-  ssMethod?: string;
+  ssMethod?: ProxyEncAlgo;
   allowedUserIds?: number[];
   routeIds?: number[];
   status: number;
@@ -26,7 +27,7 @@ export interface InboundConfigCreateRequest {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
-  ssMethod?: string;
+  ssMethod?: ProxyEncAlgo;
   allowedUserIds?: number[];
   routeIds?: number[];
   status: number;
@@ -40,7 +41,7 @@ export interface InboundConfigUpdateRequest {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
-  ssMethod?: string;
+  ssMethod?: ProxyEncAlgo;
   allowedUserIds?: number[];
   routeIds?: number[];
   status: number;

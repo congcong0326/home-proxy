@@ -2,6 +2,7 @@ package org.congcong.proxyworker.config;
 
 import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,7 @@ public class InboundConfig {
     private Integer port;
     private Boolean tlsEnabled;
     private Boolean sniffEnabled;
-    private String ssMethod;
+    private ProxyEncAlgo ssMethod;
     private List<UserConfig> allowedUsers;
     private Map<String, UserConfig> usersMap;
     private List<RouteConfig> routes;

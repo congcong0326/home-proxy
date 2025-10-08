@@ -5,7 +5,7 @@ import lombok.Data;
 import org.congcong.common.enums.ProtocolType;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-
+import org.congcong.common.enums.ProxyEncAlgo;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -36,8 +36,9 @@ public class InboundConfig {
     @Column(name = "sniff_enabled", nullable = false)
     private Boolean sniffEnabled = false;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "ss_method", length = 64)
-    private String ssMethod;
+    private ProxyEncAlgo ssMethod;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "allowed_user_ids", columnDefinition = "JSON")
