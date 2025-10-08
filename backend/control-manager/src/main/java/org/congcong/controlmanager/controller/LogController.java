@@ -160,6 +160,38 @@ public class LogController {
         return ResponseEntity.ok(items);
     }
 
+    
+
+    /**
+     * 基于日度聚合表的 TopN 查询（支持时间区间）
+     *
+     * 入参说明：
+     * - `from` / `to`：时间范围（支持 `yyyy-MM-dd` 或 13位毫秒时间戳），均为空则默认统计当月。
+     * - `dimension`：Top 维度，支持：
+     *   - `users`：按用户（用户名优先，缺省使用用户ID）
+     *   - `apps`：按应用（原始目标主机 `originalTargetHost`）
+     *   - `user_apps`：按用户@应用（用户名@原始目标主机）
+     *   - `src_geo`：按来源地理位置（国家/城市）
+     *   - `dst_geo`：按目的地理位置（国家/城市）
+     *   默认值为 `apps`。
+     * - `metric`：统计指标，支持：
+     *   - `requests`：请求数
+     *   - `bytes`：流量字节数（入+出）
+     *   默认值为 `requests`。
+     * - `limit`：返回条目数，默认 10，最大 100。
+     */
+    @GetMapping("/access/aggregate/daily/top")
+    public ResponseEntity<List<org.congcong.controlmanager.dto.TopItem>> aggregateDailyTop(
+            @RequestParam(value = "from", required = false) String from,
+            @RequestParam(value = "to", required = false) String to,
+            @RequestParam(value = "dimension", required = false) String dimension,
+            @RequestParam(value = "metric", required = false) String metric,
+            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit
+    ) {
+        List<org.congcong.controlmanager.dto.TopItem> items = logService.aggregateDailyTopRange(from, to, dimension, metric, limit == null ? 10 : limit);
+        return ResponseEntity.ok(items);
+    }
+
     /**
      * 分布聚合
      */

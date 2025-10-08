@@ -23,7 +23,8 @@ import {
   BranchesOutlined,
   ThunderboltOutlined,
   MenuFoldOutlined,
-  MenuUnfoldOutlined
+  MenuUnfoldOutlined,
+  AreaChartOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -68,6 +69,16 @@ const ProxyConfig: React.FC = () => {
           icon: <ThunderboltOutlined />,
           label: '限流设置',
         },
+      ],
+    },
+    {
+      key: 'access-overview',
+      icon: <GlobalOutlined />,
+      label: '访问概览',
+      children: [
+        { key: '/config/overview/log-audit', icon: <LogoutOutlined />, label: '日志审计' },
+        { key: '/config/overview/aggregate', icon: <AreaChartOutlined />, label: '聚合分析' },
+        { key: '/config/overview/geo', icon: <GlobalOutlined />, label: '地理位置分布' },
       ],
     },
   ];
@@ -165,7 +176,7 @@ const ProxyConfig: React.FC = () => {
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
-          defaultOpenKeys={['proxy-config']}
+          defaultOpenKeys={['proxy-config', 'access-overview']}
           className="proxy-config-menu"
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
@@ -268,6 +279,12 @@ const getCardDescription = (key: string): string => {
       return '设置路由规则与流量分发策略';
     case '/config/ratelimit':
       return '设置全局或指定用户的带宽与流量限制，支持时间/日期范围';
+    case '/config/overview/log-audit':
+      return '查看访问日志，支持查询、过滤与详情';
+    case '/config/overview/aggregate':
+      return '综合用户与应用TopN聚合分析';
+    case '/config/overview/geo':
+      return '访问来源地理分布与热点';
     default:
       return '配置项说明';
   }

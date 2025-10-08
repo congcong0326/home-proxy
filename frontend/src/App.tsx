@@ -15,6 +15,8 @@ import RouteManagement from './pages/RouteManagement';
 import './App.css';
 import RateLimitManagement from './pages/RateLimitManagement';
 import InboundManagement from './pages/InboundManagement';
+import LogAudit from './pages/LogAudit';
+import AggregatedAnalysis from './pages/AggregatedAnalysis';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -78,6 +80,26 @@ const AppContent: React.FC = () => {
           {/* 其他配置子页面占位符 */}
           <Route path="inbound" element={<InboundManagement />} />
           <Route path="ratelimit" element={<RateLimitManagement />} />
+        </Route>
+
+        {/* 访问概览子页面嵌入到代理配置下，统一左侧栏 */}
+        <Route 
+          path="/config"
+          element={
+            <ProtectedRoute>
+              <ProxyConfig />
+            </ProtectedRoute>
+          }
+        >
+          {/* 已有配置子页面 */}
+          <Route path="users" element={<UserManagement />} />
+          <Route path="routing" element={<RouteManagement />} />
+          <Route path="inbound" element={<InboundManagement />} />
+          <Route path="ratelimit" element={<RateLimitManagement />} />
+          {/* 访问概览嵌套路由 */}
+          <Route path="overview/log-audit" element={<LogAudit />} />
+          <Route path="overview/aggregate" element={<AggregatedAnalysis />} />
+          <Route path="overview/geo" element={<div style={{ padding: 24 }}>地理位置分布 - 待实现</div>} />
         </Route>
         
         {/* 默认路由重定向 */}

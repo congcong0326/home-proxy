@@ -21,4 +21,7 @@ public class AccessLogListItem {
     private Long requestDurationMs;
     private String originalTargetHost;
     private String rewriteTargetHost;
+
+    private String srcGeoCountry;
+    private String dstGeoCountry;
 }

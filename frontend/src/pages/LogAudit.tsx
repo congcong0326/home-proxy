@@ -1,0 +1,229 @@
+import React, { useEffect, useState } from 'react';
+import dayjs from 'dayjs';
+import { Card, Form, Row, Col, Input, Select, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
+import apiService from '../services/api';
+import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
+
+const { RangePicker } = DatePicker;
+const { Text } = Typography;
+
+const LogAudit: React.FC = () => {
+  const [form] = Form.useForm<AccessLogQueryParams>();
+  const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<AccessLogListItem[]>([]);
+  const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 0, pageSize: 10 });
+  const [detail, setDetail] = useState<AccessLogDetail | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  // 人性化格式化字节数（B/KB/MB/GB）
+  const formatBytes = (value?: number) => {
+    if (value === undefined || value === null || isNaN(Number(value))) return '-';
+    const KB = 1024;
+    const MB = KB * 1024;
+    const GB = MB * 1024;
+    if (value < KB) return `${value} B`;
+    if (value < MB) return `${(value / KB).toFixed(2)} KB`;
+    if (value < GB) return `${(value / MB).toFixed(2)} MB`;
+    return `${(value / GB).toFixed(2)} GB`;
+  };
+
+  // 人性化格式化耗时（ms/s/m/h）
+  const formatDuration = (value?: number) => {
+    if (value === undefined || value === null || isNaN(Number(value))) return '-';
+    if (value < 1000) return `${value} ms`;
+    const seconds = value / 1000;
+    if (seconds < 60) return `${seconds.toFixed(2)} s`;
+    const minutes = Math.floor(seconds / 60);
+    const remSeconds = Math.floor(seconds % 60);
+    if (minutes < 60) return `${minutes}m ${remSeconds}s`;
+    const hours = minutes / 60;
+    return `${hours.toFixed(2)} h`;
+  };
+
+  const fetchData = async (params?: Partial<AccessLogQueryParams>) => {
+    setLoading(true);
+    try {
+      const values = form.getFieldsValue();
+      const merged: AccessLogQueryParams = {
+        page: pageInfo.page,
+        size: pageInfo.pageSize,
+        ...values,
+        ...params,
+      };
+
+      const res: PageResponse<AccessLogListItem> = await apiService.getAccessLogs(merged);
+      setData(res.content || []);
+      setPageInfo({
+        total: res.totalElements || 0,
+        page: res.number || 0,
+        pageSize: res.size || merged.size || 10,
+      });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 首次渲染：默认选择今天并加载数据
+  useEffect(() => {
+    const start = dayjs().startOf('day');
+    const end = dayjs().endOf('day');
+    form.setFieldsValue({
+      from: start.toISOString(),
+      to: end.toISOString(),
+    });
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 分页变化时重新加载
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageInfo.page, pageInfo.pageSize]);
+
+  const onSearch = () => {
+    setPageInfo(prev => ({ ...prev, page: 0 }));
+    fetchData({ page: 0 });
+  };
+
+  const onReset = () => {
+    form.resetFields();
+    setPageInfo({ total: 0, page: 0, pageSize: 10 });
+    fetchData({ page: 0, size: 10 });
+  };
+
+  const openDetail = async (id: number) => {
+    try {
+      const d = await apiService.getAccessLogById(id);
+      setDetail(d);
+      setDetailOpen(true);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const columns = [
+    { title: '时间', dataIndex: 'ts', key: 'ts', render: (v: string) => new Date(v).toLocaleString() },
+    { title: '用户', dataIndex: 'username', key: 'username' },
+    { title: '客户端IP', dataIndex: 'clientIp', key: 'clientIp' },
+    { title: '原目标', dataIndex: 'originalTargetHost', key: 'originalTargetHost' },
+    { title: '状态', dataIndex: 'status', key: 'status', render: (v: number) => <Tag color={v === 200 ? 'green' : 'red'}>{v}</Tag> },
+    { title: '源地理', key: 'srcGeo', render: (_: any, r: AccessLogListItem) => `${r.srcGeoCountry || ''} ${r.srcGeoCity || ''}`.trim() || '-' },
+    { title: '目标地理', key: 'dstGeo', render: (_: any, r: AccessLogListItem) => `${r.dstGeoCountry || ''} ${r.dstGeoCity || ''}`.trim() || '-' },
+    { title: '上行字节', dataIndex: 'bytesIn', key: 'bytesIn', render: (v?: number) => formatBytes(v) },
+    { title: '下行字节', dataIndex: 'bytesOut', key: 'bytesOut', render: (v?: number) => formatBytes(v) },
+    { title: '隧道时长', dataIndex: 'requestDurationMs', key: 'requestDurationMs', render: (v?: number) => formatDuration(v) },
+    {
+      title: '操作',
+      key: 'action',
+      render: (_: any, record: AccessLogListItem) => (
+        <Space>
+          <Button type="link" onClick={() => openDetail(record.id)}>详情</Button>
+        </Space>
+      ),
+    },
+  ];
+
+  return (
+    <div>
+      <Card title="日志审计" bordered={false} style={{ marginBottom: 16 }}>
+        <Form form={form} layout="vertical">
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="时间范围" name="range">
+                <RangePicker
+                  showTime
+                  defaultValue={[dayjs().startOf('day'), dayjs().endOf('day')]}
+                  onChange={(val) => {
+                    const from = val?.[0]?.toISOString();
+                    const to = val?.[1]?.toISOString();
+                    form.setFieldsValue({ from, to });
+                  }}
+                />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="用户名" name="username"><Input placeholder="模糊匹配" allowClear /></Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="客户端IP" name="clientIp"><Input allowClear /></Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="状态码" name="status"><Input placeholder="例如 200" allowClear /></Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="协议" name="protocol">
+                <Select allowClear options={[{ value: 'http', label: 'HTTP' }, { value: 'socks5', label: 'SOCKS5' }, { value: 'ss', label: 'SS' }]} />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="关键字" name="q"><Input placeholder="支持主机、用户、错误信息等" allowClear /></Form.Item>
+            </Col>
+          </Row>
+          <Space>
+            <Button type="primary" onClick={onSearch}>查询</Button>
+            <Button onClick={onReset}>重置</Button>
+          </Space>
+        </Form>
+      </Card>
+
+      <Card bordered={false}>
+        <Table
+          rowKey="id"
+          loading={loading}
+          columns={columns}
+          dataSource={data}
+          pagination={{
+            total: pageInfo.total,
+            current: pageInfo.page + 1,
+            pageSize: pageInfo.pageSize,
+            showSizeChanger: true,
+            onChange: (p, ps) => setPageInfo({ ...pageInfo, page: p - 1, pageSize: ps }),
+          }}
+        />
+      </Card>
+
+      <Drawer title="访问详情" width={600} open={detailOpen} onClose={() => setDetailOpen(false)}>
+        {detail ? (
+          <div>
+            <Card size="small" title="基本信息" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">时间</Text>: {new Date(detail.ts).toLocaleString()}</p>
+              <p><Text type="secondary">请求ID</Text>: {detail.requestId}</p>
+              <p><Text type="secondary">用户</Text>: {detail.username} (ID: {detail.userId})</p>
+              <p><Text type="secondary">状态</Text>: {detail.status}</p>
+            </Card>
+            <Card size="small" title="源信息" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">客户端IP</Text>: {detail.clientIp}</p>
+              <p><Text type="secondary">源地理</Text>: {detail.srcGeoCountry} {detail.srcGeoCity}</p>
+            </Card>
+            <Card size="small" title="目标信息" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">原目标</Text>: {detail.originalTargetHost} {detail.originalTargetPort ? `:${detail.originalTargetPort}` : ''}</p>
+              <p><Text type="secondary">改写目标</Text>: {detail.rewriteTargetHost} {detail.rewriteTargetPort ? `:${detail.rewriteTargetPort}` : ''}</p>
+              <p><Text type="secondary">目标地理</Text>: {detail.dstGeoCountry} {detail.dstGeoCity}</p>
+            </Card>
+            <Card size="small" title="路由与协议" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">入站协议</Text>: {detail.inboundProtocolType}</p>
+              <p><Text type="secondary">出站协议</Text>: {detail.outboundProtocolType}</p>
+              <p><Text type="secondary">路由策略</Text>: {detail.routePolicyName} (ID: {detail.routePolicyId})</p>
+            </Card>
+            <Card size="small" title="流量与时延">
+              <p><Text type="secondary">上行/下行字节</Text>: {detail.bytesIn} / {detail.bytesOut}</p>
+          <p><Text type="secondary">隧道时长</Text>: {formatDuration(detail.requestDurationMs)}</p>
+              <p><Text type="secondary">DNS耗时(ms)</Text>: {detail.dnsDurationMs}</p>
+              <p><Text type="secondary">连接耗时(ms)</Text>: {detail.connectDurationMs}</p>
+              <p><Text type="secondary">连接目标耗时(ms)</Text>: {detail.connectTargetDurationMs}</p>
+            </Card>
+          </div>
+        ) : (
+          <Text type="secondary">无数据</Text>
+        )}
+      </Drawer>
+    </div>
+  );
+};
+
+export default LogAudit;

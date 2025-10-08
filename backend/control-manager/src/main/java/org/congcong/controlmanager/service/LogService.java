@@ -11,6 +11,26 @@ import org.congcong.controlmanager.entity.AccessLogEntity;
 import org.congcong.controlmanager.entity.AuthLogEntity;
 import org.congcong.controlmanager.repository.AccessLogRepository;
 import org.congcong.controlmanager.repository.AuthLogRepository;
+import org.congcong.controlmanager.repository.agg.MonthlyAppStatsRepository;
+import org.congcong.controlmanager.repository.agg.MonthlyUserStatsRepository;
+import org.congcong.controlmanager.repository.agg.MonthlyUserAppStatsRepository;
+import org.congcong.controlmanager.repository.agg.MonthlySrcGeoStatsRepository;
+import org.congcong.controlmanager.repository.agg.MonthlyDstGeoStatsRepository;
+import org.congcong.controlmanager.repository.agg.DailyUserStatsRepository;
+import org.congcong.controlmanager.repository.agg.DailyAppStatsRepository;
+import org.congcong.controlmanager.repository.agg.DailyUserAppStatsRepository;
+import org.congcong.controlmanager.repository.agg.DailySrcGeoStatsRepository;
+import org.congcong.controlmanager.repository.agg.DailyDstGeoStatsRepository;
+import org.congcong.controlmanager.entity.agg.MonthlyAppStats;
+import org.congcong.controlmanager.entity.agg.MonthlyUserStats;
+import org.congcong.controlmanager.entity.agg.MonthlyUserAppStats;
+import org.congcong.controlmanager.entity.agg.MonthlySrcGeoStats;
+import org.congcong.controlmanager.entity.agg.MonthlyDstGeoStats;
+import org.congcong.controlmanager.entity.agg.DailyAppStats;
+import org.congcong.controlmanager.entity.agg.DailyUserStats;
+import org.congcong.controlmanager.entity.agg.DailyUserAppStats;
+import org.congcong.controlmanager.entity.agg.DailySrcGeoStats;
+import org.congcong.controlmanager.entity.agg.DailyDstGeoStats;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -19,6 +39,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -26,6 +47,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +56,16 @@ public class LogService {
 
     private final AccessLogRepository accessLogRepository;
     private final AuthLogRepository authLogRepository;
+    private final MonthlyUserStatsRepository monthlyUserStatsRepository;
+    private final MonthlyAppStatsRepository monthlyAppStatsRepository;
+    private final MonthlyUserAppStatsRepository monthlyUserAppStatsRepository;
+    private final MonthlySrcGeoStatsRepository monthlySrcGeoStatsRepository;
+    private final MonthlyDstGeoStatsRepository monthlyDstGeoStatsRepository;
+    private final DailyUserStatsRepository dailyUserStatsRepository;
+    private final DailyAppStatsRepository dailyAppStatsRepository;
+    private final DailyUserAppStatsRepository dailyUserAppStatsRepository;
+    private final DailySrcGeoStatsRepository dailySrcGeoStatsRepository;
+    private final DailyDstGeoStatsRepository dailyDstGeoStatsRepository;
 
     @Transactional
     public int saveAccessLogs(List<AccessLog> logs) {
@@ -73,6 +106,10 @@ public class LogService {
             entities.add(e);
         }
         accessLogRepository.saveAll(entities);
+        // 增量更新月度聚合统计
+        //updateMonthlyAggregates(logs);
+        // 增量更新日度聚合统计
+        updateDailyAggregates(logs);
         return entities.size();
     }
 
@@ -227,6 +264,148 @@ public class LogService {
     }
 
     /**
+     * 基于月度聚合表的 TopN 查询
+     */
+    public List<org.congcong.controlmanager.dto.TopItem> aggregateMonthlyTop(String month, String dimension, String metric, int limit) {
+        LocalDate monthDate = parseMonth(month);
+        int topN = limit <= 0 ? 10 : Math.min(limit, 100);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
+
+        String dim = dimension == null ? "users" : dimension;
+        String met = metric == null ? "requests" : metric;
+        java.util.List<org.congcong.controlmanager.dto.TopItem> result = new java.util.ArrayList<>();
+
+        switch (dim) {
+            case "users": {
+                java.util.List<MonthlyUserStats> list = monthlyUserStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (MonthlyUserStats m : list) {
+                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
+                    String key = (m.getUsername() != null && !m.getUsername().isBlank()) ? m.getUsername() : String.valueOf(m.getUserId());
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "apps": {
+                java.util.List<MonthlyAppStats> list = monthlyAppStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (MonthlyAppStats m : list) {
+                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
+                    String key = m.getTargetHost();
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "user_apps": {
+                java.util.List<MonthlyUserAppStats> list = monthlyUserAppStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (MonthlyUserAppStats m : list) {
+                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
+                    String uname = (m.getUsername() != null && !m.getUsername().isBlank()) ? m.getUsername() : String.valueOf(m.getUserId());
+                    String key = uname + "@" + m.getTargetHost();
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "src_geo": {
+                java.util.List<MonthlySrcGeoStats> list = monthlySrcGeoStatsRepository.findTopByMonth(monthDate, pageable);
+                for (MonthlySrcGeoStats m : list) {
+                    String country = m.getSrcGeoCountry();
+                    String city = m.getSrcGeoCity();
+                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(m.getRequestsCount())));
+                }
+                break;
+            }
+            case "dst_geo": {
+                java.util.List<MonthlyDstGeoStats> list = monthlyDstGeoStatsRepository.findTopByMonth(monthDate, pageable);
+                for (MonthlyDstGeoStats m : list) {
+                    String country = m.getDstGeoCountry();
+                    String city = m.getDstGeoCity();
+                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(m.getRequestsCount())));
+                }
+                break;
+            }
+            default:
+                // 默认回退到 apps 请求次数
+                java.util.List<MonthlyAppStats> list = monthlyAppStatsRepository.findTopByMonth(monthDate, "requests", pageable);
+                for (MonthlyAppStats m : list) {
+                    result.add(new org.congcong.controlmanager.dto.TopItem(m.getTargetHost(), nullSafe(m.getRequestsCount())));
+                }
+        }
+        return result;
+    }
+
+    /**
+     * 基于日度聚合表的 TopN 查询
+     */
+    public List<org.congcong.controlmanager.dto.TopItem> aggregateDailyTop(String day, String dimension, String metric, int limit) {
+        LocalDate dayDate = parseDay(day);
+        int topN = limit <= 0 ? 10 : Math.min(limit, 100);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
+
+        String dim = dimension == null ? "apps" : dimension;
+        String met = metric == null ? "requests" : metric;
+        java.util.List<org.congcong.controlmanager.dto.TopItem> result = new java.util.ArrayList<>();
+
+        switch (dim) {
+            case "users": {
+                java.util.List<DailyUserStats> list = dailyUserStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (DailyUserStats d : list) {
+                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
+                    String key = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "apps": {
+                java.util.List<DailyAppStats> list = dailyAppStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (DailyAppStats d : list) {
+                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
+                    String key = d.getTargetHost();
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "user_apps": {
+                java.util.List<DailyUserAppStats> list = dailyUserAppStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
+                for (DailyUserAppStats d : list) {
+                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
+                    String uname = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
+                    String key = uname + "@" + d.getTargetHost();
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                break;
+            }
+            case "src_geo": {
+                java.util.List<DailySrcGeoStats> list = dailySrcGeoStatsRepository.findTopByDay(dayDate, pageable);
+                for (DailySrcGeoStats d : list) {
+                    String country = d.getSrcGeoCountry();
+                    String city = d.getSrcGeoCity();
+                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(d.getRequestsCount())));
+                }
+                break;
+            }
+            case "dst_geo": {
+                java.util.List<DailyDstGeoStats> list = dailyDstGeoStatsRepository.findTopByDay(dayDate, pageable);
+                for (DailyDstGeoStats d : list) {
+                    String country = d.getDstGeoCountry();
+                    String city = d.getDstGeoCity();
+                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
+                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(d.getRequestsCount())));
+                }
+                break;
+            }
+            default:
+                // 默认回退到 apps 请求次数
+                java.util.List<DailyAppStats> list = dailyAppStatsRepository.findTopByDay(dayDate, "requests", pageable);
+                for (DailyAppStats d : list) {
+                    result.add(new org.congcong.controlmanager.dto.TopItem(d.getTargetHost(), nullSafe(d.getRequestsCount())));
+                }
+        }
+        return result;
+    }
+
+    /**
      * 分布统计
      */
     public List<org.congcong.controlmanager.dto.DistributionBucket> aggregateAccessDistribution(AccessLogQueryRequest req, String field) {
@@ -280,14 +459,157 @@ public class LogService {
         }
     }
 
+    /**
+     * 基于日度聚合表的 TopN 查询（支持时间区间）
+     */
+    public List<org.congcong.controlmanager.dto.TopItem> aggregateDailyTopRange(String from, String to, String dimension, String metric, int limit) {
+        LocalDateTime fromTs = parseDate(from);
+        LocalDateTime toTs = parseDate(to);
+        LocalDate fromDay = fromTs == null ? null : fromTs.toLocalDate();
+        LocalDate toDay = toTs == null ? null : toTs.toLocalDate();
+
+        // 默认聚合当前整月，以覆盖原有 month 能力
+        if (fromDay == null && toDay == null) {
+            LocalDate today = LocalDate.now();
+            LocalDate firstOfMonth = LocalDate.of(today.getYear(), today.getMonth(), 1);
+            LocalDate lastOfMonth = firstOfMonth.plusMonths(1).minusDays(1);
+            fromDay = firstOfMonth;
+            toDay = lastOfMonth;
+        }
+
+        int topN = limit <= 0 ? 10 : Math.min(limit, 100);
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
+
+        String dim = dimension == null ? "apps" : dimension;
+        String met = metric == null ? "requests" : metric;
+
+        java.util.List<org.congcong.controlmanager.dto.TopItem> result = new java.util.ArrayList<>();
+        java.util.Comparator<org.congcong.controlmanager.dto.TopItem> cmp = java.util.Comparator.comparingLong(org.congcong.controlmanager.dto.TopItem::getValue).reversed();
+
+        switch (dim) {
+            case "users": {
+                java.util.List<DailyUserStats> list = dailyUserStatsRepository.findByDayDateBetween(fromDay, toDay);
+                java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: userId|username -> [req, bin, bout]
+                for (DailyUserStats d : list) {
+                    String uname = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
+                    String key = d.getUserId() + "|" + (uname == null ? "" : uname);
+                    long[] v = agg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                    v[0] += nullSafe(d.getRequestsCount());
+                    v[1] += nullSafe(d.getBytesIn());
+                    v[2] += nullSafe(d.getBytesOut());
+                }
+                java.util.List<org.congcong.controlmanager.dto.TopItem> items = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, long[]> en : agg.entrySet()) {
+                    String[] parts = en.getKey().split("\\|");
+                    String uname = parts.length > 1 ? parts[1] : parts[0];
+                    long[] v = en.getValue();
+                    long val = met.equals("bytes") ? (v[1] + v[2]) : v[0];
+                    items.add(new org.congcong.controlmanager.dto.TopItem(uname, val));
+                }
+                items.sort(cmp);
+                result = items.size() > topN ? items.subList(0, topN) : items;
+                break;
+            }
+            case "apps": {
+                java.util.List<DailyAppStats> list = dailyAppStatsRepository.findByDayDateBetween(fromDay, toDay);
+                java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: host -> [req, bin, bout]
+                for (DailyAppStats d : list) {
+                    String key = d.getTargetHost();
+                    long[] v = agg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                    v[0] += nullSafe(d.getRequestsCount());
+                    v[1] += nullSafe(d.getBytesIn());
+                    v[2] += nullSafe(d.getBytesOut());
+                }
+                java.util.List<org.congcong.controlmanager.dto.TopItem> items = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, long[]> en : agg.entrySet()) {
+                    String key = en.getKey();
+                    long[] v = en.getValue();
+                    long val = met.equals("bytes") ? (v[1] + v[2]) : v[0];
+                    items.add(new org.congcong.controlmanager.dto.TopItem(key, val));
+                }
+                items.sort(cmp);
+                result = items.size() > topN ? items.subList(0, topN) : items;
+                break;
+            }
+            case "user_apps": {
+                java.util.List<DailyUserAppStats> list = dailyUserAppStatsRepository.findByDayDateBetween(fromDay, toDay);
+                java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: userId|username|host -> [req, bin, bout]
+                for (DailyUserAppStats d : list) {
+                    String uname = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
+                    String key = d.getUserId() + "|" + (uname == null ? "" : uname) + "|" + d.getTargetHost();
+                    long[] v = agg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                    v[0] += nullSafe(d.getRequestsCount());
+                    v[1] += nullSafe(d.getBytesIn());
+                    v[2] += nullSafe(d.getBytesOut());
+                }
+                java.util.List<org.congcong.controlmanager.dto.TopItem> items = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, long[]> en : agg.entrySet()) {
+                    String[] parts = en.getKey().split("\\|");
+                    String uname = parts.length > 2 ? parts[1] : parts[0];
+                    String host = parts.length > 2 ? parts[2] : "";
+                    long[] v = en.getValue();
+                    long val = met.equals("bytes") ? (v[1] + v[2]) : v[0];
+                    items.add(new org.congcong.controlmanager.dto.TopItem(uname + "@" + host, val));
+                }
+                items.sort(cmp);
+                result = items.size() > topN ? items.subList(0, topN) : items;
+                break;
+            }
+            case "src_geo": {
+                java.util.List<DailySrcGeoStats> list = dailySrcGeoStatsRepository.findByDayDateBetween(fromDay, toDay);
+                java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: country|city -> [req]
+                for (DailySrcGeoStats d : list) {
+                    String country = d.getSrcGeoCountry();
+                    String city = d.getSrcGeoCity();
+                    String key = (country == null ? "" : country) + "|" + (city == null ? "" : city);
+                    long[] v = agg.computeIfAbsent(key, k -> new long[]{0});
+                    v[0] += nullSafe(d.getRequestsCount());
+                }
+                java.util.List<org.congcong.controlmanager.dto.TopItem> items = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, long[]> en : agg.entrySet()) {
+                    String[] parts = en.getKey().split("\\|");
+                    String key = (parts[0] == null ? "" : parts[0]) + (parts.length > 1 && parts[1] != null && !parts[1].isEmpty() ? "/" + parts[1] : "");
+                    long[] v = en.getValue();
+                    items.add(new org.congcong.controlmanager.dto.TopItem(key.isEmpty() ? "未知" : key, v[0]));
+                }
+                items.sort(cmp);
+                result = items.size() > topN ? items.subList(0, topN) : items;
+                break;
+            }
+            case "dst_geo": {
+                java.util.List<DailyDstGeoStats> list = dailyDstGeoStatsRepository.findByDayDateBetween(fromDay, toDay);
+                java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: country|city -> [req]
+                for (DailyDstGeoStats d : list) {
+                    String country = d.getDstGeoCountry();
+                    String city = d.getDstGeoCity();
+                    String key = (country == null ? "" : country) + "|" + (city == null ? "" : city);
+                    long[] v = agg.computeIfAbsent(key, k -> new long[]{0});
+                    v[0] += nullSafe(d.getRequestsCount());
+                }
+                java.util.List<org.congcong.controlmanager.dto.TopItem> items = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<String, long[]> en : agg.entrySet()) {
+                    String[] parts = en.getKey().split("\\|");
+                    String key = (parts[0] == null ? "" : parts[0]) + (parts.length > 1 && parts[1] != null && !parts[1].isEmpty() ? "/" + parts[1] : "");
+                    long[] v = en.getValue();
+                    items.add(new org.congcong.controlmanager.dto.TopItem(key.isEmpty() ? "未知" : key, v[0]));
+                }
+                items.sort(cmp);
+                result = items.size() > topN ? items.subList(0, topN) : items;
+                break;
+            }
+            default:
+                break;
+        }
+        return result;
+    }
+
     private String topKey(AccessLogEntity e, String dimension) {
         switch (dimension == null ? "users" : dimension) {
             case "users":
                 return e.getUsername();
             case "apps": // apps(host)
             case "apps(host)":
-                String host = e.getRewriteTargetHost();
-                if (host == null || host.isBlank()) host = e.getOriginalTargetHost();
+                String host = e.getOriginalTargetHost();
                 return host;
             case "src_geo_country":
                 return e.getSrcGeoCountry();
@@ -301,6 +623,419 @@ public class LogService {
                 return null;
         }
     }
+
+    private void updateMonthlyAggregates(List<AccessLog> logs) {
+        if (logs == null || logs.isEmpty()) return;
+
+        // 批量聚合，减少数据库查找次数
+        Map<String, long[]> userAgg = new HashMap<>();          // key: month|userId|username -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> appAgg = new HashMap<>();           // key: month|host -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> userAppAgg = new HashMap<>();       // key: month|userId|username|host -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> srcGeoAgg = new HashMap<>();        // key: month|country|city -> [requests]
+        Map<String, long[]> dstGeoAgg = new HashMap<>();        // key: month|country|city -> [requests]
+
+        for (AccessLog l : logs) {
+            LocalDateTime ts = toLocalDateTime(l.getTs());
+            LocalDate monthDate = LocalDate.of(ts.getYear(), ts.getMonth(), 1);
+            long req = 1L;
+            long bin = l.getBytesIn() == null ? 0L : l.getBytesIn();
+            long bout = l.getBytesOut() == null ? 0L : l.getBytesOut();
+
+            Long userId = l.getUserId();
+            String username = l.getUsername();
+            String host = l.getOriginalTargetHost();
+
+            // 用户流量
+            if (userId != null) {
+                String key = monthDate + "|" + userId + "|" + (username == null ? "" : username);
+                long[] v = userAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 应用统计
+            if (host != null && !host.isBlank()) {
+                String key = monthDate + "|" + host;
+                long[] v = appAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 用户访问应用统计
+            if (userId != null && host != null && !host.isBlank()) {
+                String key = monthDate + "|" + userId + "|" + (username == null ? "" : username) + "|" + host;
+                long[] v = userAppAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 地理来源统计
+            String srcCountry = l.getSrcGeoCountry();
+            String srcCity = l.getSrcGeoCity();
+            if (notBlank(srcCountry) || notBlank(srcCity)) {
+                String key = monthDate + "|" + nullToEmpty(srcCountry) + "|" + nullToEmpty(srcCity);
+                long[] v = srcGeoAgg.computeIfAbsent(key, k -> new long[]{0});
+                v[0] += req;
+            }
+
+            // 地理目标统计
+            String dstCountry = l.getDstGeoCountry();
+            String dstCity = l.getDstGeoCity();
+            if (notBlank(dstCountry) || notBlank(dstCity)) {
+                String key = monthDate + "|" + nullToEmpty(dstCountry) + "|" + nullToEmpty(dstCity);
+                long[] v = dstGeoAgg.computeIfAbsent(key, k -> new long[]{0});
+                v[0] += req;
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 写入用户聚合
+        for (Map.Entry<String, long[]> en : userAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate monthDate = LocalDate.parse(parts[0]);
+            Long userId = Long.parseLong(parts[1]);
+            String username = parts[2];
+            long[] v = en.getValue();
+            MonthlyUserStats m = monthlyUserStatsRepository.findByMonthDateAndUserId(monthDate, userId).orElseGet(() -> {
+                MonthlyUserStats x = new MonthlyUserStats();
+                x.setMonthDate(monthDate);
+                x.setUserId(userId);
+                x.setUsername(username);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            if (username != null && !username.isBlank()) m.setUsername(username);
+            m.setRequestsCount(nullSafe(m.getRequestsCount()) + v[0]);
+            m.setBytesIn(nullSafe(m.getBytesIn()) + v[1]);
+            m.setBytesOut(nullSafe(m.getBytesOut()) + v[2]);
+            m.setUpdatedAt(now);
+            monthlyUserStatsRepository.save(m);
+        }
+
+        // 写入应用聚合
+        for (Map.Entry<String, long[]> en : appAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate monthDate = LocalDate.parse(parts[0]);
+            String host = parts[1];
+            long[] v = en.getValue();
+            MonthlyAppStats m = monthlyAppStatsRepository.findByMonthDateAndTargetHost(monthDate, host).orElseGet(() -> {
+                MonthlyAppStats x = new MonthlyAppStats();
+                x.setMonthDate(monthDate);
+                x.setTargetHost(host);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            m.setRequestsCount(nullSafe(m.getRequestsCount()) + v[0]);
+            m.setBytesIn(nullSafe(m.getBytesIn()) + v[1]);
+            m.setBytesOut(nullSafe(m.getBytesOut()) + v[2]);
+            m.setUpdatedAt(now);
+            monthlyAppStatsRepository.save(m);
+        }
+
+        // 写入用户-应用聚合
+        for (Map.Entry<String, long[]> en : userAppAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate monthDate = LocalDate.parse(parts[0]);
+            Long userId = Long.parseLong(parts[1]);
+            String username = parts[2];
+            String host = parts[3];
+            long[] v = en.getValue();
+            MonthlyUserAppStats m = monthlyUserAppStatsRepository.findByMonthDateAndUserIdAndTargetHost(monthDate, userId, host).orElseGet(() -> {
+                MonthlyUserAppStats x = new MonthlyUserAppStats();
+                x.setMonthDate(monthDate);
+                x.setUserId(userId);
+                x.setUsername(username);
+                x.setTargetHost(host);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            if (username != null && !username.isBlank()) m.setUsername(username);
+            m.setRequestsCount(nullSafe(m.getRequestsCount()) + v[0]);
+            m.setBytesIn(nullSafe(m.getBytesIn()) + v[1]);
+            m.setBytesOut(nullSafe(m.getBytesOut()) + v[2]);
+            m.setUpdatedAt(now);
+            monthlyUserAppStatsRepository.save(m);
+        }
+
+        // 写入源地理聚合
+        for (Map.Entry<String, long[]> en : srcGeoAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate monthDate = LocalDate.parse(parts[0]);
+            String country = emptyToNull(parts[1]);
+            String city = emptyToNull(parts[2]);
+            long[] v = en.getValue();
+            MonthlySrcGeoStats m = monthlySrcGeoStatsRepository.findByMonthDateAndSrcGeoCountryAndSrcGeoCity(monthDate, country, city).orElseGet(() -> {
+                MonthlySrcGeoStats x = new MonthlySrcGeoStats();
+                x.setMonthDate(monthDate);
+                x.setSrcGeoCountry(country);
+                x.setSrcGeoCity(city);
+                x.setRequestsCount(0L);
+                return x;
+            });
+            m.setRequestsCount(nullSafe(m.getRequestsCount()) + v[0]);
+            m.setUpdatedAt(now);
+            monthlySrcGeoStatsRepository.save(m);
+        }
+
+        // 写入目标地理聚合
+        for (Map.Entry<String, long[]> en : dstGeoAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate monthDate = LocalDate.parse(parts[0]);
+            String country = emptyToNull(parts[1]);
+            String city = emptyToNull(parts[2]);
+            long[] v = en.getValue();
+            MonthlyDstGeoStats m = monthlyDstGeoStatsRepository.findByMonthDateAndDstGeoCountryAndDstGeoCity(monthDate, country, city).orElseGet(() -> {
+                MonthlyDstGeoStats x = new MonthlyDstGeoStats();
+                x.setMonthDate(monthDate);
+                x.setDstGeoCountry(country);
+                x.setDstGeoCity(city);
+                x.setRequestsCount(0L);
+                return x;
+            });
+            m.setRequestsCount(nullSafe(m.getRequestsCount()) + v[0]);
+            m.setUpdatedAt(now);
+            monthlyDstGeoStatsRepository.save(m);
+        }
+    }
+
+    private void updateDailyAggregates(List<AccessLog> logs) {
+        if (logs == null || logs.isEmpty()) return;
+
+        // 批量聚合，减少数据库查找次数
+        Map<String, long[]> userAgg = new HashMap<>();          // key: day|userId|username -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> appAgg = new HashMap<>();           // key: day|host -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> userAppAgg = new HashMap<>();       // key: day|userId|username|host -> [requests, bytesIn, bytesOut]
+        Map<String, long[]> srcGeoAgg = new HashMap<>();        // key: day|country|city -> [requests]
+        Map<String, long[]> dstGeoAgg = new HashMap<>();        // key: day|country|city -> [requests]
+
+        for (AccessLog l : logs) {
+            LocalDateTime ts = toLocalDateTime(l.getTs());
+            LocalDate dayDate = ts.toLocalDate();
+            long req = 1L;
+            long bin = l.getBytesIn() == null ? 0L : l.getBytesIn();
+            long bout = l.getBytesOut() == null ? 0L : l.getBytesOut();
+
+            Long userId = l.getUserId();
+            String username = l.getUsername();
+            String host = l.getOriginalTargetHost();
+
+            // 用户流量
+            if (userId != null) {
+                String key = dayDate + "|" + userId + "|" + (username == null ? "" : username);
+                long[] v = userAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 应用统计
+            if (host != null && !host.isBlank()) {
+                String key = dayDate + "|" + host;
+                long[] v = appAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 用户访问应用统计
+            if (userId != null && host != null && !host.isBlank()) {
+                String key = dayDate + "|" + userId + "|" + (username == null ? "" : username) + "|" + host;
+                long[] v = userAppAgg.computeIfAbsent(key, k -> new long[]{0, 0, 0});
+                v[0] += req; v[1] += bin; v[2] += bout;
+            }
+
+            // 地理来源统计
+            String srcCountry = l.getSrcGeoCountry();
+            String srcCity = l.getSrcGeoCity();
+            if (notBlank(srcCountry) || notBlank(srcCity)) {
+                String key = dayDate + "|" + nullToEmpty(srcCountry) + "|" + nullToEmpty(srcCity);
+                long[] v = srcGeoAgg.computeIfAbsent(key, k -> new long[]{0});
+                v[0] += req;
+            }
+
+            // 地理目标统计
+            String dstCountry = l.getDstGeoCountry();
+            String dstCity = l.getDstGeoCity();
+            if (notBlank(dstCountry) || notBlank(dstCity)) {
+                String key = dayDate + "|" + nullToEmpty(dstCountry) + "|" + nullToEmpty(dstCity);
+                long[] v = dstGeoAgg.computeIfAbsent(key, k -> new long[]{0});
+                v[0] += req;
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 写入用户聚合
+        for (Map.Entry<String, long[]> en : userAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate dayDate = LocalDate.parse(parts[0]);
+            Long userId = Long.parseLong(parts[1]);
+            String username = parts[2];
+            long[] v = en.getValue();
+            DailyUserStats d = dailyUserStatsRepository.findByDayDateAndUserId(dayDate, userId).orElseGet(() -> {
+                DailyUserStats x = new DailyUserStats();
+                x.setDayDate(dayDate);
+                x.setUserId(userId);
+                x.setUsername(username);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            if (username != null && !username.isBlank()) d.setUsername(username);
+            d.setRequestsCount(nullSafe(d.getRequestsCount()) + v[0]);
+            d.setBytesIn(nullSafe(d.getBytesIn()) + v[1]);
+            d.setBytesOut(nullSafe(d.getBytesOut()) + v[2]);
+            d.setUpdatedAt(now);
+            dailyUserStatsRepository.save(d);
+        }
+
+        // 写入应用聚合
+        for (Map.Entry<String, long[]> en : appAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate dayDate = LocalDate.parse(parts[0]);
+            String host = parts[1];
+            long[] v = en.getValue();
+            DailyAppStats d = dailyAppStatsRepository.findByDayDateAndTargetHost(dayDate, host).orElseGet(() -> {
+                DailyAppStats x = new DailyAppStats();
+                x.setDayDate(dayDate);
+                x.setTargetHost(host);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            d.setRequestsCount(nullSafe(d.getRequestsCount()) + v[0]);
+            d.setBytesIn(nullSafe(d.getBytesIn()) + v[1]);
+            d.setBytesOut(nullSafe(d.getBytesOut()) + v[2]);
+            d.setUpdatedAt(now);
+            dailyAppStatsRepository.save(d);
+        }
+
+        // 写入用户-应用聚合
+        for (Map.Entry<String, long[]> en : userAppAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate dayDate = LocalDate.parse(parts[0]);
+            Long userId = Long.parseLong(parts[1]);
+            String username = parts[2];
+            String host = parts[3];
+            long[] v = en.getValue();
+            DailyUserAppStats d = dailyUserAppStatsRepository.findByDayDateAndUserIdAndTargetHost(dayDate, userId, host).orElseGet(() -> {
+                DailyUserAppStats x = new DailyUserAppStats();
+                x.setDayDate(dayDate);
+                x.setUserId(userId);
+                x.setUsername(username);
+                x.setTargetHost(host);
+                x.setRequestsCount(0L);
+                x.setBytesIn(0L);
+                x.setBytesOut(0L);
+                return x;
+            });
+            if (username != null && !username.isBlank()) d.setUsername(username);
+            d.setRequestsCount(nullSafe(d.getRequestsCount()) + v[0]);
+            d.setBytesIn(nullSafe(d.getBytesIn()) + v[1]);
+            d.setBytesOut(nullSafe(d.getBytesOut()) + v[2]);
+            d.setUpdatedAt(now);
+            dailyUserAppStatsRepository.save(d);
+        }
+
+        // 写入源地理聚合
+        for (Map.Entry<String, long[]> en : srcGeoAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate dayDate = LocalDate.parse(parts[0]);
+            String country = emptyToNull(parts[1]);
+            String city = emptyToNull(parts[2]);
+            long[] v = en.getValue();
+            DailySrcGeoStats d = dailySrcGeoStatsRepository.findByDayDateAndSrcGeoCountryAndSrcGeoCity(dayDate, country, city).orElseGet(() -> {
+                DailySrcGeoStats x = new DailySrcGeoStats();
+                x.setDayDate(dayDate);
+                x.setSrcGeoCountry(country);
+                x.setSrcGeoCity(city);
+                x.setRequestsCount(0L);
+                return x;
+            });
+            d.setRequestsCount(nullSafe(d.getRequestsCount()) + v[0]);
+            d.setUpdatedAt(now);
+            dailySrcGeoStatsRepository.save(d);
+        }
+
+        // 写入目标地理聚合
+        for (Map.Entry<String, long[]> en : dstGeoAgg.entrySet()) {
+            String[] parts = en.getKey().split("\\|", -1);
+            LocalDate dayDate = LocalDate.parse(parts[0]);
+            String country = emptyToNull(parts[1]);
+            String city = emptyToNull(parts[2]);
+            long[] v = en.getValue();
+            DailyDstGeoStats d = dailyDstGeoStatsRepository.findByDayDateAndDstGeoCountryAndDstGeoCity(dayDate, country, city).orElseGet(() -> {
+                DailyDstGeoStats x = new DailyDstGeoStats();
+                x.setDayDate(dayDate);
+                x.setDstGeoCountry(country);
+                x.setDstGeoCity(city);
+                x.setRequestsCount(0L);
+                return x;
+            });
+            d.setRequestsCount(nullSafe(d.getRequestsCount()) + v[0]);
+            d.setUpdatedAt(now);
+            dailyDstGeoStatsRepository.save(d);
+        }
+    }
+
+    private LocalDate parseMonth(String month) {
+        if (month == null || month.isBlank()) {
+            LocalDateTime now = LocalDateTime.now();
+            return LocalDate.of(now.getYear(), now.getMonth(), 1);
+        }
+        try {
+            if (month.matches("^\\d{4}-\\d{2}$")) {
+                int y = Integer.parseInt(month.substring(0, 4));
+                int m = Integer.parseInt(month.substring(5, 7));
+                return LocalDate.of(y, m, 1);
+            }
+            // 支持毫秒时间戳
+            if (month.matches("^\\d{13}$")) {
+                long ms = Long.parseLong(month);
+                LocalDateTime t = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), ZoneId.systemDefault());
+                return LocalDate.of(t.getYear(), t.getMonth(), 1);
+            }
+        } catch (Exception ignored) {}
+        // 兜底当前月
+        LocalDateTime now = LocalDateTime.now();
+        return LocalDate.of(now.getYear(), now.getMonth(), 1);
+    }
+
+    private LocalDate parseDay(String day) {
+        if (day == null || day.isBlank()) {
+            LocalDateTime now = LocalDateTime.now();
+            return LocalDate.of(now.getYear(), now.getMonth(), now.getDayOfMonth());
+        }
+        try {
+            if (day.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
+                int y = Integer.parseInt(day.substring(0, 4));
+                int m = Integer.parseInt(day.substring(5, 7));
+                int d = Integer.parseInt(day.substring(8, 10));
+                return LocalDate.of(y, m, d);
+            }
+            // 支持毫秒时间戳
+            if (day.matches("^\\d{13}$")) {
+                long ms = Long.parseLong(day);
+                LocalDateTime t = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), ZoneId.systemDefault());
+                return LocalDate.of(t.getYear(), t.getMonth(), t.getDayOfMonth());
+            }
+        } catch (Exception ignored) {}
+        // 兜底当前日
+        LocalDateTime now = LocalDateTime.now();
+        return LocalDate.of(now.getYear(), now.getMonth(), now.getDayOfMonth());
+    }
+
+    private String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) return a;
+        if (b != null && !b.isBlank()) return b;
+        return null;
+    }
+
+    private String nullToEmpty(String s) { return s == null ? "" : s; }
+    private String emptyToNull(String s) { return (s == null || s.isEmpty()) ? null : s; }
+    private long nullSafe(Long v) { return v == null ? 0L : v; }
 
     private LocalDateTime floorTs(LocalDateTime ts, String interval) {
         if (ts == null) return null;
@@ -362,7 +1097,7 @@ public class LogService {
         return new AccessLogListItem(
                 e.getId(), e.getTs(), e.getRequestId(), e.getUserId(), e.getUsername(), e.getProxyName(),
                 e.getInboundId(), e.getClientIp(), e.getStatus(), e.getBytesIn(), e.getBytesOut(), e.getRequestDurationMs(),
-                e.getOriginalTargetHost(), e.getRewriteTargetHost()
+                e.getOriginalTargetHost(), e.getRewriteTargetHost(), e.getSrcGeoCountry(), e.getDstGeoCountry()
         );
     }
 
@@ -395,6 +1130,17 @@ public class LogService {
                 long ms = Long.parseLong(s);
                 return LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), ZoneId.systemDefault());
             }
+            if (s.matches("^\\d{4}-\\d{2}-\\d{2}$")) { // 仅日期
+                int y = Integer.parseInt(s.substring(0, 4));
+                int m = Integer.parseInt(s.substring(5, 7));
+                int d = Integer.parseInt(s.substring(8, 10));
+                return LocalDateTime.of(y, m, d, 0, 0, 0);
+            }
+            try {
+                // 支持本地日期时间（无时区）
+                return LocalDateTime.parse(s, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+            } catch (DateTimeParseException ignored) {}
+            // 支持带时区的时间戳（UTC 或偏移）
             java.time.Instant instant = java.time.Instant.parse(s);
             return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
         } catch (DateTimeParseException | NumberFormatException ex) {
