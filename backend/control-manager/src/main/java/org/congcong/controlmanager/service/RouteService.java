@@ -181,6 +181,7 @@ public class RouteService {
         dto.setOutboundProxyPort(route.getOutboundProxyPort());
         dto.setOutboundProxyUsername(route.getOutboundProxyUsername());
         dto.setOutboundProxyPassword(route.getOutboundProxyPassword());
+        dto.setOutboundProxyEncAlgo(route.getOutboundProxyEncAlgo());
         dto.setStatus(route.getStatus());
         dto.setNotes(route.getNotes());
         dto.setCreatedAt(route.getCreatedAt());

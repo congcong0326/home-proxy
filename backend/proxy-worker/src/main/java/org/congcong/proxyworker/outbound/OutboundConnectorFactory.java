@@ -5,6 +5,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.direct.DirectOutboundConnector;
 import org.congcong.proxyworker.outbound.http.HttpProxyOutboundConnector;
+import org.congcong.proxyworker.outbound.shadowsocks.ShadowSocksOutboundConnector;
 import org.congcong.proxyworker.outbound.socks.Socks5OutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -24,7 +25,7 @@ public final class OutboundConnectorFactory {
         // 支持通过上游 HTTP CONNECT 代理（当前实现为未完成，返回失败）
         if (outboundType == ProtocolType.HTTPS_CONNECT) return new HttpProxyOutboundConnector();
         if (outboundType == ProtocolType.SOCKS5) return new Socks5OutboundConnector();
-        // if (outboundType == ProtocolType.SHADOWSOCKS) return new ShadowsocksOutboundConnector();
+        if (outboundType == ProtocolType.SHADOW_SOCKS) return new ShadowSocksOutboundConnector();
         // 默认回退为直连，避免中断
         return new DirectOutboundConnector();
     }
