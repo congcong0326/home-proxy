@@ -4,11 +4,17 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
+import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.protocol.RequestAppendHandler;
 import org.congcong.proxyworker.protocol.TcpTunnelConnectorHandler;
 import org.congcong.proxyworker.router.RouterService;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslHandler;
+import org.congcong.proxyworker.server.netty.tls.TlsContextManager;
+
+import java.util.Objects;
 
 
 public abstract class AbstractChannelInitializer extends ChannelInitializer<SocketChannel> {
@@ -22,6 +28,8 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
     @Override
     protected void initChannel(SocketChannel socketChannel) throws Exception {
         pipeLineContextInit(socketChannel);
+        // 在最前面处理 TLS（如启用）
+        processSSL(socketChannel);
         socketChannel.pipeline().addLast(
                 // 添加一些统计的channelHandler
                 //new LoggingHandler(LogLevel.INFO),
@@ -39,6 +47,14 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
 
     protected abstract void init(SocketChannel socketChannel);
 
+    private void processSSL(SocketChannel socketChannel) {
+        // 开启TLS
+        if (Objects.equals(inboundConfig.getTlsEnabled(), true) && inboundConfig.getProtocol() != ProtocolType.SHADOW_SOCKS) {
+            SslContext sslContext = TlsContextManager.getInstance().getServerContext(inboundConfig);
+            SslHandler sslHandler = sslContext.newHandler(socketChannel.alloc());
+            socketChannel.pipeline().addFirst("ssl", sslHandler);
+        }
+    }
 
     private void pipeLineContextInit(SocketChannel socketChannel) {
         ChannelAttributes.setInboundConfig(socketChannel, inboundConfig);
