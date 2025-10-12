@@ -93,72 +93,72 @@ public class LogController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    /**
-     * 时间序列聚合
-     */
-    @GetMapping("/access/aggregate/timeseries")
-    public ResponseEntity<List<org.congcong.controlmanager.dto.TimeSeriesPoint>> aggregateAccessTimeSeries(
-            @RequestParam(value = "from", required = false) String from,
-            @RequestParam(value = "to", required = false) String to,
-            @RequestParam(value = "interval", required = false) String interval,
-            @RequestParam(value = "metric", required = false) String metric,
-            @RequestParam(value = "userId", required = false) Long userId,
-            @RequestParam(value = "username", required = false) String username,
-            @RequestParam(value = "proxyName", required = false) String proxyName,
-            @RequestParam(value = "inboundId", required = false) Long inboundId,
-            @RequestParam(value = "clientIp", required = false) String clientIp,
-            @RequestParam(value = "status", required = false) Integer status,
-            @RequestParam(value = "protocol", required = false) String protocol,
-            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
-            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
-            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
-            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
-            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
-            @RequestParam(value = "host", required = false) String host,
-            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
-            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
-            @RequestParam(value = "q", required = false) String q
-    ) {
-        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
-                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
-                null, null, null);
-        List<org.congcong.controlmanager.dto.TimeSeriesPoint> points = logService.aggregateAccessTimeSeries(req, interval, metric);
-        return ResponseEntity.ok(points);
-    }
+//    /**
+//     * 时间序列聚合
+//     */
+//    @GetMapping("/access/aggregate/timeseries")
+//    public ResponseEntity<List<org.congcong.controlmanager.dto.TimeSeriesPoint>> aggregateAccessTimeSeries(
+//            @RequestParam(value = "from", required = false) String from,
+//            @RequestParam(value = "to", required = false) String to,
+//            @RequestParam(value = "interval", required = false) String interval,
+//            @RequestParam(value = "metric", required = false) String metric,
+//            @RequestParam(value = "userId", required = false) Long userId,
+//            @RequestParam(value = "username", required = false) String username,
+//            @RequestParam(value = "proxyName", required = false) String proxyName,
+//            @RequestParam(value = "inboundId", required = false) Long inboundId,
+//            @RequestParam(value = "clientIp", required = false) String clientIp,
+//            @RequestParam(value = "status", required = false) Integer status,
+//            @RequestParam(value = "protocol", required = false) String protocol,
+//            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
+//            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
+//            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
+//            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
+//            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
+//            @RequestParam(value = "host", required = false) String host,
+//            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
+//            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
+//            @RequestParam(value = "q", required = false) String q
+//    ) {
+//        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
+//                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
+//                null, null, null);
+//        List<org.congcong.controlmanager.dto.TimeSeriesPoint> points = logService.aggregateAccessTimeSeries(req, interval, metric);
+//        return ResponseEntity.ok(points);
+//    }
 
-    /**
-     * TopN 聚合
-     */
-    @GetMapping("/access/aggregate/top")
-    public ResponseEntity<List<org.congcong.controlmanager.dto.TopItem>> aggregateAccessTop(
-            @RequestParam(value = "from", required = false) String from,
-            @RequestParam(value = "to", required = false) String to,
-            @RequestParam(value = "dimension") String dimension,
-            @RequestParam(value = "metric", required = false) String metric,
-            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
-            @RequestParam(value = "userId", required = false) Long userId,
-            @RequestParam(value = "username", required = false) String username,
-            @RequestParam(value = "proxyName", required = false) String proxyName,
-            @RequestParam(value = "inboundId", required = false) Long inboundId,
-            @RequestParam(value = "clientIp", required = false) String clientIp,
-            @RequestParam(value = "status", required = false) Integer status,
-            @RequestParam(value = "protocol", required = false) String protocol,
-            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
-            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
-            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
-            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
-            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
-            @RequestParam(value = "host", required = false) String host,
-            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
-            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
-            @RequestParam(value = "q", required = false) String q
-    ) {
-        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
-                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
-                null, null, null);
-        List<org.congcong.controlmanager.dto.TopItem> items = logService.aggregateAccessTop(req, dimension, metric, limit == null ? 10 : limit);
-        return ResponseEntity.ok(items);
-    }
+//    /**
+//     * TopN 聚合
+//     */
+//    @GetMapping("/access/aggregate/top")
+//    public ResponseEntity<List<org.congcong.controlmanager.dto.TopItem>> aggregateAccessTop(
+//            @RequestParam(value = "from", required = false) String from,
+//            @RequestParam(value = "to", required = false) String to,
+//            @RequestParam(value = "dimension") String dimension,
+//            @RequestParam(value = "metric", required = false) String metric,
+//            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
+//            @RequestParam(value = "userId", required = false) Long userId,
+//            @RequestParam(value = "username", required = false) String username,
+//            @RequestParam(value = "proxyName", required = false) String proxyName,
+//            @RequestParam(value = "inboundId", required = false) Long inboundId,
+//            @RequestParam(value = "clientIp", required = false) String clientIp,
+//            @RequestParam(value = "status", required = false) Integer status,
+//            @RequestParam(value = "protocol", required = false) String protocol,
+//            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
+//            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
+//            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
+//            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
+//            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
+//            @RequestParam(value = "host", required = false) String host,
+//            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
+//            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
+//            @RequestParam(value = "q", required = false) String q
+//    ) {
+//        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
+//                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
+//                null, null, null);
+//        List<org.congcong.controlmanager.dto.TopItem> items = logService.aggregateAccessTop(req, dimension, metric, limit == null ? 10 : limit);
+//        return ResponseEntity.ok(items);
+//    }
 
     
 
@@ -196,32 +196,32 @@ public class LogController {
     /**
      * 分布聚合
      */
-    @GetMapping("/access/aggregate/distribution")
-    public ResponseEntity<List<org.congcong.controlmanager.dto.DistributionBucket>> aggregateAccessDistribution(
-            @RequestParam(value = "from", required = false) String from,
-            @RequestParam(value = "to", required = false) String to,
-            @RequestParam(value = "field") String field,
-            @RequestParam(value = "userId", required = false) Long userId,
-            @RequestParam(value = "username", required = false) String username,
-            @RequestParam(value = "proxyName", required = false) String proxyName,
-            @RequestParam(value = "inboundId", required = false) Long inboundId,
-            @RequestParam(value = "clientIp", required = false) String clientIp,
-            @RequestParam(value = "status", required = false) Integer status,
-            @RequestParam(value = "protocol", required = false) String protocol,
-            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
-            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
-            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
-            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
-            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
-            @RequestParam(value = "host", required = false) String host,
-            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
-            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
-            @RequestParam(value = "q", required = false) String q
-    ) {
-        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
-                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
-                null, null, null);
-        List<org.congcong.controlmanager.dto.DistributionBucket> buckets = logService.aggregateAccessDistribution(req, field);
-        return ResponseEntity.ok(buckets);
-    }
+//    @GetMapping("/access/aggregate/distribution")
+//    public ResponseEntity<List<org.congcong.controlmanager.dto.DistributionBucket>> aggregateAccessDistribution(
+//            @RequestParam(value = "from", required = false) String from,
+//            @RequestParam(value = "to", required = false) String to,
+//            @RequestParam(value = "field") String field,
+//            @RequestParam(value = "userId", required = false) Long userId,
+//            @RequestParam(value = "username", required = false) String username,
+//            @RequestParam(value = "proxyName", required = false) String proxyName,
+//            @RequestParam(value = "inboundId", required = false) Long inboundId,
+//            @RequestParam(value = "clientIp", required = false) String clientIp,
+//            @RequestParam(value = "status", required = false) Integer status,
+//            @RequestParam(value = "protocol", required = false) String protocol,
+//            @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
+//            @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
+//            @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
+//            @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
+//            @RequestParam(value = "dstGeoCity", required = false) String dstGeoCity,
+//            @RequestParam(value = "host", required = false) String host,
+//            @RequestParam(value = "originalTargetHost", required = false) String originalTargetHost,
+//            @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
+//            @RequestParam(value = "q", required = false) String q
+//    ) {
+//        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
+//                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
+//                null, null, null);
+//        List<org.congcong.controlmanager.dto.DistributionBucket> buckets = logService.aggregateAccessDistribution(req, field);
+//        return ResponseEntity.ok(buckets);
+//    }
 }
