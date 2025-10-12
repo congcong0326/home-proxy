@@ -455,13 +455,14 @@ class ApiService {
   }
 
   // 日度聚合表的 TopN（支持时间区间，按天汇总后按月范围查询）
-  async getAccessDailyTop(params: { from?: string; to?: string; dimension?: string; metric?: string; limit?: number }): Promise<TopItem[]> {
+  async getAccessDailyTop(params: { from?: string; to?: string; dimension?: string; metric?: string; limit?: number; userId?: number }): Promise<TopItem[]> {
     const searchParams = new URLSearchParams();
     if (params.from) searchParams.append('from', params.from);
     if (params.to) searchParams.append('to', params.to);
     if (params.dimension) searchParams.append('dimension', params.dimension);
     if (params.metric) searchParams.append('metric', params.metric);
     if (params.limit !== undefined) searchParams.append('limit', String(params.limit));
+    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
     const endpoint = `/logs/access/aggregate/daily/top?${searchParams.toString()}`;
     return this.request<TopItem[]>(endpoint);
   }

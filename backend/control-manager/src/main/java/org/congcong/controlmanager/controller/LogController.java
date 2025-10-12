@@ -186,9 +186,10 @@ public class LogController {
             @RequestParam(value = "to", required = false) String to,
             @RequestParam(value = "dimension", required = false) String dimension,
             @RequestParam(value = "metric", required = false) String metric,
-            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit
+            @RequestParam(value = "limit", required = false, defaultValue = "10") Integer limit,
+            @RequestParam(value = "userId", required = false) Long userId
     ) {
-        List<org.congcong.controlmanager.dto.TopItem> items = logService.aggregateDailyTopRange(from, to, dimension, metric, limit == null ? 10 : limit);
+        List<org.congcong.controlmanager.dto.TopItem> items = logService.aggregateDailyTopRange(from, to, dimension, metric, limit == null ? 10 : limit, userId);
         return ResponseEntity.ok(items);
     }
 

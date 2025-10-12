@@ -20,4 +20,6 @@ public interface DailyUserAppStatsRepository extends JpaRepository<DailyUserAppS
     List<DailyUserAppStats> findTopByDayRange(@Param("from") LocalDate from, @Param("to") LocalDate to, @Param("orderBy") String orderBy, Pageable pageable);
 
     List<DailyUserAppStats> findByDayDateBetween(LocalDate from, LocalDate to);
+    
+    List<DailyUserAppStats> findByUserIdAndDayDateBetween(Long userId, LocalDate from, LocalDate to);
 }

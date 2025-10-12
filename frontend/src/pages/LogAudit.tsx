@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import { Card, Form, Row, Col, Input, Select, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
 import apiService from '../services/api';
 import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
+import { formatBytes } from '../utils/format';
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -14,18 +15,6 @@ const LogAudit: React.FC = () => {
   const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 0, pageSize: 10 });
   const [detail, setDetail] = useState<AccessLogDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-
-  // 人性化格式化字节数（B/KB/MB/GB）
-  const formatBytes = (value?: number) => {
-    if (value === undefined || value === null || isNaN(Number(value))) return '-';
-    const KB = 1024;
-    const MB = KB * 1024;
-    const GB = MB * 1024;
-    if (value < KB) return `${value} B`;
-    if (value < MB) return `${(value / KB).toFixed(2)} KB`;
-    if (value < GB) return `${(value / MB).toFixed(2)} MB`;
-    return `${(value / GB).toFixed(2)} GB`;
-  };
 
   // 人性化格式化耗时（ms/s/m/h）
   const formatDuration = (value?: number) => {
@@ -112,8 +101,8 @@ const LogAudit: React.FC = () => {
     { title: '状态', dataIndex: 'status', key: 'status', render: (v: number) => <Tag color={v === 200 ? 'green' : 'red'}>{v}</Tag> },
     { title: '源地理', key: 'srcGeo', render: (_: any, r: AccessLogListItem) => `${r.srcGeoCountry || ''} ${r.srcGeoCity || ''}`.trim() || '-' },
     { title: '目标地理', key: 'dstGeo', render: (_: any, r: AccessLogListItem) => `${r.dstGeoCountry || ''} ${r.dstGeoCity || ''}`.trim() || '-' },
-    { title: '上行字节', dataIndex: 'bytesIn', key: 'bytesIn', render: (v?: number) => formatBytes(v) },
-    { title: '下行字节', dataIndex: 'bytesOut', key: 'bytesOut', render: (v?: number) => formatBytes(v) },
+    { title: '上行字节', dataIndex: 'bytesIn', key: 'bytesIn', render: (v?: number) => v !== undefined && v !== null ? formatBytes(v) : '-' },
+    { title: '下行字节', dataIndex: 'bytesOut', key: 'bytesOut', render: (v?: number) => v !== undefined && v !== null ? formatBytes(v) : '-' },
     { title: '隧道时长', dataIndex: 'requestDurationMs', key: 'requestDurationMs', render: (v?: number) => formatDuration(v) },
     {
       title: '操作',
@@ -196,6 +185,9 @@ const LogAudit: React.FC = () => {
               <p><Text type="secondary">用户</Text>: {detail.username} (ID: {detail.userId})</p>
               <p><Text type="secondary">状态</Text>: {detail.status}</p>
             </Card>
+            <Card size="small" title="代理信息" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">代理名称</Text>: {detail.proxyName || '-'}</p>
+            </Card>
             <Card size="small" title="源信息" style={{ marginBottom: 12 }}>
               <p><Text type="secondary">客户端IP</Text>: {detail.clientIp}</p>
               <p><Text type="secondary">源地理</Text>: {detail.srcGeoCountry} {detail.srcGeoCity}</p>
@@ -210,9 +202,15 @@ const LogAudit: React.FC = () => {
               <p><Text type="secondary">出站协议</Text>: {detail.outboundProtocolType}</p>
               <p><Text type="secondary">路由策略</Text>: {detail.routePolicyName} (ID: {detail.routePolicyId})</p>
             </Card>
+            {(detail.errorCode || detail.errorMsg) && (
+              <Card size="small" title="错误信息" style={{ marginBottom: 12 }}>
+                {detail.errorCode && <p><Text type="secondary">错误码</Text>: <Text type="danger">{detail.errorCode}</Text></p>}
+                {detail.errorMsg && <p><Text type="secondary">错误信息</Text>: <Text type="danger">{detail.errorMsg}</Text></p>}
+              </Card>
+            )}
             <Card size="small" title="流量与时延">
-              <p><Text type="secondary">上行/下行字节</Text>: {detail.bytesIn} / {detail.bytesOut}</p>
-          <p><Text type="secondary">隧道时长</Text>: {formatDuration(detail.requestDurationMs)}</p>
+              <p><Text type="secondary">上行/下行字节</Text>: {formatBytes(detail.bytesIn || 0)} / {formatBytes(detail.bytesOut || 0)}</p>
+              <p><Text type="secondary">隧道时长</Text>: {formatDuration(detail.requestDurationMs)}</p>
               <p><Text type="secondary">DNS耗时(ms)</Text>: {detail.dnsDurationMs}</p>
               <p><Text type="secondary">连接耗时(ms)</Text>: {detail.connectDurationMs}</p>
               <p><Text type="secondary">连接目标耗时(ms)</Text>: {detail.connectTargetDurationMs}</p>

@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.repository.agg;
 
 import org.congcong.controlmanager.entity.agg.DailyAppStats;
+import org.congcong.controlmanager.entity.agg.DailyUserAppStats;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,4 +21,9 @@ public interface DailyAppStatsRepository extends JpaRepository<DailyAppStats, Lo
     List<DailyAppStats> findTopByDayRange(@Param("from") LocalDate from, @Param("to") LocalDate to, @Param("orderBy") String orderBy, Pageable pageable);
 
     List<DailyAppStats> findByDayDateBetween(LocalDate from, LocalDate to);
+
+    @Query("SELECT new org.congcong.controlmanager.entity.agg.DailyAppStats(d.dayDate, d.targetHost, SUM(d.requestsCount), SUM(d.bytesIn), SUM(d.bytesOut)) " +
+           "FROM DailyUserAppStats d WHERE d.userId = :userId AND d.dayDate BETWEEN :from AND :to " +
+           "GROUP BY d.dayDate, d.targetHost")
+    List<DailyAppStats> findByUserIdAndDayDateBetween(@Param("userId") Long userId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 }

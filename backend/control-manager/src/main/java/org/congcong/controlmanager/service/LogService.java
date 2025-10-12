@@ -462,7 +462,7 @@ public class LogService {
     /**
      * 基于日度聚合表的 TopN 查询（支持时间区间）
      */
-    public List<org.congcong.controlmanager.dto.TopItem> aggregateDailyTopRange(String from, String to, String dimension, String metric, int limit) {
+    public List<org.congcong.controlmanager.dto.TopItem> aggregateDailyTopRange(String from, String to, String dimension, String metric, int limit, Long userId) {
         LocalDateTime fromTs = parseDate(from);
         LocalDateTime toTs = parseDate(to);
         LocalDate fromDay = fromTs == null ? null : fromTs.toLocalDate();
@@ -478,7 +478,6 @@ public class LogService {
         }
 
         int topN = limit <= 0 ? 10 : Math.min(limit, 100);
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
 
         String dim = dimension == null ? "apps" : dimension;
         String met = metric == null ? "requests" : metric;
@@ -532,7 +531,13 @@ public class LogService {
                 break;
             }
             case "user_apps": {
-                java.util.List<DailyUserAppStats> list = dailyUserAppStatsRepository.findByDayDateBetween(fromDay, toDay);
+                // 如果userId有值，则根据userId过滤，通过DailyUserAppStats聚合得到应用统计数据
+                java.util.List<DailyUserAppStats> list;
+                if (userId != null) {
+                    list = dailyUserAppStatsRepository.findByUserIdAndDayDateBetween(userId, fromDay, toDay);
+                } else {
+                    list = dailyUserAppStatsRepository.findByDayDateBetween(fromDay, toDay);
+                }
                 java.util.Map<String, long[]> agg = new java.util.HashMap<>(); // key: userId|username|host -> [req, bin, bout]
                 for (DailyUserAppStats d : list) {
                     String uname = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
@@ -643,7 +648,7 @@ public class LogService {
 
             Long userId = l.getUserId();
             String username = l.getUsername();
-            String host = l.getOriginalTargetHost();
+            String host = parseMainDomain(l.getOriginalTargetHost());
 
             // 用户流量
             if (userId != null) {
@@ -821,7 +826,7 @@ public class LogService {
 
             Long userId = l.getUserId();
             String username = l.getUsername();
-            String host = l.getOriginalTargetHost();
+            String host = parseMainDomain(l.getOriginalTargetHost());
 
             // 用户流量
             if (userId != null) {
@@ -1122,6 +1127,50 @@ public class LogService {
     }
 
     private boolean notBlank(String s) { return s != null && !s.isBlank(); }
+
+    /**
+     * 解析主机名，如果是域名则提取主域名（去掉子域名），如果是IP地址则保持不变
+     * @param host 原始主机名或IP地址
+     * @return 处理后的主机名
+     */
+    private String parseMainDomain(String host) {
+        if (host == null || host.isBlank()) {
+            return host;
+        }
+        
+        // 检查是否为IP地址（IPv4或IPv6）
+        if (isIpAddress(host)) {
+            return host; // IP地址保持不变
+        }
+        
+        // 处理域名，提取主域名
+        String[] parts = host.split("\\.");
+        if (parts.length <= 2) {
+            return host; // 已经是主域名或单级域名
+        }
+        
+        // 提取最后两个部分作为主域名（例如：www.example.com -> example.com）
+        return parts[parts.length - 2] + "." + parts[parts.length - 1];
+    }
+    
+    /**
+     * 检查字符串是否为IP地址（IPv4或IPv6）
+     * @param host 待检查的字符串
+     * @return 如果是IP地址返回true，否则返回false
+     */
+    private boolean isIpAddress(String host) {
+        // 检查IPv4地址
+        if (host.matches("^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$")) {
+            return true;
+        }
+        
+        // 检查IPv6地址（简化版本，支持常见格式）
+        if (host.contains(":") && host.matches("^([0-9a-fA-F]{0,4}:){1,7}[0-9a-fA-F]{0,4}$|^::1$|^::$")) {
+            return true;
+        }
+        
+        return false;
+    }
 
     private LocalDateTime parseDate(String s) {
         if (s == null || s.isBlank()) return null;
