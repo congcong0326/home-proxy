@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
+import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.RouteConditionType;
@@ -43,9 +44,12 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
+        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+        proxyTimeContext.setDnsStartTime(System.currentTimeMillis());
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
         List<RouteConfig> routes = inboundConfig.getRoutes();
         locationLookupAndContextFill(channelHandlerContext, proxyTunnelRequest);
+        proxyTimeContext.setDnsEndTime(System.currentTimeMillis());
         for (RouteConfig route : routes) {
             List<RouteRule> rules = route.getRules();
             for (RouteRule rule : rules) {
@@ -103,7 +107,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         log.debug("target host: {}", proxyTunnelRequest.getTargetHost());
         if (rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
             proxyTunnelRequest.setCity("代理重写");
-            proxyTunnelRequest.setCountry(null);
+            proxyTunnelRequest.setCountry("内网");
             proxyTunnelRequest.setLocationResolveSuccess(false);
         } else {
             Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
