@@ -49,6 +49,7 @@ public class GeoIPUtil implements AutoCloseable {
         this.cacheEnabled = cacheEnabled;
         this.cache = cacheEnabled ? CacheBuilder.newBuilder()
                 .maximumSize(Math.max(1000, maximumCacheSize))
+                .expireAfterWrite(4, TimeUnit.HOURS)  // 4小时后过期
                 .build() : null;
 
         try {
@@ -85,11 +86,23 @@ public class GeoIPUtil implements AutoCloseable {
             return Optional.empty();
         }
 
+        // 优化：首先检查是否已缓存该hostOrIp的结果，避免重复DNS解析
+        if (cacheEnabled && cache != null) {
+            GeoLocation cached = cache.getIfPresent(hostOrIp);
+            if (cached != null) {
+                return Optional.of(cached);
+            }
+        }
+
         // 统一解析一次 InetAddress，后续复用，避免重复 getByName 调用
         Optional<InetAddress> optAddr = resolveToInetAddress(hostOrIp);
         if (optAddr.isEmpty()) {
             // 域名解析失败，返回占位值，避免因地理位置为空导致直通
             GeoLocation result = new GeoLocation("解析失败", null, null);
+            // 缓存解析失败的结果，避免重复尝试解析
+            if (cacheEnabled && cache != null) {
+                cache.put(hostOrIp, result);
+            }
             return Optional.of(result);
         }
         InetAddress inetAddress = optAddr.get();
@@ -99,20 +112,13 @@ public class GeoIPUtil implements AutoCloseable {
         if (isPrivateOrReserved(inetAddress)) {
             GeoLocation result = new GeoLocation("内网", null, ip);
             if (cacheEnabled && cache != null) {
-                cache.put(ip, result);
+                cache.put(hostOrIp, result);
             }
             return Optional.of(result);
         }
 
         if (dbReader == null) {
             return Optional.empty();
-        }
-
-        if (cacheEnabled && cache != null) {
-            GeoLocation cached = cache.getIfPresent(ip);
-            if (cached != null) {
-                return Optional.of(cached);
-            }
         }
 
         try {
@@ -128,14 +134,14 @@ public class GeoIPUtil implements AutoCloseable {
             }
             GeoLocation result = new GeoLocation(country, city, ip);
             if (cacheEnabled && cache != null) {
-                cache.put(ip, result);
+                cache.put(hostOrIp, result);
             }
             return Optional.of(result);
         } catch (AddressNotFoundException e) {
             // 公网IP但数据库未收录，返回占位值以便路由规则可识别
             GeoLocation result = new GeoLocation("未收录", null, ip);
             if (cacheEnabled && cache != null) {
-                cache.put(ip, result);
+                cache.put(hostOrIp, result);
             }
             return Optional.of(result);
         } catch (Exception e) {
