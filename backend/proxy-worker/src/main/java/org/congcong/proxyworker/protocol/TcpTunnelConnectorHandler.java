@@ -10,6 +10,7 @@ import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.server.RelayHandler;
+import org.congcong.proxyworker.server.RelayHandlerV2;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 

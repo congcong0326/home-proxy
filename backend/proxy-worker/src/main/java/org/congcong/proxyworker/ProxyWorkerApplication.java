@@ -4,10 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.common.dto.AggregateConfigResponse;
-import org.congcong.common.dto.InboundConfigDTO;
-import org.congcong.common.dto.RouteDTO;
-import org.congcong.common.dto.UserDtoWithCredential;
+import org.congcong.common.dto.*;
+import org.congcong.common.enums.RouteConditionType;
+import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
@@ -17,12 +16,7 @@ import org.congcong.proxyworker.service.AggregateConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -119,6 +113,18 @@ public class ProxyWorkerApplication {
                                     .filter(Objects::nonNull)
                                     .map(r -> mapper.convertValue(r, RouteConfig.class))
                                     .collect(Collectors.toList());
+                    Set<String> rewriteHosts = new HashSet<>();
+                    for (RouteConfig route : routes) {
+                        if(route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE) {
+                            for (RouteRule rule : route.getRules()) {
+                                if (rule.getConditionType() == RouteConditionType.DOMAIN) {
+                                    rewriteHosts.add(rule.getValue());
+                                }
+                            }
+                        }
+                    }
+
+
                     inboundConfig.setAllowedUsers(allowedUsers);
                     inboundConfig.setRoutes(routes);
                     Map<String, UserConfig> usersMap = new HashMap<>();
@@ -126,6 +132,10 @@ public class ProxyWorkerApplication {
                         usersMap.put(allowedUser.getUsername(), allowedUser);
                     }
                     inboundConfig.setUsersMap(usersMap);
+
+                    inboundConfig.setRewriteHosts(rewriteHosts);
+
+
                     inboundConfigs.add(inboundConfig);
                 }
             }

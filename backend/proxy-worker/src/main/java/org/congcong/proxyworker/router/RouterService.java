@@ -20,6 +20,7 @@ import org.congcong.proxyworker.util.ProxyContextFillUtil;
 import java.net.SocketAddress;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 @ChannelHandler.Sharable
 @Slf4j
@@ -96,13 +97,22 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
 
     private void locationLookupAndContextFill(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) {
-        Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
+        InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
+        Set<String> rewriteHosts = inboundConfig.getRewriteHosts();
         GeoLocation geoLocation = null;
-        if (lookup.isPresent()) {
-            geoLocation = lookup.get();
-            proxyTunnelRequest.setCity(geoLocation.getCity());
-            proxyTunnelRequest.setCountry(geoLocation.getCountry());
-            proxyTunnelRequest.setLocationResolveSuccess(true);
+        log.debug("target host: {}", proxyTunnelRequest.getTargetHost());
+        if (rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
+            proxyTunnelRequest.setCity("代理重写");
+            proxyTunnelRequest.setCountry(null);
+            proxyTunnelRequest.setLocationResolveSuccess(false);
+        } else {
+            Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
+            if (lookup.isPresent()) {
+                geoLocation = lookup.get();
+                proxyTunnelRequest.setCity(geoLocation.getCity());
+                proxyTunnelRequest.setCountry(geoLocation.getCountry());
+                proxyTunnelRequest.setLocationResolveSuccess(true);
+            }
         }
         // 获取客户端源地址信息（IP/端口）
         java.net.InetSocketAddress remote = null;
@@ -126,7 +136,11 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         if (geoLocation != null) {
             dstIp = geoLocation.getIp();
         } else {
-            dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
+            if (!rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
+                dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
+            } else {
+                dstIp = proxyTunnelRequest.getTargetHost();
+            }
         }
 
         // 填充 ProxyContext

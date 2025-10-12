@@ -51,6 +51,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response); 
             return; 
         }
+        
+        // 跳过前端静态资源和路由页面的JWT验证
+        if (path.equals("/") || 
+            path.equals("/login") || 
+            path.equals("/dashboard") || 
+            path.equals("/users") || 
+            path.equals("/routes") || 
+            path.equals("/inbound") || 
+            path.equals("/ratelimit") || 
+            path.equals("/logs") || 
+            path.equals("/analysis") || 
+            path.equals("/config") || 
+            path.equals("/change-password") ||
+            path.startsWith("/static/") ||
+            path.endsWith(".js") ||
+            path.endsWith(".css") ||
+            path.endsWith(".png") ||
+            path.endsWith(".jpg") ||
+            path.endsWith(".jpeg") ||
+            path.endsWith(".gif") ||
+            path.endsWith(".svg") ||
+            path.endsWith(".ico") ||
+            path.endsWith(".woff") ||
+            path.endsWith(".woff2") ||
+            path.endsWith(".ttf") ||
+            path.endsWith(".eot") ||
+            path.equals("/favicon.ico") ||
+            path.equals("/manifest.json") ||
+            path.equals("/robots.txt")) {
+            chain.doFilter(request, response);
+            return;
+        }
         String auth = Optional.ofNullable(request.getHeader("Authorization")).orElse("");
         if (!auth.startsWith("Bearer ")) { unauthorized(response, "UNAUTHORIZED", "invalid or expired token"); return; }
         String token = auth.substring(7);

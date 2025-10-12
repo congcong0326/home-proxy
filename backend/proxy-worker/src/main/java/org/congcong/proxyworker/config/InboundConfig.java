@@ -6,6 +6,7 @@ import org.congcong.common.enums.ProxyEncAlgo;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Data
 public class InboundConfig {
@@ -20,4 +21,5 @@ public class InboundConfig {
     private List<UserConfig> allowedUsers;
     private Map<String, UserConfig> usersMap;
     private List<RouteConfig> routes;
+    private Set<String> rewriteHosts;
 }

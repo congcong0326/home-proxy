@@ -30,6 +30,11 @@ public class SecurityConfig {
                     .requestMatchers("/api/config/hash").permitAll()
                     .requestMatchers("/api/logs/**").permitAll()
                     .requestMatchers("/error").permitAll()
+                    // 允许访问静态资源
+                    .requestMatchers("/", "/static/**", "/favicon.ico", "/manifest.json", "/robots.txt").permitAll()
+                    .requestMatchers("/*.js", "/*.css", "/*.png", "/*.jpg", "/*.jpeg", "/*.gif", "/*.svg", "/*.ico").permitAll()
+                    // 允许访问前端路由页面
+                    .requestMatchers("/login", "/dashboard", "/users", "/routes", "/inbound", "/ratelimit", "/logs", "/analysis", "/config", "/change-password").permitAll()
                     .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex
