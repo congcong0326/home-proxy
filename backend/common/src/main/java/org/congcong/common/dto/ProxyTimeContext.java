@@ -20,7 +20,7 @@ public class ProxyTimeContext {
     /**
      * 代理与客户端完成握手（CONNECT/SOCKS）的耗时
      */
-    private long connectStartTime;
+    private long connectStartTime = System.currentTimeMillis();
     private long connectEndTime;
 
     /**

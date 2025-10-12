@@ -22,10 +22,6 @@ public class ShadowSocksHandler extends ByteToMessageDecoder {
     //[1-byte type][variable-length host][2-byte port]
     @Override
     protected void decode(ChannelHandlerContext channelHandlerContext, ByteBuf byteBuf, List<Object> list) throws Exception {
-        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
-        if (proxyTimeContext.getConnectStartTime() != 0L) {
-            proxyTimeContext.setConnectStartTime(System.currentTimeMillis());
-        }
         // 检查可读字节数是否足够至少包含1字节类型和2字节端口
         if (byteBuf.readableBytes() < 3) {
             return;  // 等待更多数据
@@ -99,6 +95,7 @@ public class ShadowSocksHandler extends ByteToMessageDecoder {
                 readableBytes > 0 ? byteBuf.retain() : null
         );
         channelHandlerContext.channel().pipeline().remove(this);
+        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
         proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
         list.add(tunnelRequest);
     }
