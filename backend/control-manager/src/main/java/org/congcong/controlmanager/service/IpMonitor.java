@@ -3,7 +3,11 @@ package org.congcong.controlmanager.service;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.controlmanager.config.WolConfig;
 import org.congcong.controlmanager.entity.PcStatus;
+import org.congcong.controlmanager.event.WolConfigChangedEvent;
+import org.congcong.controlmanager.repository.WolConfigRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.stereotype.Service;
 
 import java.net.InetAddress;
@@ -13,18 +17,26 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class IpMonitor {
 
-    @Autowired
-    private WolConfigService wolConfigService;
+    private final WolConfigRepository wolConfigRepository;
 
     private final Map<String, Boolean> statusMap = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private volatile boolean isStarted = false;
+    
+    // 缓存当前启用的配置，避免每次都查数据库
+    private volatile List<WolConfig> cachedEnabledConfigs = new ArrayList<>();
+
+    public IpMonitor(WolConfigRepository wolConfigRepository) {
+        this.wolConfigRepository = wolConfigRepository;
+    }
 
     /**
      * 启动IP监控服务
@@ -36,8 +48,10 @@ public class IpMonitor {
         }
         
         log.info("启动IP监控服务");
-        // 每5秒执行一次检测任务
-        scheduler.scheduleAtFixedRate(this::monitorIps, 0, 5, TimeUnit.SECONDS);
+        // 初始加载配置
+        refreshConfigs();
+        // 每30秒执行一次检测任务
+        scheduler.scheduleAtFixedRate(this::monitorIps, 0, 30, TimeUnit.SECONDS);
         isStarted = true;
     }
 
@@ -63,18 +77,34 @@ public class IpMonitor {
     }
 
     /**
-     * 刷新配置（当WOL配置发生变化时调用）
+     * 监听WOL配置变更事件（在事务提交后处理）
+     */
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onWolConfigChanged(WolConfigChangedEvent event) {
+        log.info("收到WOL配置变更事件: {} - {}", event.getChangeType(), event.getConfigName());
+        refreshConfigs();
+    }
+    
+    /**
+     * 手动刷新配置
      */
     public void refreshConfigs() {
         log.info("刷新WOL配置");
-        // 清理已删除设备的状态
-        List<WolConfig> enabledConfigs = wolConfigService.getAllEnabledConfigs();
-        List<String> currentIps = enabledConfigs.stream()
-                .map(WolConfig::getIpAddress)
-                .toList();
-        
-        // 移除不再监控的IP状态
-        statusMap.keySet().removeIf(ip -> !currentIps.contains(ip));
+        try {
+            // 重新加载启用的配置
+            cachedEnabledConfigs = wolConfigRepository.findAllEnabled();
+            log.info("已加载 {} 个启用的WOL配置", cachedEnabledConfigs.size());
+            
+            // 清理不再监控的IP状态
+            Set<String> currentIps = cachedEnabledConfigs.stream()
+                    .map(WolConfig::getIpAddress)
+                    .collect(Collectors.toSet());
+            
+            statusMap.entrySet().removeIf(entry -> !currentIps.contains(entry.getKey()));
+            
+        } catch (Exception e) {
+            log.error("刷新WOL配置时发生错误", e);
+        }
     }
 
     /**
@@ -82,24 +112,14 @@ public class IpMonitor {
      */
     private void monitorIps() {
         try {
-            List<WolConfig> enabledConfigs = wolConfigService.getAllEnabledConfigs();
-            
-            for (WolConfig config : enabledConfigs) {
+            // 使用缓存的配置，避免每次都查数据库
+            for (WolConfig config : cachedEnabledConfigs) {
                 String ip = config.getIpAddress();
-                try {
-                    boolean isOnline = InetAddress.getByName(ip).isReachable(1000); // 1秒超时
-                    statusMap.put(ip, isOnline);
-                    
-                    if (log.isDebugEnabled()) {
-                        log.debug("设备 {} ({}) 状态: {}", config.getName(), ip, isOnline ? "在线" : "离线");
-                    }
-                } catch (Exception e) {
-                    statusMap.put(ip, false); // 异常视为离线
-                    log.warn("检测设备 {} ({}) 状态时发生异常: {}", config.getName(), ip, e.getMessage());
-                }
+                Boolean currentStatus = isOnline(ip);
+                statusMap.put(ip, currentStatus);
             }
         } catch (Exception e) {
-            log.error("监控IP状态时发生异常", e);
+            log.error("监控IP状态时发生错误", e);
         }
     }
 
@@ -107,32 +127,33 @@ public class IpMonitor {
      * 根据IP地址获取WOL配置
      */
     public WolConfig getByIp(String ip) {
-        return wolConfigService.getConfigByIpAddress(ip).orElse(null);
+        return wolConfigRepository.findByIpAddress(ip).orElse(null);
     }
 
     /**
      * 获取所有PC状态
      */
     public List<PcStatus> getAllPcStatus() {
-        List<PcStatus> result = new ArrayList<>();
-        List<WolConfig> allConfigs = wolConfigService.getAllConfigs();
+        List<PcStatus> pcStatusList = new ArrayList<>();
+        List<WolConfig> allConfigs = wolConfigRepository.findAll();
         
         for (WolConfig config : allConfigs) {
-            String ipAddress = config.getIpAddress();
-            Boolean online = isOnline(ipAddress);
+            String ip = config.getIpAddress();
+            Boolean isOnline = statusMap.get(ip);
             
             PcStatus pcStatus = new PcStatus();
             pcStatus.setName(config.getName());
-            pcStatus.setOnline(online);
-            pcStatus.setIp(config.getIpAddress());
-            pcStatus.setEnabled(config.isEnabled());
+            pcStatus.setIp(ip);
             pcStatus.setMacAddress(config.getMacAddress());
             pcStatus.setWolPort(config.getWolPort());
+            pcStatus.setEnabled(config.isEnabled());
             pcStatus.setNotes(config.getNotes());
+            pcStatus.setOnline(isOnline != null ? isOnline : false);
             
-            result.add(pcStatus);
+            pcStatusList.add(pcStatus);
         }
-        return result;
+        
+        return pcStatusList;
     }
 
     /**

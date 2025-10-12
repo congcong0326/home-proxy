@@ -3,7 +3,9 @@ package org.congcong.controlmanager.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.controlmanager.config.WolConfig;
+import org.congcong.controlmanager.event.WolConfigChangedEvent;
 import org.congcong.controlmanager.repository.WolConfigRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +20,7 @@ import java.util.Optional;
 public class WolConfigService {
     
     private final WolConfigRepository wolConfigRepository;
-    private final IpMonitor ipMonitor;
+    private final ApplicationEventPublisher eventPublisher;
     
     /**
      * 获取所有WOL配置
@@ -65,13 +67,16 @@ public class WolConfigService {
     /**
      * 创建WOL配置
      */
+    @Transactional
     public WolConfig createConfig(WolConfig config) {
         validateConfig(config, null);
         
         WolConfig savedConfig = wolConfigRepository.save(config);
         
-        // 通知IP监控器更新配置
-        ipMonitor.refreshConfigs();
+        // 发布配置变更事件
+        eventPublisher.publishEvent(new WolConfigChangedEvent(
+                this, WolConfigChangedEvent.ChangeType.CREATED, 
+                savedConfig.getId(), savedConfig.getName()));
         
         log.info("创建WOL配置成功: {}", savedConfig.getName());
         return savedConfig;
@@ -80,6 +85,7 @@ public class WolConfigService {
     /**
      * 更新WOL配置
      */
+    @Transactional
     public WolConfig updateConfig(Long id, WolConfig config) {
         WolConfig existingConfig = wolConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "WOL配置不存在: " + id));
@@ -97,8 +103,10 @@ public class WolConfigService {
         
         WolConfig savedConfig = wolConfigRepository.save(existingConfig);
         
-        // 通知IP监控器更新配置
-        ipMonitor.refreshConfigs();
+        // 发布配置变更事件
+        eventPublisher.publishEvent(new WolConfigChangedEvent(
+                this, WolConfigChangedEvent.ChangeType.UPDATED, 
+                savedConfig.getId(), savedConfig.getName()));
         
         log.info("更新WOL配置成功: {}", savedConfig.getName());
         return savedConfig;
@@ -107,21 +115,26 @@ public class WolConfigService {
     /**
      * 删除WOL配置
      */
+    @Transactional
     public void deleteConfig(Long id) {
         WolConfig config = wolConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "WOL配置不存在: " + id));
         
+        String configName = config.getName();
         wolConfigRepository.delete(config);
         
-        // 通知IP监控器更新配置
-        ipMonitor.refreshConfigs();
+        // 发布配置变更事件
+        eventPublisher.publishEvent(new WolConfigChangedEvent(
+                this, WolConfigChangedEvent.ChangeType.DELETED, 
+                id, configName));
         
-        log.info("删除WOL配置成功: {}", config.getName());
+        log.info("删除WOL配置成功: {}", configName);
     }
     
     /**
      * 启用WOL配置
      */
+    @Transactional
     public WolConfig enableConfig(Long id) {
         WolConfig config = wolConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "WOL配置不存在: " + id));
@@ -129,8 +142,10 @@ public class WolConfigService {
         config.enable();
         WolConfig savedConfig = wolConfigRepository.save(config);
         
-        // 通知IP监控器更新配置
-        ipMonitor.refreshConfigs();
+        // 发布配置变更事件
+        eventPublisher.publishEvent(new WolConfigChangedEvent(
+                this, WolConfigChangedEvent.ChangeType.ENABLED, 
+                savedConfig.getId(), savedConfig.getName()));
         
         log.info("启用WOL配置成功: {}", savedConfig.getName());
         return savedConfig;
@@ -139,6 +154,7 @@ public class WolConfigService {
     /**
      * 禁用WOL配置
      */
+    @Transactional
     public WolConfig disableConfig(Long id) {
         WolConfig config = wolConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "WOL配置不存在: " + id));
@@ -146,8 +162,10 @@ public class WolConfigService {
         config.disable();
         WolConfig savedConfig = wolConfigRepository.save(config);
         
-        // 通知IP监控器更新配置
-        ipMonitor.refreshConfigs();
+        // 发布配置变更事件
+        eventPublisher.publishEvent(new WolConfigChangedEvent(
+                this, WolConfigChangedEvent.ChangeType.DISABLED, 
+                savedConfig.getId(), savedConfig.getName()));
         
         log.info("禁用WOL配置成功: {}", savedConfig.getName());
         return savedConfig;
