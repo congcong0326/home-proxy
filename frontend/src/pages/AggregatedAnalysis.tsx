@@ -5,6 +5,7 @@ import { TopItem } from '../types/log';
 import { UserDTO } from '../types/user';
 import ReactECharts from 'echarts-for-react';
 import { formatBytes, formatNumber } from '../utils/format';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -28,7 +29,11 @@ const metricOptions: { label: string; value: Metric }[] = [
 const AggregatedAnalysis: React.FC = () => {
   const [dimension, setDimension] = useState<Dimension>('users');
   const [metric, setMetric] = useState<Metric>('requests');
-  const [range, setRange] = useState<any>();
+  // 设置默认日期范围为本月
+  const [range, setRange] = useState<any>([
+    dayjs().startOf('month'),
+    dayjs().endOf('month')
+  ]);
   const [limit, setLimit] = useState<number>(10);
   const [loading, setLoading] = useState<boolean>(false);
   const [items, setItems] = useState<TopItem[]>([]);
@@ -43,8 +48,8 @@ const AggregatedAnalysis: React.FC = () => {
     if (!range || !range[0] || !range[1]) return {};
     const [from, to] = range;
     return {
-      from: from.startOf('month').format('YYYY-MM-DD'),
-      to: to.endOf('month').format('YYYY-MM-DD'),
+      from: from.format('YYYY-MM-DD'),
+      to: to.format('YYYY-MM-DD'),
     };
   }, [range]);
 
@@ -177,12 +182,12 @@ const AggregatedAnalysis: React.FC = () => {
           )}
           <Col xs={24} sm={24} md={8} lg={showUserFilter ? 6 : 8}>
             <Space direction="vertical" style={{ width: '100%' }}>
-              <Text strong>月份范围</Text>
+              <Text strong>日期范围</Text>
               <RangePicker
-                picker="month"
                 value={range}
                 onChange={(v) => setRange(v)}
                 style={{ width: '100%' }}
+                format="YYYY-MM-DD"
               />
             </Space>
           </Col>
