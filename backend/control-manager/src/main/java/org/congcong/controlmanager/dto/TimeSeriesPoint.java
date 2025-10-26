@@ -9,5 +9,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class TimeSeriesPoint {
     private LocalDateTime ts;
-    private Long value;
+    private Long byteIn;
+    private Long byteOut;
 }

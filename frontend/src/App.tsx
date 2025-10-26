@@ -17,6 +17,9 @@ import RateLimitManagement from './pages/RateLimitManagement';
 import InboundManagement from './pages/InboundManagement';
 import LogAudit from './pages/LogAudit';
 import AggregatedAnalysis from './pages/AggregatedAnalysis';
+import Dashboard from './pages/Dashboard';
+import TrafficOverview from './pages/TrafficOverview';
+import WolManagement from './pages/WolManagement';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -42,7 +45,7 @@ const AppContent: React.FC = () => {
               user?.mustChangePassword ? (
                 <Navigate to="/change-password" replace />
               ) : (
-                <Navigate to="/config/users" replace />
+                <Navigate to="/config/dashboard" replace />
               )
             ) : (
               <Login />
@@ -100,21 +103,26 @@ const AppContent: React.FC = () => {
           <Route path="overview/log-audit" element={<LogAudit />} />
           <Route path="overview/aggregate" element={<AggregatedAnalysis />} />
           <Route path="overview/geo" element={<div style={{ padding: 24 }}>地理位置分布 - 待实现</div>} />
+          {/* Dashboard路由 */}
+          <Route path="dashboard" element={<Dashboard />} />
+          {/* Dashboard子页面路由 */}
+          <Route path="dashboard/traffic" element={<TrafficOverview />} />
+          <Route path="dashboard/wol" element={<WolManagement />} />
         </Route>
         
         {/* 默认路由重定向 */}
         <Route 
           path="/" 
           element={
-            <Navigate to={isAuthenticated ? "/config/users" : "/login"} replace />
+            <Navigate to={isAuthenticated ? "/config/dashboard" : "/login"} replace />
           } 
         />
         
-        {/* 404页面 - 重定向到用户管理或登录页 */}
+        {/* 404页面 - 重定向到仪表盘或登录页 */}
         <Route 
           path="*" 
           element={
-            <Navigate to={isAuthenticated ? "/config/users" : "/login"} replace />
+            <Navigate to={isAuthenticated ? "/config/dashboard" : "/login"} replace />
           } 
         />
       </Routes>

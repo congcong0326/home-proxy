@@ -33,8 +33,7 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.HTTPS_CONNECT]: 'HTTPS CONNECT协议',
   [ProtocolType.SOCKS5_HTTPS]: 'SOCKS5+HTTPS混合协议',
   [ProtocolType.NONE]: '直接转发',
-  [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议',
-  [ProtocolType.SS]: 'Shadowsocks协议',
+  [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议'
 };
 
 // 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）

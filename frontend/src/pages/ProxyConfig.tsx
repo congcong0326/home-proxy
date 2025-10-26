@@ -24,7 +24,8 @@ import {
   ThunderboltOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  AreaChartOutlined
+  AreaChartOutlined,
+  DashboardOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -44,6 +45,23 @@ const ProxyConfig: React.FC = () => {
 
   // 菜单项配置 - 手风琴式结构
   const menuItems = [
+    {
+      key: 'dashboard',
+      icon: <DashboardOutlined />,
+      label: '仪表盘',
+      children: [
+        {
+          key: '/config/dashboard/traffic',
+          icon: <AreaChartOutlined />,
+          label: '流量概览',
+        },
+        {
+          key: '/config/dashboard/wol',
+          icon: <GlobalOutlined />,
+          label: 'WOL唤醒页面',
+        },
+      ],
+    },
     {
       key: 'proxy-config',
       icon: <SettingOutlined />,
@@ -176,7 +194,7 @@ const ProxyConfig: React.FC = () => {
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
-          defaultOpenKeys={['proxy-config', 'access-overview']}
+          defaultOpenKeys={['dashboard', 'proxy-config', 'access-overview']}
           className="proxy-config-menu"
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}

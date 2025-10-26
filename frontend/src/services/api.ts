@@ -33,10 +33,20 @@ import {
   AccessLogListItem,
   AccessLogDetail,
   AccessLogQueryParams,
-  TimeSeriesPoint,
+  TimeSeriesPoint as LogTimeSeriesPoint,
   TopItem,
   DistributionBucket,
 } from '../types/log';
+import {
+  UserTrafficStats,
+  TimeSeriesPoint,
+  WolConfig,
+  PcStatus,
+  IpStatusResponse,
+  WolResponse,
+  TrafficTrendParams,
+  TrafficStatsParams
+} from '../types/dashboard';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -400,7 +410,7 @@ class ApiService {
   }
 
   // 时间序列聚合
-  async getAccessTimeseries(params: AccessLogQueryParams & { metric: string; interval: string }): Promise<TimeSeriesPoint[]> {
+  async getAccessTimeseries(params: AccessLogQueryParams & { metric: string; interval: string }): Promise<LogTimeSeriesPoint[]> {
     const searchParams = new URLSearchParams();
     if (params.from) searchParams.append('from', params.from);
     if (params.to) searchParams.append('to', params.to);
@@ -423,7 +433,7 @@ class ApiService {
     if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
 
     const endpoint = `/logs/access/aggregate/timeseries?${searchParams.toString()}`;
-    return this.request<TimeSeriesPoint[]>(endpoint);
+    return this.request<LogTimeSeriesPoint[]>(endpoint);
   }
 
   // TopN 聚合
@@ -542,6 +552,135 @@ class ApiService {
   // 获取所有启用的路由（用于下拉选择）
   async getEnabledRoutes(): Promise<RouteDTO[]> {
     return this.request<RouteDTO[]>('/routes/enabled');
+  }
+
+  // Dashboard API methods
+  
+  // 用户流量统计相关API
+  async getDailyUserTrafficStats(params: TrafficStatsParams = {}): Promise<UserTrafficStats[]> {
+    const queryParams = new URLSearchParams();
+    if (params.date) {
+      queryParams.append('date', params.date);
+    }
+    const url = `/user-traffic-stats/daily${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.request<UserTrafficStats[]>(url);
+  }
+
+  async getMonthlyUserTrafficStats(params: TrafficStatsParams = {}): Promise<UserTrafficStats[]> {
+    const queryParams = new URLSearchParams();
+    if (params.yearMonth) {
+      queryParams.append('yearMonth', params.yearMonth);
+    }
+    const url = `/user-traffic-stats/monthly${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.request<UserTrafficStats[]>(url);
+  }
+
+  // 流量趋势相关API
+  async getGlobalTrafficTrend(params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
+    const queryParams = new URLSearchParams({
+      startTime: params.startTime,
+      endTime: params.endTime
+    });
+    return this.request<TimeSeriesPoint[]>(`/logs/traffic/minute/global?${queryParams.toString()}`);
+  }
+
+  async getUserTrafficTrend(userId: number, params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
+    const queryParams = new URLSearchParams({
+      startTime: params.startTime,
+      endTime: params.endTime
+    });
+    return this.request<TimeSeriesPoint[]>(`/logs/traffic/minute/user/${userId}?${queryParams.toString()}`);
+  }
+
+  // WOL相关API
+  async getWolConfigs(): Promise<WolConfig[]> {
+    return this.request<WolConfig[]>('/wol/configs');
+  }
+
+  async getWolConfigById(id: number): Promise<WolConfig> {
+    return this.request<WolConfig>(`/wol/configs/${id}`);
+  }
+
+  async createWolConfig(data: Omit<WolConfig, 'id' | 'createdAt' | 'updatedAt' | 'online'>): Promise<WolConfig> {
+    return this.request<WolConfig>('/wol/configs', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateWolConfig(id: number, data: Partial<WolConfig>): Promise<WolConfig> {
+    return this.request<WolConfig>(`/wol/configs/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteWolConfig(id: number): Promise<void> {
+    await this.request<void>(`/wol/configs/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  async enableWolConfig(id: number): Promise<WolConfig> {
+    return this.request<WolConfig>(`/wol/configs/${id}/enable`, {
+      method: 'POST'
+    });
+  }
+
+  async disableWolConfig(id: number): Promise<WolConfig> {
+    return this.request<WolConfig>(`/wol/configs/${id}/disable`, {
+      method: 'POST'
+    });
+  }
+
+  async getAllPcStatus(): Promise<PcStatus[]> {
+    return this.request<PcStatus[]>('/wol/status');
+  }
+
+  async getIpStatus(ip: string): Promise<IpStatusResponse> {
+    return this.request<IpStatusResponse>(`/wol/status/${ip}`);
+  }
+
+  async checkIpStatus(ip: string): Promise<IpStatusResponse> {
+    return this.request<IpStatusResponse>(`/wol/status/${ip}/check`, {
+      method: 'POST'
+    });
+  }
+
+  async wakeById(id: number): Promise<WolResponse> {
+    return this.request<WolResponse>(`/wol/wake/${id}`, {
+      method: 'POST'
+    });
+  }
+
+  async wakeByIp(ip: string): Promise<WolResponse> {
+    return this.request<WolResponse>(`/wol/wake/ip/${ip}`, {
+      method: 'POST'
+    });
+  }
+
+  async wakeByName(name: string): Promise<WolResponse> {
+    return this.request<WolResponse>(`/wol/wake/name/${name}`, {
+      method: 'POST'
+    });
+  }
+
+  async refreshWolConfigs(): Promise<WolResponse> {
+    return this.request<WolResponse>('/wol/refresh', {
+      method: 'POST'
+    });
+  }
+
+  async startWolMonitor(): Promise<WolResponse> {
+    return this.request<WolResponse>('/wol/monitor/start', {
+      method: 'POST'
+    });
+  }
+
+  async stopWolMonitor(): Promise<WolResponse> {
+    return this.request<WolResponse>('/wol/monitor/stop', {
+      method: 'POST'
+    });
   }
 }
 

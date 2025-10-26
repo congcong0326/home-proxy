@@ -3,10 +3,7 @@ package org.congcong.controlmanager.service;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.AccessLog;
 import org.congcong.common.dto.AuthLog;
-import org.congcong.controlmanager.dto.AccessLogDetail;
-import org.congcong.controlmanager.dto.AccessLogListItem;
-import org.congcong.controlmanager.dto.AccessLogQueryRequest;
-import org.congcong.controlmanager.dto.PageResponse;
+import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.entity.AccessLogEntity;
 import org.congcong.controlmanager.entity.AuthLogEntity;
 import org.congcong.controlmanager.repository.AccessLogRepository;
@@ -21,6 +18,8 @@ import org.congcong.controlmanager.repository.agg.DailyAppStatsRepository;
 import org.congcong.controlmanager.repository.agg.DailyUserAppStatsRepository;
 import org.congcong.controlmanager.repository.agg.DailySrcGeoStatsRepository;
 import org.congcong.controlmanager.repository.agg.DailyDstGeoStatsRepository;
+import org.congcong.controlmanager.repository.agg.MinuteTrafficStatsRepository;
+import org.congcong.controlmanager.entity.agg.MinuteTrafficStats;
 import org.congcong.controlmanager.entity.agg.MonthlyAppStats;
 import org.congcong.controlmanager.entity.agg.MonthlyUserStats;
 import org.congcong.controlmanager.entity.agg.MonthlyUserAppStats;
@@ -43,12 +42,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
-import java.util.Optional;
-import java.util.Map;
-import java.util.HashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +61,7 @@ public class LogService {
     private final DailyUserAppStatsRepository dailyUserAppStatsRepository;
     private final DailySrcGeoStatsRepository dailySrcGeoStatsRepository;
     private final DailyDstGeoStatsRepository dailyDstGeoStatsRepository;
+    private final MinuteTrafficStatsRepository minuteTrafficStatsRepository;
 
     @Transactional
     public int saveAccessLogs(List<AccessLog> logs) {
@@ -110,6 +106,8 @@ public class LogService {
         //updateMonthlyAggregates(logs);
         // 增量更新日度聚合统计
         updateDailyAggregates(logs);
+        // 增量更新分钟级聚合统计
+        updateMinuteAggregates(logs);
         return entities.size();
     }
 
@@ -210,254 +208,7 @@ public class LogService {
         return spec;
     }
 
-    /**
-     * 时间序列聚合
-     */
-    public List<org.congcong.controlmanager.dto.TimeSeriesPoint> aggregateAccessTimeSeries(AccessLogQueryRequest req, String interval, String metric) {
-        Specification<AccessLogEntity> spec = buildAccessLogSpec(req);
-        List<AccessLogEntity> logs = accessLogRepository.findAll(spec, Sort.by(Sort.Direction.ASC, "ts"));
 
-        java.util.Map<java.time.LocalDateTime, Long> bucketValues = new java.util.HashMap<>();
-        for (AccessLogEntity e : logs) {
-            LocalDateTime bucket = floorTs(e.getTs(), interval);
-            long inc = metricValue(e, metric);
-            bucketValues.merge(bucket, inc, Long::sum);
-        }
-
-        // 填充空桶
-        LocalDateTime from = parseDate(req.getFrom());
-        LocalDateTime to = parseDate(req.getTo());
-        if (from != null && to != null) {
-            LocalDateTime cur = floorTs(from, interval);
-            while (!cur.isAfter(to)) {
-                bucketValues.putIfAbsent(cur, 0L);
-                cur = nextBucket(cur, interval);
-            }
-        }
-
-        return bucketValues.entrySet().stream()
-                .sorted(java.util.Map.Entry.comparingByKey())
-                .map(en -> new org.congcong.controlmanager.dto.TimeSeriesPoint(en.getKey(), en.getValue()))
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    /**
-     * TopN 聚合
-     */
-    public List<org.congcong.controlmanager.dto.TopItem> aggregateAccessTop(AccessLogQueryRequest req, String dimension, String metric, int limit) {
-        Specification<AccessLogEntity> spec = buildAccessLogSpec(req);
-        List<AccessLogEntity> logs = accessLogRepository.findAll(spec);
-
-        java.util.Map<String, Long> map = new java.util.HashMap<>();
-        for (AccessLogEntity e : logs) {
-            String key = topKey(e, dimension);
-            if (key == null || key.isBlank()) continue;
-            long inc = metricValue(e, metric);
-            map.merge(key, inc, Long::sum);
-        }
-
-        return map.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .limit(limit)
-                .map(en -> new org.congcong.controlmanager.dto.TopItem(en.getKey(), en.getValue()))
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    /**
-     * 基于月度聚合表的 TopN 查询
-     */
-    public List<org.congcong.controlmanager.dto.TopItem> aggregateMonthlyTop(String month, String dimension, String metric, int limit) {
-        LocalDate monthDate = parseMonth(month);
-        int topN = limit <= 0 ? 10 : Math.min(limit, 100);
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
-
-        String dim = dimension == null ? "users" : dimension;
-        String met = metric == null ? "requests" : metric;
-        java.util.List<org.congcong.controlmanager.dto.TopItem> result = new java.util.ArrayList<>();
-
-        switch (dim) {
-            case "users": {
-                java.util.List<MonthlyUserStats> list = monthlyUserStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (MonthlyUserStats m : list) {
-                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
-                    String key = (m.getUsername() != null && !m.getUsername().isBlank()) ? m.getUsername() : String.valueOf(m.getUserId());
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "apps": {
-                java.util.List<MonthlyAppStats> list = monthlyAppStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (MonthlyAppStats m : list) {
-                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
-                    String key = m.getTargetHost();
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "user_apps": {
-                java.util.List<MonthlyUserAppStats> list = monthlyUserAppStatsRepository.findTopByMonth(monthDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (MonthlyUserAppStats m : list) {
-                    long val = met.equals("bytes") ? (nullSafe(m.getBytesIn()) + nullSafe(m.getBytesOut())) : nullSafe(m.getRequestsCount());
-                    String uname = (m.getUsername() != null && !m.getUsername().isBlank()) ? m.getUsername() : String.valueOf(m.getUserId());
-                    String key = uname + "@" + m.getTargetHost();
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "src_geo": {
-                java.util.List<MonthlySrcGeoStats> list = monthlySrcGeoStatsRepository.findTopByMonth(monthDate, pageable);
-                for (MonthlySrcGeoStats m : list) {
-                    String country = m.getSrcGeoCountry();
-                    String city = m.getSrcGeoCity();
-                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(m.getRequestsCount())));
-                }
-                break;
-            }
-            case "dst_geo": {
-                java.util.List<MonthlyDstGeoStats> list = monthlyDstGeoStatsRepository.findTopByMonth(monthDate, pageable);
-                for (MonthlyDstGeoStats m : list) {
-                    String country = m.getDstGeoCountry();
-                    String city = m.getDstGeoCity();
-                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(m.getRequestsCount())));
-                }
-                break;
-            }
-            default:
-                // 默认回退到 apps 请求次数
-                java.util.List<MonthlyAppStats> list = monthlyAppStatsRepository.findTopByMonth(monthDate, "requests", pageable);
-                for (MonthlyAppStats m : list) {
-                    result.add(new org.congcong.controlmanager.dto.TopItem(m.getTargetHost(), nullSafe(m.getRequestsCount())));
-                }
-        }
-        return result;
-    }
-
-    /**
-     * 基于日度聚合表的 TopN 查询
-     */
-    public List<org.congcong.controlmanager.dto.TopItem> aggregateDailyTop(String day, String dimension, String metric, int limit) {
-        LocalDate dayDate = parseDay(day);
-        int topN = limit <= 0 ? 10 : Math.min(limit, 100);
-        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, topN);
-
-        String dim = dimension == null ? "apps" : dimension;
-        String met = metric == null ? "requests" : metric;
-        java.util.List<org.congcong.controlmanager.dto.TopItem> result = new java.util.ArrayList<>();
-
-        switch (dim) {
-            case "users": {
-                java.util.List<DailyUserStats> list = dailyUserStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (DailyUserStats d : list) {
-                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
-                    String key = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "apps": {
-                java.util.List<DailyAppStats> list = dailyAppStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (DailyAppStats d : list) {
-                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
-                    String key = d.getTargetHost();
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "user_apps": {
-                java.util.List<DailyUserAppStats> list = dailyUserAppStatsRepository.findTopByDay(dayDate, met.equals("bytes") ? "bytes" : "requests", pageable);
-                for (DailyUserAppStats d : list) {
-                    long val = met.equals("bytes") ? (nullSafe(d.getBytesIn()) + nullSafe(d.getBytesOut())) : nullSafe(d.getRequestsCount());
-                    String uname = (d.getUsername() != null && !d.getUsername().isBlank()) ? d.getUsername() : String.valueOf(d.getUserId());
-                    String key = uname + "@" + d.getTargetHost();
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, val));
-                }
-                break;
-            }
-            case "src_geo": {
-                java.util.List<DailySrcGeoStats> list = dailySrcGeoStatsRepository.findTopByDay(dayDate, pageable);
-                for (DailySrcGeoStats d : list) {
-                    String country = d.getSrcGeoCountry();
-                    String city = d.getSrcGeoCity();
-                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(d.getRequestsCount())));
-                }
-                break;
-            }
-            case "dst_geo": {
-                java.util.List<DailyDstGeoStats> list = dailyDstGeoStatsRepository.findTopByDay(dayDate, pageable);
-                for (DailyDstGeoStats d : list) {
-                    String country = d.getDstGeoCountry();
-                    String city = d.getDstGeoCity();
-                    String key = (city == null || city.isBlank()) ? (country == null ? "unknown" : country) : (country == null ? city : country + "/" + city);
-                    result.add(new org.congcong.controlmanager.dto.TopItem(key, nullSafe(d.getRequestsCount())));
-                }
-                break;
-            }
-            default:
-                // 默认回退到 apps 请求次数
-                java.util.List<DailyAppStats> list = dailyAppStatsRepository.findTopByDay(dayDate, "requests", pageable);
-                for (DailyAppStats d : list) {
-                    result.add(new org.congcong.controlmanager.dto.TopItem(d.getTargetHost(), nullSafe(d.getRequestsCount())));
-                }
-        }
-        return result;
-    }
-
-    /**
-     * 分布统计
-     */
-    public List<org.congcong.controlmanager.dto.DistributionBucket> aggregateAccessDistribution(AccessLogQueryRequest req, String field) {
-        Specification<AccessLogEntity> spec = buildAccessLogSpec(req);
-        List<AccessLogEntity> logs = accessLogRepository.findAll(spec);
-
-        java.util.Map<String, Long> map = new java.util.HashMap<>();
-        for (AccessLogEntity e : logs) {
-            String key;
-            switch (field == null ? "" : field) {
-                case "status":
-                    key = e.getStatus() == null ? "unknown" : String.valueOf(e.getStatus());
-                    break;
-                case "protocol":
-                    String proto = e.getInboundProtocolType();
-                    if (proto == null || proto.isBlank()) proto = e.getOutboundProtocolType();
-                    key = (proto == null || proto.isBlank()) ? "unknown" : proto;
-                    break;
-                case "sniff_proto":
-                    // 使用出站协议类型作为嗅探结果近似
-                    String sniff = e.getOutboundProtocolType();
-                    key = (sniff == null || sniff.isBlank()) ? "unknown" : sniff;
-                    break;
-                case "latency_bucket":
-                    key = latencyBucket(e.getRequestDurationMs());
-                    break;
-                default:
-                    key = "unknown";
-            }
-            map.merge(key, 1L, Long::sum);
-        }
-
-        return map.entrySet().stream()
-                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
-                .map(en -> new org.congcong.controlmanager.dto.DistributionBucket(en.getKey(), en.getValue()))
-                .collect(java.util.stream.Collectors.toList());
-    }
-
-    private long metricValue(AccessLogEntity e, String metric) {
-        switch (metric == null ? "requests" : metric) {
-            case "bytes_in":
-                return e.getBytesIn() == null ? 0L : e.getBytesIn();
-            case "bytes_out":
-                return e.getBytesOut() == null ? 0L : e.getBytesOut();
-            case "errors":
-                Integer st = e.getStatus();
-                return (st != null && st >= 500) ? 1L : 0L;
-            case "requests":
-            default:
-                return 1L;
-        }
-    }
 
     /**
      * 基于日度聚合表的 TopN 查询（支持时间区间）
@@ -554,7 +305,11 @@ public class LogService {
                     String host = parts.length > 2 ? parts[2] : "";
                     long[] v = en.getValue();
                     long val = met.equals("bytes") ? (v[1] + v[2]) : v[0];
-                    items.add(new org.congcong.controlmanager.dto.TopItem(uname + "@" + host, val));
+                    if (userId != null) {
+                        items.add(new org.congcong.controlmanager.dto.TopItem(host, val));
+                    } else {
+                        items.add(new org.congcong.controlmanager.dto.TopItem(uname + "@" + host, val));
+                    }
                 }
                 items.sort(cmp);
                 result = items.size() > topN ? items.subList(0, topN) : items;
@@ -1195,5 +950,124 @@ public class LogService {
         } catch (DateTimeParseException | NumberFormatException ex) {
             return null;
         }
+    }
+
+    /**
+     * 更新分钟级聚合统计
+     */
+    private void updateMinuteAggregates(List<AccessLog> logs) {
+        if (logs == null || logs.isEmpty()) return;
+
+        Map<String, Long> globalByteInAgg = new HashMap<>(); // key: minuteTime -> byteIn
+        Map<String, Long> globalByteOutAgg = new HashMap<>(); // key: minuteTime -> byteOut
+        Map<String, Long> userByteInAgg = new HashMap<>(); // key: minuteTime|userId -> byteIn
+        Map<String, Long> userByteOutAgg = new HashMap<>(); // key: minuteTime|userId -> byteOut
+
+        for (AccessLog l : logs) {
+            LocalDateTime ts = toLocalDateTime(l.getTs());
+
+            // 截取到分钟级别
+            LocalDateTime minuteTime = ts.withSecond(0).withNano(0);
+            String minuteTimeStr = minuteTime.toString();
+
+            Long userId = l.getUserId();
+            long byteIn = nullSafe(l.getBytesIn());
+            long byteOut = nullSafe(l.getBytesOut());
+
+            // 全局统计
+            globalByteInAgg.merge(minuteTimeStr, byteIn, Long::sum);
+            globalByteOutAgg.merge(minuteTimeStr, byteOut, Long::sum);
+
+            // 用户统计
+            if (userId != null) {
+                String userKey = minuteTimeStr + "|" + userId;
+                userByteInAgg.merge(userKey, byteIn, Long::sum);
+                userByteOutAgg.merge(userKey, byteOut, Long::sum);
+            }
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        // 保存用户级别的统计数据
+        for (String userKey : userByteInAgg.keySet()) {
+            String[] parts = userKey.split("\\|", -1);
+            LocalDateTime minuteTime = LocalDateTime.parse(parts[0]);
+            Long userId = Long.parseLong(parts[1]);
+            Long byteIn = userByteInAgg.get(userKey);
+            Long byteOut = userByteOutAgg.get(userKey);
+            
+            MinuteTrafficStats m = new MinuteTrafficStats(minuteTime, userId, byteIn, byteOut);
+            m.setCreatedAt(now);
+            minuteTrafficStatsRepository.save(m);
+        }
+
+        // 保存全局级别的统计数据
+        for (String minuteTimeStr : globalByteInAgg.keySet()) {
+            LocalDateTime minuteTime = LocalDateTime.parse(minuteTimeStr);
+            Long byteIn = globalByteInAgg.get(minuteTimeStr);
+            Long byteOut = globalByteOutAgg.get(minuteTimeStr);
+
+            MinuteTrafficStats m = new MinuteTrafficStats(minuteTime, byteIn, byteOut);
+            m.setCreatedAt(now);
+            minuteTrafficStatsRepository.save(m);
+        }
+    }
+
+    /**
+     * 获取全局流量趋势（分钟级）
+     */
+    public List<TimeSeriesPoint> getGlobalTrafficTrend(LocalDateTime from, LocalDateTime to) {
+        List<MinuteTrafficStats> userTrafficTrend = minuteTrafficStatsRepository.findGlobalTrafficTrend(from, to);
+        Map<LocalDateTime, TimeSeriesPoint> map = new HashMap<>();
+        for (MinuteTrafficStats m : userTrafficTrend) {
+            TimeSeriesPoint timeSeriesPoint = map.get(m.getMinuteTime());
+            if (timeSeriesPoint == null) {
+                map.put(m.getMinuteTime(), toTimeSeriesPoint(m));
+            } else {
+                timeSeriesPoint.setByteIn(timeSeriesPoint.getByteIn() + m.getByteIn());
+                timeSeriesPoint.setByteOut(timeSeriesPoint.getByteOut() + m.getByteOut());
+            }
+        }
+        return map.values().stream().sorted(Comparator.comparing(TimeSeriesPoint::getTs)).collect(Collectors.toList());
+    }
+
+    /**
+     * 获取指定用户的流量趋势（分钟级）
+     */
+    public List<TimeSeriesPoint> getUserTrafficTrend(Long userId, LocalDateTime from, LocalDateTime to) {
+        List<MinuteTrafficStats> userTrafficTrend = minuteTrafficStatsRepository.findUserTrafficTrend(userId, from, to);
+        Map<LocalDateTime, TimeSeriesPoint> map = new HashMap<>();
+        for (MinuteTrafficStats m : userTrafficTrend) {
+            TimeSeriesPoint timeSeriesPoint = map.get(m.getMinuteTime());
+            if (timeSeriesPoint == null) {
+                map.put(m.getMinuteTime(), toTimeSeriesPoint(m));
+            } else {
+                timeSeriesPoint.setByteIn(timeSeriesPoint.getByteIn() + m.getByteIn());
+                timeSeriesPoint.setByteOut(timeSeriesPoint.getByteOut() + m.getByteOut());
+            }
+        }
+        return map.values().stream().sorted(Comparator.comparing(TimeSeriesPoint::getTs)).collect(Collectors.toList());
+    }
+
+    private TimeSeriesPoint toTimeSeriesPoint(MinuteTrafficStats minuteTrafficStats) {
+        return new TimeSeriesPoint(minuteTrafficStats.getMinuteTime(), minuteTrafficStats.getByteIn(),  minuteTrafficStats.getByteOut());
+    }
+
+    /**
+     * 清理过期的分钟级流量数据
+     */
+    @Transactional
+    public int cleanupExpiredMinuteTrafficStats() {
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        minuteTrafficStatsRepository.deleteByMinuteTimeBefore(oneMonthAgo);
+        return 0; // 简化返回值
+    }
+
+    /**
+     * 统计过期的分钟级流量数据数量
+     */
+    public long countExpiredMinuteTrafficStats() {
+        LocalDateTime oneMonthAgo = LocalDateTime.now().minusMonths(1);
+        return minuteTrafficStatsRepository.countByMinuteTimeBefore(oneMonthAgo);
     }
 }
