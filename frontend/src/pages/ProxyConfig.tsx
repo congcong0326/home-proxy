@@ -25,7 +25,8 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   AreaChartOutlined,
-  DashboardOutlined
+  DashboardOutlined,
+  HddOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -59,6 +60,11 @@ const ProxyConfig: React.FC = () => {
           key: '/config/dashboard/wol',
           icon: <GlobalOutlined />,
           label: 'WOL唤醒页面',
+        },
+        {
+          key: '/config/dashboard/disk',
+          icon: <HddOutlined />,
+          label: '磁盘监控',
         },
       ],
     },

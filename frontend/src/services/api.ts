@@ -47,6 +47,7 @@ import {
   TrafficTrendParams,
   TrafficStatsParams
 } from '../types/dashboard';
+import { DiskInfo, DiskDetail } from '../types/disk';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -671,16 +672,21 @@ class ApiService {
     });
   }
 
-  async startWolMonitor(): Promise<WolResponse> {
-    return this.request<WolResponse>('/wol/monitor/start', {
-      method: 'POST'
-    });
-  }
-
   async stopWolMonitor(): Promise<WolResponse> {
     return this.request<WolResponse>('/wol/monitor/stop', {
       method: 'POST'
     });
+  }
+
+  // ========== 磁盘监控接口 ==========
+  async getDisks(): Promise<DiskInfo[]> {
+    return this.request<DiskInfo[]>('/disk/list');
+  }
+
+  async getDiskDetail(device: string): Promise<DiskDetail> {
+    // 后端参数需要去掉前导'/'，并让 'dev/' 被后端剥离为设备名
+    const param = device.replace(/^\//, '');
+    return this.request<DiskDetail>(`/disk/detail/${encodeURIComponent(param)}`);
   }
 }
 

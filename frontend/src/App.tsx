@@ -20,6 +20,7 @@ import AggregatedAnalysis from './pages/AggregatedAnalysis';
 import Dashboard from './pages/Dashboard';
 import TrafficOverview from './pages/TrafficOverview';
 import WolManagement from './pages/WolManagement';
+import DiskMonitor from './pages/DiskMonitor';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -108,6 +109,7 @@ const AppContent: React.FC = () => {
           {/* Dashboard子页面路由 */}
           <Route path="dashboard/traffic" element={<TrafficOverview />} />
           <Route path="dashboard/wol" element={<WolManagement />} />
+          <Route path="dashboard/disk" element={<DiskMonitor />} />
         </Route>
         
         {/* 默认路由重定向 */}
