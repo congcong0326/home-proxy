@@ -46,6 +46,11 @@ public class AggregateConfigResponse {
     private List<UserDtoWithCredential> users;
 
     /**
+     * dns规则
+     */
+    private List<DnsRuleDTO> dnsRules;
+
+    /**
      * 配置哈希值（用于ETag缓存机制）
      */
     private String configHash;
