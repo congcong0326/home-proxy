@@ -30,10 +30,6 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
         pipeLineContextInit(socketChannel);
         // 在最前面处理 TLS（如启用）
         processSSL(socketChannel);
-        socketChannel.pipeline().addLast(
-                // 添加一些统计的channelHandler
-                //new LoggingHandler(LogLevel.INFO),
-                );
         // 添加根据各个协议的channelHandler
         // 认证相关的处理器
         init(socketChannel);
@@ -47,7 +43,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
 
     protected abstract void init(SocketChannel socketChannel);
 
-    private void processSSL(SocketChannel socketChannel) {
+    protected void processSSL(SocketChannel socketChannel) {
         // 开启TLS
         if (Objects.equals(inboundConfig.getTlsEnabled(), true) && inboundConfig.getProtocol() != ProtocolType.SHADOW_SOCKS) {
             SslContext sslContext = TlsContextManager.getInstance().getServerContext(inboundConfig);
@@ -56,7 +52,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
         }
     }
 
-    private void pipeLineContextInit(SocketChannel socketChannel) {
+    protected void pipeLineContextInit(SocketChannel socketChannel) {
         ChannelAttributes.setInboundConfig(socketChannel, inboundConfig);
         // 构建并填充代理上下文
         ProxyContext context = new ProxyContext();

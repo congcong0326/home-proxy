@@ -5,6 +5,10 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.epoll.Epoll;
+import io.netty.channel.epoll.EpollChannelOption;
+import io.netty.channel.epoll.EpollEventLoopGroup;
+import io.netty.channel.epoll.EpollServerSocketChannel;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -32,20 +36,37 @@ public abstract class ProxyServer {
 
     public abstract InboundConfig getInboundConfig();
 
+    protected boolean useEpoll() {
+        boolean available = Epoll.isAvailable();
+        log.info("enable native epoll {}", available);
+        return Epoll.isAvailable();
+    }
+
     public void start() throws InterruptedException {
         if (!running.compareAndSet(false, true)) {
             log.info("{} 代理服务器已经运行在 {}:{}", getServerName(), getIp(), getPort());
             return;
         }
-
-        bossGroup = new NioEventLoopGroup(1);
-        workerGroup = new NioEventLoopGroup(); // 默认cpu核心数量*2
+        if (useEpoll()) {
+            bossGroup =  new EpollEventLoopGroup(1);
+            workerGroup = new EpollEventLoopGroup();
+        } else {
+            bossGroup = new NioEventLoopGroup(1);
+            // 默认cpu核心数量*2
+            workerGroup = new NioEventLoopGroup();
+        }
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
-                .channel(NioServerSocketChannel.class)
                 .handler(new LoggingHandler(LogLevel.DEBUG))
                 .childHandler(getChildHandler());
-
+        if (useEpoll()) {
+            bootstrap.channel(EpollServerSocketChannel.class)
+                    // 开启透明代理能力
+                    .option(EpollChannelOption.IP_TRANSPARENT, true)
+                    .childOption(EpollChannelOption.IP_TRANSPARENT, true);
+        } else {
+            bootstrap.channel(NioServerSocketChannel.class);
+        }
         bindFuture = bootstrap.bind(getIp(), getPort()).sync();
         serverChannel = bindFuture.channel();
         log.info("{} 代理服务器启动在 {}:{}", getServerName(), getIp(), getPort());

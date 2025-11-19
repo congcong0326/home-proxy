@@ -134,21 +134,20 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
         // 解析客户端地理位置
         GeoLocation srcGeo = clientIp != null ? GeoIPUtil.getInstance().lookup(clientIp).orElse(null) : null;
-
+        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
         // 准备目标 IP（无论 GeoIP 是否成功都尽量解析）
-        String dstIp = null;
-        if (geoLocation != null) {
-            dstIp = geoLocation.getIp();
-        } else {
-            if (!rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
-                dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
+        String dstIp = proxyContext.getOriginalTargetIP();
+        if (dstIp == null) {
+            if (geoLocation != null) {
+                dstIp = geoLocation.getIp();
             } else {
-                dstIp = proxyTunnelRequest.getTargetHost();
+                if (!rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
+                    dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
+                } else {
+                    dstIp = proxyTunnelRequest.getTargetHost();
+                }
             }
         }
-
-        // 填充 ProxyContext
-        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
         if (srcGeo != null) {
             proxyContext.setSrcGeoCity(srcGeo.getCity());
             proxyContext.setSrcGeoCountry(srcGeo.getCountry());

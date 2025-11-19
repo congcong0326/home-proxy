@@ -4,6 +4,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.protocol.shadowsock.ShadowSocksProtocolStrategy;
 import org.congcong.proxyworker.protocol.socks.Socks5ProtocolStrategy;
 import org.congcong.proxyworker.protocol.http.HttpsConnectProtocolStrategy;
+import org.congcong.proxyworker.protocol.transparent.TransparentProtocolStrategy;
 
 import java.util.EnumMap;
 import java.util.Map;
@@ -18,6 +19,7 @@ public class ProtocolStrategyRegistry {
         STRATEGIES.put(ProtocolType.SOCKS5, new Socks5ProtocolStrategy());
         STRATEGIES.put(ProtocolType.HTTPS_CONNECT, new HttpsConnectProtocolStrategy());
         STRATEGIES.put(ProtocolType.SHADOW_SOCKS, new ShadowSocksProtocolStrategy());
+        STRATEGIES.put(ProtocolType.TP_PROXY, new TransparentProtocolStrategy());
     }
 
     private ProtocolStrategyRegistry() {}

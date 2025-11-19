@@ -3,8 +3,10 @@ package org.congcong.common.enums;
 public enum ProtocolType {
     SOCKS5("SOCKS5", "SOCKS5协议"),
     HTTPS_CONNECT("HTTPS_CONNECT", "HTTPS CONNECT协议"),
+    @Deprecated // 虽然很简单，但是没时间做这个
     SOCKS5_HTTPS("SOCKS5_HTTPS", "SOCKS5+HTTPS混合协议"),
     NONE("NONE", "直接转发"),
+    TP_PROXY("TP_PROXY", "透明代理"),
     SHADOW_SOCKS("SHADOW_SOCKS", "Shadowsocks协议");
     private final String value;
     private final String description;
