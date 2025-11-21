@@ -11,6 +11,7 @@ export interface User {
 export interface UserDTO {
   id: number;
   username: string;
+  ipAddress?: string;
   status: number;
   remark?: string;
   createdAt: string;
@@ -21,12 +22,14 @@ export interface UserDTO {
 export interface CreateUserRequest {
   username: string;
   credential: string;
+  ipAddress?: string;
   status?: number;
 }
 
 // 更新用户请求类型
 export interface UpdateUserRequest {
   username?: string;
+  ipAddress?: string;
   status?: number;
 }
 

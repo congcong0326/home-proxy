@@ -14,6 +14,9 @@ public class UpdateUserRequest {
     @Size(max = 255, message = "凭据长度不能超过255个字符")
     private String credential;
 
+    @Size(max = 45, message = "IP地址长度不能超过45个字符")
+    private String ipAddress;
+
     private Integer status;
 
     @Size(max = 255, message = "备注长度不能超过255个字符")

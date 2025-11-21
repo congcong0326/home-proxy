@@ -20,6 +20,7 @@ public class InboundConfig {
     private ProxyEncAlgo ssMethod;
     private List<UserConfig> allowedUsers;
     private Map<String, UserConfig> usersMap;
+    private Map<String, UserConfig> deviceIpMapUser;
     private List<RouteConfig> routes;
     private Set<String> rewriteHosts;
 }

@@ -8,5 +8,5 @@ public class UserConfig {
     private Long id;
     private String username;
     private String credential;
-
+    private String ipAddress;
 }

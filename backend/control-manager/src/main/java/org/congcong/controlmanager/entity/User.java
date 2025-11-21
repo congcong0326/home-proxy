@@ -19,6 +19,9 @@ public class User {
     @Column(length = 255)
     private String credential;
 
+    @Column(name = "ip_address", length = 45, unique = true)
+    private String ipAddress;
+
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled
 

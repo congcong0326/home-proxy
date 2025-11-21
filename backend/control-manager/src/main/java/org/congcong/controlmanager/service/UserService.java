@@ -106,6 +106,10 @@ public class UserService {
         if (userRepository.existsByUsername(user.getUsername())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在: " + user.getUsername());
         }
+        // 检查IP地址唯一性（可选字段）
+        if (user.getIpAddress() != null && userRepository.existsByIpAddress(user.getIpAddress())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "IP地址已存在: " + user.getIpAddress());
+        }
         User savedUser = userRepository.save(user);
 
         return convertToDTO(savedUser);
@@ -129,9 +133,17 @@ public class UserService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在: " + updatedUser.getUsername());
         }
 
+        // 检查IP地址是否与其他用户冲突（仅当有修改且非空）
+        String newIp = updatedUser.getIpAddress();
+        String oldIp = existingUser.getIpAddress();
+        if (newIp != null && (oldIp == null || !oldIp.equals(newIp)) && userRepository.existsByIpAddress(newIp)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "IP地址已存在: " + newIp);
+        }
+
         // 更新字段
         existingUser.setUsername(updatedUser.getUsername());
         existingUser.setCredential(updatedUser.getCredential());
+        existingUser.setIpAddress(updatedUser.getIpAddress());
         existingUser.setStatus(updatedUser.getStatus());
         existingUser.setRemark(updatedUser.getRemark());
 

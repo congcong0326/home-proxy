@@ -128,11 +128,16 @@ public class ProxyWorkerApplication {
                     inboundConfig.setAllowedUsers(allowedUsers);
                     inboundConfig.setRoutes(routes);
                     Map<String, UserConfig> usersMap = new HashMap<>();
+                    Map<String, UserConfig> deviceIpMapUser = new HashMap<>();
                     for (UserConfig allowedUser : inboundConfig.getAllowedUsers()) {
                         usersMap.put(allowedUser.getUsername(), allowedUser);
+                        String ipAddress = allowedUser.getIpAddress();
+                        if (ipAddress != null) {
+                            deviceIpMapUser.put(ipAddress, allowedUser);
+                        }
                     }
                     inboundConfig.setUsersMap(usersMap);
-
+                    inboundConfig.setDeviceIpMapUser(deviceIpMapUser);
                     inboundConfig.setRewriteHosts(rewriteHosts);
 
 
