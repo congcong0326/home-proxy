@@ -56,7 +56,7 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
                 }
                 // 连接目标服务器失败
                 AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
-                log.debug("连接目标服务器失败" +
+                log.warn("连接目标服务器失败" +
                         " {}", future.cause().getMessage());
                 // 确保释放出站资源
                 Channel ch = future.channel();

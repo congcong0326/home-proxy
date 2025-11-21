@@ -3,6 +3,7 @@ package org.congcong.proxyworker.server.impl;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import org.congcong.proxyworker.config.InboundConfig;
+import org.congcong.proxyworker.protocol.transparent.TransparentServerInitializer;
 import org.congcong.proxyworker.server.ProxyServer;
 
 public class TransparentProxyServer extends ProxyServer  {
@@ -30,7 +31,7 @@ public class TransparentProxyServer extends ProxyServer  {
 
     @Override
     public ChannelInitializer<SocketChannel> getChildHandler() {
-        return null;
+        return new TransparentServerInitializer(this.cfg);
     }
 
     @Override

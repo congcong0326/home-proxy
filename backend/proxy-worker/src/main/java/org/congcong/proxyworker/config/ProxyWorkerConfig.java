@@ -21,6 +21,10 @@ public class ProxyWorkerConfig {
     private final String controlHost;
     private final int controlPort;
     private final String controlBaseUrl;
+    // TLS certificate configuration (optional)
+    private final String tlsCertFile;
+    private final String tlsKeyFile;
+    private final String tlsKeyPassword;
     
     private static ProxyWorkerConfig instance;
     
@@ -30,6 +34,10 @@ public class ProxyWorkerConfig {
         this.controlHost = props.getProperty("control.host", DEFAULT_CONTROL_HOST);
         this.controlPort = Integer.parseInt(props.getProperty("control.port", String.valueOf(DEFAULT_CONTROL_PORT)));
         this.controlBaseUrl = String.format("http://%s:%d", controlHost, controlPort);
+        // TLS certificate paths (optional)
+        this.tlsCertFile = props.getProperty("tls.certFile", null);
+        this.tlsKeyFile = props.getProperty("tls.keyFile", null);
+        this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
         
         log.info("代理工作节点配置加载完成 - 控制端地址: {}", controlBaseUrl);
     }
@@ -83,5 +91,21 @@ public class ProxyWorkerConfig {
 
     public String getAuthLogUrl() {
         return controlBaseUrl + "/api/logs/auth";
+    }
+
+    /**
+     * 外部 TLS 证书配置（可选）。
+     * 返回值可能为 null 或空字符串，调用方需自行判空验证。
+     */
+    public String getTlsCertFile() {
+        return tlsCertFile;
+    }
+
+    public String getTlsKeyFile() {
+        return tlsKeyFile;
+    }
+
+    public String getTlsKeyPassword() {
+        return tlsKeyPassword;
     }
 }

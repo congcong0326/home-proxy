@@ -2,6 +2,8 @@ package org.congcong.proxyworker.server.netty;
 
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.enums.ProtocolType;
@@ -32,6 +34,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
         processSSL(socketChannel);
         // 添加根据各个协议的channelHandler
         // 认证相关的处理器
+        socketChannel.pipeline().addFirst(new LoggingHandler(LogLevel.DEBUG));
         init(socketChannel);
         // 路由处理器
         socketChannel.pipeline().addLast(RouterService.getInstance());

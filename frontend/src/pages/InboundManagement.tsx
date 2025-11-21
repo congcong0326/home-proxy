@@ -71,6 +71,24 @@ const InboundManagement: React.FC = () => {
   const [createForm] = Form.useForm<InboundConfigCreateRequest>();
   const [editForm] = Form.useForm<InboundConfigUpdateRequest>();
 
+  // 监听协议选择，便于基于协议调整表单项可见性与默认值
+  const createProtocolWatch = Form.useWatch('protocol', createForm);
+  const editProtocolWatch = Form.useWatch('protocol', editForm);
+
+  // 根据协议选择调整创建表单的TLS与嗅探默认值
+  useEffect(() => {
+    if (createProtocolWatch === ProtocolType.TP_PROXY) {
+      createForm.setFieldsValue({ tlsEnabled: false, sniffEnabled: true });
+    }
+  }, [createProtocolWatch]);
+
+  // 根据协议调整编辑表单的TLS与嗅探默认值
+  useEffect(() => {
+    if (editProtocolWatch === ProtocolType.TP_PROXY) {
+      editForm.setFieldsValue({ tlsEnabled: false, sniffEnabled: true });
+    }
+  }, [editProtocolWatch]);
+
   // 下拉数据
   const [userOptions, setUserOptions] = useState<UserDTO[]>([]);
   const [routeOptions, setRouteOptions] = useState<RouteDTO[]>([]);
@@ -81,6 +99,7 @@ const InboundManagement: React.FC = () => {
     { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
     { value: ProtocolType.SOCKS5_HTTPS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5_HTTPS] },
     { value: ProtocolType.SS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SS] },
+    { value: ProtocolType.TP_PROXY, label: PROTOCOL_TYPE_LABELS[ProtocolType.TP_PROXY] },
   ]), []);
 
   const statusSelectOptions = useMemo(() => ([
@@ -328,7 +347,7 @@ const InboundManagement: React.FC = () => {
         <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, sniffEnabled: true, status: 1 }}>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="配置名称" /></Form.Item></Col>
-            <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}>
+            <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
               <Select placeholder="选择协议" options={protocolSelectOptions} />
             </Form.Item></Col>
           </Row>
@@ -339,7 +358,7 @@ const InboundManagement: React.FC = () => {
           <Row gutter={16}>
             <Col span={8}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
             <Col span={8}><Form.Item name="sniffEnabled" label="启用嗅探" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}>
+            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>
@@ -380,7 +399,7 @@ const InboundManagement: React.FC = () => {
         <Form form={editForm} layout="vertical">
           <Row gutter={16}>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
-            <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}>
+            <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
               <Select disabled options={protocolSelectOptions} />
             </Form.Item></Col>
           </Row>
@@ -391,7 +410,7 @@ const InboundManagement: React.FC = () => {
           <Row gutter={16}>
             <Col span={8}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
             <Col span={8}><Form.Item name="sniffEnabled" label="启用嗅探" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}>
+            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>

@@ -2,18 +2,17 @@ package org.congcong.proxyworker.outbound.direct;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.Promise;
-import org.congcong.proxyworker.outbound.OutboundConnector;
+import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
-public class DirectOutboundConnector implements OutboundConnector {
+public class DirectOutboundConnector extends AbstractOutboundConnector {
 
     @Override
     public ChannelFuture connect(Channel inboundChannel, ProxyTunnelRequest request, Promise<Channel> relayPromise) {
         Bootstrap b = new Bootstrap();
         b.group(inboundChannel.eventLoop())
-                .channel(NioSocketChannel.class)
+                .channel(getSocketChannel())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new DirectClientHandler(relayPromise));

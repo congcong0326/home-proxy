@@ -16,8 +16,8 @@ public class TransparentServerInitializer extends AbstractChannelInitializer {
 
     @Override
     protected void init(SocketChannel socketChannel) {
-        socketChannel.pipeline().addLast(new ProtocolDetectHandler(inboundConfig));
-        socketChannel.pipeline().addLast(TransparentServerHandler.getInstance());
+        socketChannel.pipeline().addLast(new ProtocolDetectHandler());
+        socketChannel.pipeline().addLast(new TransparentServerHandler());
     }
 
 

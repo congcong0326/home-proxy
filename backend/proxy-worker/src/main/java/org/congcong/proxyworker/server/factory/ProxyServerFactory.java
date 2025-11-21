@@ -6,6 +6,7 @@ import org.congcong.proxyworker.server.ProxyServer;
 import org.congcong.proxyworker.server.impl.ShadowSocksProxyServer;
 import org.congcong.proxyworker.server.impl.SocksProxyServer;
 import org.congcong.proxyworker.server.impl.HttpProxyServer;
+import org.congcong.proxyworker.server.impl.TransparentProxyServer;
 
 public class ProxyServerFactory {
     public static ProxyServer create(InboundConfig cfg) {
@@ -16,6 +17,8 @@ public class ProxyServerFactory {
             return new HttpProxyServer(cfg);
         } else if (type == ProtocolType.SHADOW_SOCKS) {
             return new ShadowSocksProxyServer(cfg);
+        } else if (type == ProtocolType.TP_PROXY) {
+            return new TransparentProxyServer(cfg);
         }
         return null;
     }

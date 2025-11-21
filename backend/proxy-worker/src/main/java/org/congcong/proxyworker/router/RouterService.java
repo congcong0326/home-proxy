@@ -156,7 +156,9 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             proxyContext.setDstGeoCity(geoLocation.getCity());
             proxyContext.setDstGeoCountry(geoLocation.getCountry());
         }
-        proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
+        if (proxyContext.getOriginalTargetHost() == null) {
+            proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
+        }
         proxyContext.setOriginalTargetIP(dstIp);
         proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
 

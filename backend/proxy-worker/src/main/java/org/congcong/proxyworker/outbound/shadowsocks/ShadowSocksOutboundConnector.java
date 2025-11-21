@@ -4,22 +4,20 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.socksx.v5.Socks5AddressType;
 import io.netty.util.NetUtil;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.proxyworker.config.RouteConfig;
-import org.congcong.proxyworker.outbound.OutboundConnector;
+import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.protocol.shadowsock.EncryptedSocksHandler;
 import org.congcong.proxyworker.protocol.shadowsock.DecryptedSocksHandler;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.encryption.CryptoProcessorFactory;
-import org.congcong.proxyworker.util.encryption.algorithm.CryptoProcessor;
 
 @Slf4j
-public class ShadowSocksOutboundConnector implements OutboundConnector {
+public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
 
     @Override
     public ChannelFuture connect(Channel inboundChannel, ProxyTunnelRequest request, Promise<Channel> relayPromise) {
@@ -35,7 +33,7 @@ public class ShadowSocksOutboundConnector implements OutboundConnector {
 
         Bootstrap b = new Bootstrap();
         b.group(inboundChannel.eventLoop())
-                .channel(NioSocketChannel.class)
+                .channel(getSocketChannel())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new ChannelInitializer<SocketChannel>() {

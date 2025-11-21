@@ -1,10 +1,7 @@
 package org.congcong.proxyworker.server;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.EventLoopGroup;
+import io.netty.channel.*;
 import io.netty.channel.epoll.Epoll;
 import io.netty.channel.epoll.EpollChannelOption;
 import io.netty.channel.epoll.EpollEventLoopGroup;
@@ -39,7 +36,7 @@ public abstract class ProxyServer {
     protected boolean useEpoll() {
         boolean available = Epoll.isAvailable();
         log.info("enable native epoll {}", available);
-        return Epoll.isAvailable();
+        return available;
     }
 
     public void start() throws InterruptedException {
@@ -61,8 +58,9 @@ public abstract class ProxyServer {
                 .childHandler(getChildHandler());
         if (useEpoll()) {
             bootstrap.channel(EpollServerSocketChannel.class)
-                    // 开启透明代理能力
+                    .option(ChannelOption.SO_REUSEADDR, true)
                     .option(EpollChannelOption.IP_TRANSPARENT, true)
+                    .childOption(ChannelOption.SO_REUSEADDR, true)
                     .childOption(EpollChannelOption.IP_TRANSPARENT, true);
         } else {
             bootstrap.channel(NioServerSocketChannel.class);

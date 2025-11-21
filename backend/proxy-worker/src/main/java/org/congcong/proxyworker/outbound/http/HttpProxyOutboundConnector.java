@@ -3,13 +3,12 @@ package org.congcong.proxyworker.outbound.http;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.http.*;
 import io.netty.buffer.Unpooled;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.RouteConfig;
-import org.congcong.proxyworker.outbound.OutboundConnector;
+import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import java.util.Base64;
@@ -18,13 +17,13 @@ import java.util.Base64;
  * 通过上游 HTTP CONNECT 代理转发的出站连接器。
  */
 @Slf4j
-public class HttpProxyOutboundConnector implements OutboundConnector {
+public class HttpProxyOutboundConnector extends AbstractOutboundConnector {
 
     @Override
     public ChannelFuture connect(Channel inboundChannel, ProxyTunnelRequest request, Promise<Channel> relayPromise) {
         Bootstrap b = new Bootstrap();
         b.group(inboundChannel.eventLoop())
-                .channel(NioSocketChannel.class)
+                .channel(getSocketChannel())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new ChannelInitializer<SocketChannel>() {

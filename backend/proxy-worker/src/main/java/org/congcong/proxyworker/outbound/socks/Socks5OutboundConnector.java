@@ -3,18 +3,17 @@ package org.congcong.proxyworker.outbound.socks;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.handler.codec.socksx.v5.*;
 import io.netty.handler.proxy.ProxyConnectException;
 import io.netty.util.NetUtil;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.RouteConfig;
-import org.congcong.proxyworker.outbound.OutboundConnector;
+import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 @Slf4j
-public class Socks5OutboundConnector implements OutboundConnector  {
+public class Socks5OutboundConnector extends AbstractOutboundConnector {
 
 
 
@@ -22,7 +21,7 @@ public class Socks5OutboundConnector implements OutboundConnector  {
     public ChannelFuture connect(Channel inboundChannel, ProxyTunnelRequest request, Promise<Channel> relayPromise) {
         Bootstrap b = new Bootstrap();
         b.group(inboundChannel.eventLoop())
-                .channel(NioSocketChannel.class)
+                .channel(getSocketChannel())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
                 .handler(new ChannelInitializer<SocketChannel>() {
