@@ -331,6 +331,7 @@ const UserManagement: React.FC = () => {
     setCurrentUser(user);
     editForm.setFieldsValue({
       username: user.username,
+      ipAddress: user.ipAddress,
       status: user.status,
     });
     setEditModalVisible(true);
@@ -379,6 +380,13 @@ const UserManagement: React.FC = () => {
       sorter: true,
     },
     {
+      title: '设备IP',
+      dataIndex: 'ipAddress',
+      key: 'ipAddress',
+      width: 180,
+      ellipsis: true,
+    },
+    {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
@@ -423,6 +431,7 @@ const UserManagement: React.FC = () => {
                     <div>
                       <p><strong>ID:</strong> {record.id}</p>
                       <p><strong>用户名:</strong> {record.username}</p>
+                      <p><strong>设备IP:</strong> {record.ipAddress || '-'}</p>
                       <p><strong>状态:</strong> {USER_STATUS_LABELS[record.status as UserStatus]}</p>
                       <p><strong>创建时间:</strong> {new Date(record.createdAt).toLocaleString('zh-CN')}</p>
                       <p><strong>更新时间:</strong> {new Date(record.updatedAt).toLocaleString('zh-CN')}</p>
@@ -681,6 +690,16 @@ const UserManagement: React.FC = () => {
           </Form.Item>
 
           <Form.Item
+            name="ipAddress"
+            label="设备IP"
+            rules={[
+              { max: 45, message: '设备IP长度不能超过45个字符' },
+            ]}
+          >
+            <Input placeholder="请输入设备IP（IPv4/IPv6）" />
+          </Form.Item>
+
+          <Form.Item
             name="status"
             label="状态"
             initialValue={UserStatus.ENABLED}
@@ -736,6 +755,16 @@ const UserManagement: React.FC = () => {
             ]}
           >
             <Input placeholder="请输入用户名" />
+          </Form.Item>
+
+          <Form.Item
+            name="ipAddress"
+            label="设备IP"
+            rules={[
+              { max: 45, message: '设备IP长度不能超过45个字符' },
+            ]}
+          >
+            <Input placeholder="请输入设备IP（IPv4/IPv6）" />
           </Form.Item>
 
           <Form.Item
