@@ -1,6 +1,11 @@
 import { ProtocolType } from './route';
 import { ProxyEncAlgo } from './proxyEncAlgo';
 
+export interface InboundRouteBinding {
+  userIds: number[];
+  routeIds: number[];
+}
+
 export interface InboundConfigDTO {
   id: number;
   name: string;
@@ -10,6 +15,8 @@ export interface InboundConfigDTO {
   tlsEnabled: boolean;
   sniffEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
+  inboundRouteBindings?: InboundRouteBinding[];
+  // 兼容旧数据
   allowedUserIds?: number[];
   routeIds?: number[];
   status: number;
@@ -28,8 +35,7 @@ export interface InboundConfigCreateRequest {
   tlsEnabled: boolean;
   sniffEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
-  allowedUserIds?: number[];
-  routeIds?: number[];
+  inboundRouteBindings: InboundRouteBinding[];
   status: number;
   notes?: string;
 }
@@ -42,8 +48,7 @@ export interface InboundConfigUpdateRequest {
   tlsEnabled: boolean;
   sniffEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
-  allowedUserIds?: number[];
-  routeIds?: number[];
+  inboundRouteBindings: InboundRouteBinding[];
   status: number;
   notes?: string;
 }

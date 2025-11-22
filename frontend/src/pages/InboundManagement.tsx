@@ -29,7 +29,7 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest } from '../types/inbound';
+import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding } from '../types/inbound';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO, UserStatus, USER_STATUS_LABELS } from '../types/user';
 import { RouteDTO } from '../types/route';
@@ -243,8 +243,9 @@ const InboundManagement: React.FC = () => {
               tlsEnabled: record.tlsEnabled,
               sniffEnabled: record.sniffEnabled,
               ssMethod: record.ssMethod,
-              allowedUserIds: record.allowedUserIds,
-              routeIds: record.routeIds,
+              inboundRouteBindings: (record.inboundRouteBindings && record.inboundRouteBindings.length > 0)
+                ? record.inboundRouteBindings
+                : [{ userIds: record.allowedUserIds || [], routeIds: record.routeIds || [] }],
               status: record.status,
               notes: record.notes,
             });
@@ -337,14 +338,14 @@ const InboundManagement: React.FC = () => {
       />
 
       {/* 创建模态框 */}
-      <Modal
-        title="新建入站配置"
-        open={createVisible}
-        onCancel={() => setCreateVisible(false)}
-        onOk={handleCreate}
-        okText="创建"
-      >
-        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, sniffEnabled: true, status: 1 }}>
+          <Modal
+            title="新建入站配置"
+            open={createVisible}
+            onCancel={() => setCreateVisible(false)}
+            onOk={handleCreate}
+            okText="创建"
+          >
+        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, sniffEnabled: true, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="配置名称" /></Form.Item></Col>
             <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
@@ -365,24 +366,45 @@ const InboundManagement: React.FC = () => {
           <Form.Item shouldUpdate noStyle>
             {() => (
               createForm.getFieldValue('protocol') === ProtocolType.SS ? (
-                <Row gutter={16}>
-                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}>
-                    <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
-                  </Form.Item></Col>
-                  <Col span={12}><Form.Item name="allowedUserIds" label="绑定用户(仅1个)" rules={[{ required: true }]}>
-                    <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
-                  </Form.Item></Col>
-                </Row>
+                <>
+                  <Row gutter={16}>
+                    <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}> 
+                      <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
+                    </Form.Item></Col>
+                  </Row>
+                  <Card size="small" title="绑定关系">
+                    <Row gutter={16}>
+                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
+                        <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
+                      </Form.Item></Col>
+                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
+                        <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
+                      </Form.Item></Col>
+                    </Row>
+                  </Card>
+                </>
               ) : (
-                <Form.Item name="allowedUserIds" label="允许用户(可选)">
-                  <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
-                </Form.Item>
+                <Form.List name="inboundRouteBindings">
+                  {(fields, { add, remove }) => (
+                    <>
+                      {fields.map(({ key, name }) => (
+                        <Card key={key} size="small" title={`绑定组 #${name + 1}`} extra={<Button size="small" danger onClick={() => remove(name)}>移除</Button>} style={{ marginBottom: 12 }}>
+                          <Row gutter={16}>
+                            <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
+                              <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
+                            </Form.Item></Col>
+                            <Col span={12}><Form.Item name={[name, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
+                              <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
+                            </Form.Item></Col>
+                          </Row>
+                        </Card>
+                      ))}
+                      <Button type="dashed" onClick={() => add({ userIds: [], routeIds: [] } as InboundRouteBinding)} block icon={<PlusOutlined />}>添加绑定组</Button>
+                    </>
+                  )}
+                </Form.List>
               )
             )}
-          </Form.Item>
-
-          <Form.Item name="routeIds" label="关联路由(可选)">
-            <Select mode="multiple" placeholder="选择路由" options={routeSelectOptions} />
           </Form.Item>
           <Form.Item name="notes" label="备注"><Input.TextArea rows={3} /></Form.Item>
         </Form>
@@ -418,24 +440,45 @@ const InboundManagement: React.FC = () => {
           <Form.Item shouldUpdate noStyle>
             {() => (
               editForm.getFieldValue('protocol') === ProtocolType.SS ? (
-                <Row gutter={16}>
-                  <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}>
-                    <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
-                  </Form.Item></Col>
-                  <Col span={12}><Form.Item name="allowedUserIds" label="绑定用户(仅1个)" rules={[{ required: true }]}>
-                    <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
-                  </Form.Item></Col>
-                </Row>
+                <>
+                  <Row gutter={16}>
+                    <Col span={12}><Form.Item name="ssMethod" label="SS加密方法" rules={[{ required: true }]}> 
+                      <Select placeholder="选择加密算法" options={ssMethodSelectOptions} />
+                    </Form.Item></Col>
+                  </Row>
+                  <Card size="small" title="绑定关系">
+                    <Row gutter={16}>
+                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
+                        <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
+                      </Form.Item></Col>
+                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
+                        <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
+                      </Form.Item></Col>
+                    </Row>
+                  </Card>
+                </>
               ) : (
-                <Form.Item name="allowedUserIds" label="允许用户(可选)">
-                  <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
-                </Form.Item>
+                <Form.List name="inboundRouteBindings">
+                  {(fields, { add, remove }) => (
+                    <>
+                      {fields.map(({ key, name }) => (
+                        <Card key={key} size="small" title={`绑定组 #${name + 1}`} extra={<Button size="small" danger onClick={() => remove(name)}>移除</Button>} style={{ marginBottom: 12 }}>
+                          <Row gutter={16}>
+                            <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
+                              <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
+                            </Form.Item></Col>
+                            <Col span={12}><Form.Item name={[name, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
+                              <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
+                            </Form.Item></Col>
+                          </Row>
+                        </Card>
+                      ))}
+                      <Button type="dashed" onClick={() => add({ userIds: [], routeIds: [] } as InboundRouteBinding)} block icon={<PlusOutlined />}>添加绑定组</Button>
+                    </>
+                  )}
+                </Form.List>
               )
             )}
-          </Form.Item>
-
-          <Form.Item name="routeIds" label="关联路由(可选)">
-            <Select mode="multiple" placeholder="选择路由" options={routeSelectOptions} />
           </Form.Item>
           <Form.Item name="notes" label="备注"><Input.TextArea rows={3} /></Form.Item>
         </Form>
