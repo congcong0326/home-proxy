@@ -29,5 +29,5 @@
     </root>
 
     <!-- 应用程序日志级别 -->
-    <logger name="org.congcong.proxyworker" level="WARN" />
+    <logger name="org.congcong.proxyworker" level="INFO" />
 </configuration>
