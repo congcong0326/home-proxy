@@ -13,13 +13,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.proxyworker.config.FindUser;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.config.UserQueryService;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import java.util.Base64;
-import java.util.Map;
 
 @Slf4j
 @ChannelHandler.Sharable
@@ -51,19 +52,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         }
 
         InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(channelHandlerContext.channel());
-        Map<String, UserConfig> usersMap = inboundConfig != null ? inboundConfig.getUsersMap() : null;
-
         // 解析 Proxy-Authorization: Basic base64(username:password)
         String authHeader = fullHttpRequest.headers().get("Proxy-Authorization");
-        if (usersMap == null || usersMap.isEmpty()) {
-            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-                    "Proxy-Authenticate: Basic realm=\"NAS Proxy\"\r\n" +
-                    "Connection: close\r\n" +
-                    "Content-Length: 0\r\n\r\n";
-            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
-            channelHandlerContext.close();
-            return;
-        }
 
         if (authHeader == null || !authHeader.toLowerCase().startsWith("basic ")) {
             String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
@@ -98,9 +88,9 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
             return;
         }
         String username = decoded.substring(0, colonIdx);
+        UserConfig user = FindUser.find(username, inboundConfig);
         String password = decoded.substring(colonIdx + 1);
 
-        UserConfig user = usersMap.get(username);
         boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
         if (!ok) {
             log.warn("failed to authenticate HTTP proxy user: {}", username);

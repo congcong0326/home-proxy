@@ -2,6 +2,7 @@ package org.congcong.controlmanager.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import org.congcong.common.dto.InboundRouteBinding;
 import org.congcong.common.enums.ProtocolType;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -47,6 +48,10 @@ public class InboundConfig {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "route_ids", columnDefinition = "JSON")
     private List<Long> routeIds;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "inbound_route_bindings", columnDefinition = "JSON")
+    private List<InboundRouteBinding>  inboundRouteBindings;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

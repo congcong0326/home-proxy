@@ -244,4 +244,17 @@ public class UserService {
                 userPage.getTotalElements()
         );
     }
+
+
+    public void ensureDefaultAnonymousUserExists() {
+        if (userRepository.findByUsername("Anonymous user").isEmpty()) {
+            User user = new User();
+            user.setUsername("Anonymous user");
+            user.setCredential("Anonymous user");
+            user.setIpAddress("127.0.0.1");
+            user.setStatus(1);
+            user.setRemark("匿名访问用户，透明代理的兜底用户，误删除");
+            userRepository.save(user);
+        }
+    }
 }

@@ -3,8 +3,10 @@ package org.congcong.proxyworker.protocol.shadowsock;
 import io.netty.channel.socket.SocketChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProxyEncAlgo;
+import org.congcong.proxyworker.config.FindUser;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.config.UserQueryService;
 import org.congcong.proxyworker.server.netty.AbstractChannelInitializer;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.util.encryption.CryptoProcessorFactory;
@@ -20,11 +22,7 @@ public class ShadowSocksInitializer extends AbstractChannelInitializer {
 
     @Override
     protected void init(SocketChannel socketChannel) {
-        List<UserConfig> allowedUsers = inboundConfig.getAllowedUsers();
-        if(allowedUsers.size() > 1) {
-            log.warn("ShadowSocks {} must have only one user, now is {}", inboundConfig.getName(), allowedUsers.size());
-        }
-        UserConfig userConfig = allowedUsers.get(0);
+        UserConfig userConfig = FindUser.find(null, inboundConfig);
         ProxyEncAlgo ssMethod = inboundConfig.getSsMethod();
         String credential = userConfig.getCredential();
         ChannelAttributes.setAuthenticatedUser(socketChannel, userConfig);

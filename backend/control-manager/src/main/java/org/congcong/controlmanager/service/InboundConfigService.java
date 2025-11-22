@@ -181,6 +181,7 @@ public class InboundConfigService {
         inboundConfig.setRouteIds(request.getRouteIds());
         inboundConfig.setStatus(request.getStatus());
         inboundConfig.setNotes(request.getNotes());
+        inboundConfig.setInboundRouteBindings(request.getInboundRouteBindings());
     }
 
     /**

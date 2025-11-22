@@ -75,72 +75,72 @@ public class ProxyWorkerApplication {
             mapper.registerModule(new JavaTimeModule());
             // 忽略来源对象中在目标类中不存在的字段（如 allowedUserIds、routeIds 等）
             mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-
+            UserConfig anonymousUser = null;
+            RouteConfig defaultRouteConfig = null;
+            // 获取所有用户配置
             Map<Long, UserDtoWithCredential> userMap = new HashMap<>();
             Map<Long, RouteDTO> routeMap = new HashMap<>();
             if (newConfig.getUsers() != null) {
                 for (UserDtoWithCredential user : newConfig.getUsers()) {
                     if (user != null && user.getId() != null) {
                         userMap.put(user.getId(), user);
+                        if ("Anonymous user".equals(user.getUsername())) {
+                            anonymousUser = mapper.convertValue(user, UserConfig.class);
+                        }
                     }
                 }
             }
+            // 获取所有路由配置
             if (newConfig.getRoutes() != null) {
                 for (RouteDTO route : newConfig.getRoutes()) {
                     if (route != null && route.getId() != null) {
                         routeMap.put(route.getId(), route);
+                        if ("兜底直连路由规则".equals(route.getName())) {
+                            defaultRouteConfig =  mapper.convertValue(route, RouteConfig.class);
+                        }
                     }
                 }
             }
+            // 封装代理需要的配置
             List<InboundConfig> inboundConfigs = new ArrayList<>();
             if (newConfig.getInbounds() != null) {
                 for (InboundConfigDTO inbound : newConfig.getInbounds()) {
                     if (inbound == null) {
                         continue;
                     }
+                    // 拷贝了部分字段
                     InboundConfig inboundConfig = mapper.convertValue(inbound, InboundConfig.class);
-                    List<UserConfig> allowedUsers = inbound.getAllowedUserIds() == null
-                            ? Collections.emptyList()
-                            : inbound.getAllowedUserIds().stream()
-                                    .map(userMap::get)
-                                    .filter(Objects::nonNull)
-                                    .map(u -> mapper.convertValue(u, UserConfig.class))
-                                    .collect(Collectors.toList());
-                    List<RouteConfig> routes = inbound.getRouteIds() == null
-                            ? Collections.emptyList()
-                            : inbound.getRouteIds().stream()
-                                    .map(routeMap::get)
-                                    .filter(Objects::nonNull)
-                                    .map(r -> mapper.convertValue(r, RouteConfig.class))
-                                    .collect(Collectors.toList());
-                    Set<String> rewriteHosts = new HashSet<>();
-                    for (RouteConfig route : routes) {
-                        if(route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE) {
-                            for (RouteRule rule : route.getRules()) {
-                                if (rule.getConditionType() == RouteConditionType.DOMAIN) {
-                                    rewriteHosts.add(rule.getValue());
-                                }
+
+                    // 关键的几个高效查询的字段
+                    Map<String, UserConfig> userNameMap = new HashMap<>();
+                    Map<String, UserConfig> deviceIpMapUser = new HashMap<>();
+                    Map<Long, List<RouteConfig>> userToRoutesMap = new HashMap<>();
+
+                    List<InboundRouteBinding> inboundRouteBindings = inbound.getInboundRouteBindings();
+                    for (InboundRouteBinding inboundRouteBinding : inboundRouteBindings) {
+                        List<Long> userIds = inboundRouteBinding.getUserIds();
+                        List<Long> routeIds = inboundRouteBinding.getRouteIds();
+                        List<RouteConfig> userBelongRoutes = new ArrayList<>();
+                        for (Long routeId : routeIds) {
+                            RouteDTO routeDTO = routeMap.get(routeId);
+                            userBelongRoutes.add(mapper.convertValue(routeDTO, RouteConfig.class));
+                        }
+                        for (Long userId : userIds) {
+                            userToRoutesMap.put(userId, userBelongRoutes);
+                            UserDtoWithCredential userDtoWithCredential = userMap.get(userId);
+                            UserConfig userConfig = mapper.convertValue(userDtoWithCredential, UserConfig.class);
+                            userNameMap.put(userConfig.getUsername(), userConfig);
+                            if (userConfig.getIpAddress() != null) {
+                                deviceIpMapUser.put(userConfig.getIpAddress(), userConfig);
                             }
                         }
                     }
 
-
-                    inboundConfig.setAllowedUsers(allowedUsers);
-                    inboundConfig.setRoutes(routes);
-                    Map<String, UserConfig> usersMap = new HashMap<>();
-                    Map<String, UserConfig> deviceIpMapUser = new HashMap<>();
-                    for (UserConfig allowedUser : inboundConfig.getAllowedUsers()) {
-                        usersMap.put(allowedUser.getUsername(), allowedUser);
-                        String ipAddress = allowedUser.getIpAddress();
-                        if (ipAddress != null) {
-                            deviceIpMapUser.put(ipAddress, allowedUser);
-                        }
-                    }
-                    inboundConfig.setUsersMap(usersMap);
+                    inboundConfig.setUsersMap(userNameMap);
                     inboundConfig.setDeviceIpMapUser(deviceIpMapUser);
-                    inboundConfig.setRewriteHosts(rewriteHosts);
-
-
+                    inboundConfig.setRoutesMap(userToRoutesMap);
+                    inboundConfig.setAnonymousUser(anonymousUser);
+                    inboundConfig.setDefaultRouteConfig(defaultRouteConfig);
                     inboundConfigs.add(inboundConfig);
                 }
             }

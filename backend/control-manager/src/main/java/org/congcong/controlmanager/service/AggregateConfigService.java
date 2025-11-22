@@ -115,8 +115,9 @@ public class AggregateConfigService {
                         .append(inbound.getTlsEnabled())
                         .append(inbound.getSniffEnabled())
                         .append(inbound.getSsMethod())
-                        .append(inbound.getAllowedUserIds())
-                        .append(inbound.getRouteIds())
+//                        .append(inbound.getAllowedUserIds())
+//                        .append(inbound.getRouteIds())
+                        .append(inbound.getInboundRouteBindings())
                         .append(inbound.getUpdatedAt());
             });
             

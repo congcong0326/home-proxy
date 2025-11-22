@@ -9,8 +9,10 @@ import io.netty.handler.codec.socksx.v5.*;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
+import org.congcong.proxyworker.config.FindUser;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.config.UserQueryService;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -55,12 +57,10 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
         }
 
         // 校验认证请求（用户名/密码）
-        if (socksMessage instanceof Socks5PasswordAuthRequest) {
-            Socks5PasswordAuthRequest authReq = (Socks5PasswordAuthRequest) socksMessage;
+        if (socksMessage instanceof Socks5PasswordAuthRequest authReq) {
             String username = authReq.username();
             String password = authReq.password();
-
-            UserConfig user = usersMap != null ? usersMap.get(username) : null;
+            UserConfig user = FindUser.find(username, inboundConfig);
             boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
 
             if (ok) {

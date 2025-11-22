@@ -9,7 +9,9 @@ import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.RouteConditionType;
+import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.config.DefaultRouteConfig;
+import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
@@ -19,6 +21,7 @@ import org.congcong.proxyworker.util.GeoLocation;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
 import java.net.SocketAddress;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -42,13 +45,27 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     }
 
 
+    private Set<String> findRewriteHosts(List<RouteConfig> routes) {
+        Set<String> rewriteHosts = new HashSet<>();
+        for (RouteConfig route : routes) {
+            if(route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE) {
+                for (RouteRule rule : route.getRules()) {
+                    if (rule.getConditionType() == RouteConditionType.DOMAIN) {
+                        rewriteHosts.add(rule.getValue());
+                    }
+                }
+            }
+        }
+        return rewriteHosts;
+    }
+
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
         ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
         proxyTimeContext.setDnsStartTime(System.currentTimeMillis());
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-        List<RouteConfig> routes = inboundConfig.getRoutes();
-        locationLookupAndContextFill(channelHandlerContext, proxyTunnelRequest);
+        List<RouteConfig> routes = FindRoutes.find(proxyTunnelRequest.getUser().getId(), inboundConfig);
+        locationLookupAndContextFill(channelHandlerContext, proxyTunnelRequest, routes);
         proxyTimeContext.setDnsEndTime(System.currentTimeMillis());
         for (RouteConfig route : routes) {
             List<RouteRule> rules = route.getRules();
@@ -100,9 +117,8 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
 
 
-    private void locationLookupAndContextFill(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) {
-        InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-        Set<String> rewriteHosts = inboundConfig.getRewriteHosts();
+    private void locationLookupAndContextFill(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest, List<RouteConfig> routes) {
+        Set<String> rewriteHosts = findRewriteHosts(routes);
         GeoLocation geoLocation = null;
         log.debug("target host: {}", proxyTunnelRequest.getTargetHost());
         if (rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {

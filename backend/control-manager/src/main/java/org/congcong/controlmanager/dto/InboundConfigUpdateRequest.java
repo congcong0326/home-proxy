@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
+import org.congcong.common.dto.InboundRouteBinding;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.ProxyEncAlgo;
 
@@ -64,6 +65,9 @@ public class InboundConfigUpdateRequest {
      * 路由ID列表
      */
     private List<Long> routeIds;
+
+    @NotNull(message = "绑定数据不能为空")
+    private List<InboundRouteBinding> inboundRouteBindings;
 
     /**
      * 状态

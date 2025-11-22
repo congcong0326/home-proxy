@@ -7,6 +7,7 @@ import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
 
 import java.util.List;
+import java.util.Set;
 
 @Data
 public class RouteConfig {

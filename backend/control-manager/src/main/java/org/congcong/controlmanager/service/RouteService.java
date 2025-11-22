@@ -2,6 +2,9 @@ package org.congcong.controlmanager.service;
 
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.RouteDTO;
+import org.congcong.common.dto.RouteRule;
+import org.congcong.common.enums.MatchOp;
+import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
@@ -16,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -187,5 +191,31 @@ public class RouteService {
         dto.setCreatedAt(route.getCreatedAt());
         dto.setUpdatedAt(route.getUpdatedAt());
         return dto;
+    }
+
+
+    public void ensureDefaultRouteExists() {
+        if (!routeRepository.existsByName("兜底直连路由规则")) {
+            Route route = new Route();
+            route.setStatus(1);
+            route.setName("兜底直连路由规则");
+            route.setNotes("兜底直连路由规则，误删除");
+            RouteRule routeRule = new RouteRule();
+            routeRule.setConditionType(RouteConditionType.DOMAIN);
+            routeRule.setOp(MatchOp.IN);
+            routeRule.setValue("*");
+            route.setRules(Collections.singletonList(routeRule));
+            route.setPolicy(RoutePolicy.DIRECT);
+            route.setOutboundTag(null);
+            route.setOutboundProxyType(null);
+            route.setOutboundProxyHost(null);
+            route.setOutboundProxyPort(null);
+            route.setOutboundProxyUsername(null);
+            route.setOutboundProxyPassword(null);
+            route.setOutboundProxyEncAlgo(null);
+            route.setCreatedAt(null);
+            route.setUpdatedAt(null);
+            routeRepository.save(route);
+        }
     }
 }
