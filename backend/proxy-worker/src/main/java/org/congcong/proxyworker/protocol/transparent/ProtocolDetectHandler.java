@@ -54,7 +54,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
                 case OTHER:
                 default:
                     // 没确认是 HTTP/HTTPS，直接走 4 层转发
-                    proxyContext.setOriginalTargetHost("unknown");
+                    proxyContext.setOriginalTargetHost(proxyContext.getOriginalTargetIP());
                     finishAndForward(ctx, in, out);
                     return;
             }

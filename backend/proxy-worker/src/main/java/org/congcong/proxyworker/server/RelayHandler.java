@@ -104,7 +104,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception{
-        log.warn("Exception in RelayHandler: {}", cause.getMessage(), cause);
+        // log.debug("Exception in RelayHandler: {}", cause.getMessage(), cause);
         // 增加访问日志记录
         Channel contextChannel = isClient ? ctx.channel() : relayChannel;
         if (contextChannel != null) {
@@ -112,7 +112,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         }
         closeOnFlush(ctx.channel());
         closeOnFlush(relayChannel);
-        super.exceptionCaught(ctx, cause);
+        //super.exceptionCaught(ctx, cause);
     }
 
     @Override

@@ -43,6 +43,8 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         ch.pipeline().addLast(RequestAppendHandler.getInstance());
         // 连接目标服务器
         ch.pipeline().addLast(TcpTunnelConnectorHandler.getInstance());
+        // 兜底异常消费
+        ch.pipeline().addLast(TerminalExceptionHandler.getInstance());
     }
 
     protected abstract void init(Channel socketChannel);
