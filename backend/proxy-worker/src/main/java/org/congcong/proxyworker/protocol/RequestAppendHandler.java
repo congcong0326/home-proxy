@@ -42,9 +42,17 @@ public class RequestAppendHandler extends ChannelInboundHandlerAdapter {
                 if (status == ProxyTunnelRequest.Status.append) {
                     ByteBuf initialPayload = request.getInitialPayload();
                     if (initialPayload != null) {
+                        if (initialPayload.writableBytes() < buf.readableBytes()) {
+                            ByteBuf expanded = ctx.alloc().buffer(initialPayload.readableBytes() + buf.readableBytes());
+                            expanded.writeBytes(initialPayload);
+                            initialPayload.release();
+                            initialPayload = expanded;
+                            request.setInitialPayload(expanded);
+                        }
                         initialPayload.writeBytes(buf);
                     } else {
-                        request.setInitialPayload(buf.retain());
+                        ByteBuf copy = ctx.alloc().buffer(buf.readableBytes()).writeBytes(buf);
+                        request.setInitialPayload(copy);
                     }
                     //ctx.fireChannelRead(msg);
                     return;

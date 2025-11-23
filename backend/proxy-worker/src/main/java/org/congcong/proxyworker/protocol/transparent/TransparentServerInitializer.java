@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.transparent;
 
+import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.proxyworker.config.InboundConfig;
@@ -15,17 +16,17 @@ public class TransparentServerInitializer extends AbstractChannelInitializer {
     }
 
     @Override
-    protected void init(SocketChannel socketChannel) {
+    protected void init(Channel socketChannel) {
         socketChannel.pipeline().addLast(new ProtocolDetectHandler());
         socketChannel.pipeline().addLast(new TransparentServerHandler());
     }
 
 
-    protected void processSSL(SocketChannel socketChannel) {
+    protected void processSSL(Channel socketChannel) {
         // 啥都不做
     }
 
-    protected void pipeLineContextInit(SocketChannel socketChannel) {
+    protected void pipeLineContextInit(Channel socketChannel) {
         super.pipeLineContextInit(socketChannel);
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(socketChannel);
         InetSocketAddress originalDst = (InetSocketAddress) socketChannel.localAddress();

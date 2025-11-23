@@ -107,7 +107,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
   const handlePolicyChange = (value: RoutePolicy) => {
     setPolicy(value);
     // 切换不同策略时清理相关字段
-    if (value === RoutePolicy.DESTINATION_OVERRIDE) {
+    if (value === RoutePolicy.DESTINATION_OVERRIDE || value === RoutePolicy.DNS_REWRITING) {
       // 目标重写不需要认证信息
       form.setFieldsValue({
         outboundProxyUsername: undefined,
@@ -185,6 +185,10 @@ const RouteForm: React.FC<RouteFormProps> = ({
           outboundProxyHost: values.outboundProxyHost,
           outboundProxyPort: values.outboundProxyPort,
         }),
+        ...(values.policy === RoutePolicy.DNS_REWRITING && {
+          outboundTag: values.outboundTag,
+          outboundProxyHost: values.outboundProxyHost,
+        }),
       };
 
       await onSubmit(submitData);
@@ -257,6 +261,12 @@ const RouteForm: React.FC<RouteFormProps> = ({
                   <Space>
                     <Tag color="purple">{ROUTE_POLICY_LABELS[RoutePolicy.DESTINATION_OVERRIDE]}</Tag>
                     <Text type="secondary">目标地址重写</Text>
+                  </Space>
+                ) },
+                { value: RoutePolicy.DNS_REWRITING, label: (
+                  <Space>
+                    <Tag color="cyan">{ROUTE_POLICY_LABELS[RoutePolicy.DNS_REWRITING]}</Tag>
+                    <Text type="secondary">自定义DNS解析</Text>
                   </Space>
                 ) },
               ]}
@@ -364,6 +374,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                   options={[
                     { value: ProtocolType.SOCKS5, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5] },
                     { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
+                    { value: ProtocolType.DOT, label: PROTOCOL_TYPE_LABELS[ProtocolType.DOT] },
                     { value: ProtocolType.SHADOW_SOCKS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SHADOW_SOCKS] },
                   ]}
                 />
@@ -461,9 +472,9 @@ const RouteForm: React.FC<RouteFormProps> = ({
         </>
       )}
 
-      {policy === RoutePolicy.DESTINATION_OVERRIDE && (
+      {(policy === RoutePolicy.DESTINATION_OVERRIDE || policy === RoutePolicy.DNS_REWRITING) && (
         <>
-          <Divider orientation="left">目标重写配置</Divider>
+          <Divider orientation="left">{policy === RoutePolicy.DNS_REWRITING ? 'DNS解析配置' : '目标重写配置'}</Divider>
           <Row gutter={16}>
             <Col span={12}>
               <Form.Item
@@ -487,35 +498,36 @@ const RouteForm: React.FC<RouteFormProps> = ({
             <Col span={12}>
               <Form.Item
                 name="outboundProxyHost"
-                label="目标地址"
+                label={policy === RoutePolicy.DNS_REWRITING ? '应答IP' : '目标地址'}
                 rules={[
                   { required: true, message: '请输入目标地址' },
                   { pattern: /^[a-zA-Z0-9.-]+$/, message: '请输入有效的主机地址' },
                 ]}
               >
-                <Input placeholder="请输入目标服务器地址" />
+                <Input placeholder={policy === RoutePolicy.DNS_REWRITING ? '请输入应答IP' : '请输入目标服务器地址'} />
               </Form.Item>
             </Col>
           </Row>
-
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item
-                name="outboundProxyPort"
-                label="目标端口（可选）"
-                rules={[
-                  { type: 'number', min: 1, max: 65535, message: '端口范围应在1-65535之间' },
-                ]}
-              >
-                <InputNumber
-                  placeholder="端口"
-                  style={{ width: '100%' }}
-                  min={1}
-                  max={65535}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
+          {policy === RoutePolicy.DESTINATION_OVERRIDE && (
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item
+                  name="outboundProxyPort"
+                  label="目标端口（可选）"
+                  rules={[
+                    { type: 'number', min: 1, max: 65535, message: '端口范围应在1-65535之间' },
+                  ]}
+                >
+                  <InputNumber
+                    placeholder="端口"
+                    style={{ width: '100%' }}
+                    min={1}
+                    max={65535}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
         </>
       )}
 

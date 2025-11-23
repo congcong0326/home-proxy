@@ -11,6 +11,8 @@ import org.congcong.proxyworker.config.UserConfig;
 import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
 import org.congcong.proxyworker.protocol.RequestAppendHandler;
 
+import java.net.InetSocketAddress;
+
 /**
  * 通用的隧道建立请求对象，统一 SOCKS/HTTPS/SS 等协议的入站隧道参数。
  */
@@ -34,6 +36,8 @@ public class ProxyTunnelRequest {
     @Getter
     @Setter
     private Status status = Status.init;
+    @Getter
+    private Object protocolAttachment;
 
     public String getFinalTargetHost() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
@@ -64,6 +68,20 @@ public class ProxyTunnelRequest {
         this.user = user;
         this.inboundConfig = inboundConfig;
         this.initialPayload = initialPayload;
+    }
+
+    public ProxyTunnelRequest(ProtocolType protocolType,
+                              String targetHost,
+                              int targetPort,
+                              UserConfig user,
+                              InboundConfig inboundConfig,
+                              Object protocolAttachment) {
+        this.protocolType = protocolType;
+        this.targetHost = targetHost;
+        this.targetPort = targetPort;
+        this.user = user;
+        this.inboundConfig = inboundConfig;
+        this.protocolAttachment = protocolAttachment;
     }
 
     public static ProxyTunnelRequest fromSocks5(Socks5CommandRequest cmd,

@@ -26,6 +26,8 @@ export enum ProtocolType {
   SHADOW_SOCKS = 'SHADOW_SOCKS',
   SS = 'SHADOW_SOCKS',
   TP_PROXY = 'TP_PROXY',
+  DOT = 'DOT',
+  DNS_SERVER = 'DNS_SERVER',
 }
 
 // 协议类型标签映射
@@ -35,7 +37,9 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.SOCKS5_HTTPS]: 'SOCKS5+HTTPS混合协议',
   [ProtocolType.NONE]: '直接转发',
   [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议',
-  [ProtocolType.TP_PROXY]: '透明代理'
+  [ProtocolType.TP_PROXY]: '透明代理',
+  [ProtocolType.DOT]: 'dns over tls 服务器',
+  [ProtocolType.DNS_SERVER]: 'DNS 服务器'
 };
 
 // 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）
@@ -46,7 +50,8 @@ export enum RoutePolicy {
   DIRECT = 'DIRECT',
   BLOCK = 'BLOCK',
   OUTBOUND_PROXY = 'OUTBOUND_PROXY',
-  DESTINATION_OVERRIDE = 'DESTINATION_OVERRIDE'
+  DESTINATION_OVERRIDE = 'DESTINATION_OVERRIDE',
+  DNS_REWRITING = 'DNS_REWRITING'
 }
 
 // 路由策略标签映射
@@ -54,7 +59,8 @@ export const ROUTE_POLICY_LABELS = {
   [RoutePolicy.DIRECT]: '直连',
   [RoutePolicy.BLOCK]: '阻断',
   [RoutePolicy.OUTBOUND_PROXY]: '出站代理',
-  [RoutePolicy.DESTINATION_OVERRIDE]: '目标重写'
+  [RoutePolicy.DESTINATION_OVERRIDE]: '目标重写',
+  [RoutePolicy.DNS_REWRITING]: '自定义DNS解析'
 };
 
 // 路由策略颜色映射
@@ -62,7 +68,8 @@ export const ROUTE_POLICY_COLORS = {
   [RoutePolicy.DIRECT]: 'green',
   [RoutePolicy.BLOCK]: 'red',
   [RoutePolicy.OUTBOUND_PROXY]: 'blue',
-  [RoutePolicy.DESTINATION_OVERRIDE]: 'purple'
+  [RoutePolicy.DESTINATION_OVERRIDE]: 'purple',
+  [RoutePolicy.DNS_REWRITING]: 'cyan'
 };
 
 // 路由状态枚举

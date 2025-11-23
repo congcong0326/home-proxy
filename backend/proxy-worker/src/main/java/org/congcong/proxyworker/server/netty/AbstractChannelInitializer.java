@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.server.netty;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
@@ -19,7 +20,7 @@ import org.congcong.proxyworker.server.netty.tls.TlsContextManager;
 import java.util.Objects;
 
 
-public abstract class AbstractChannelInitializer extends ChannelInitializer<SocketChannel> {
+public abstract class AbstractChannelInitializer extends ChannelInitializer<Channel> {
 
     protected final InboundConfig inboundConfig;
 
@@ -28,25 +29,26 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
     }
 
     @Override
-    protected void initChannel(SocketChannel socketChannel) throws Exception {
-        pipeLineContextInit(socketChannel);
+    protected void initChannel(Channel ch) throws Exception {
+        pipeLineContextInit(ch);
         // 在最前面处理 TLS（如启用）
-        processSSL(socketChannel);
+        processSSL(ch);
         // 添加根据各个协议的channelHandler
         // 认证相关的处理器
-        socketChannel.pipeline().addFirst(new LoggingHandler(LogLevel.DEBUG));
-        init(socketChannel);
+        ch.pipeline().addFirst(new LoggingHandler(LogLevel.DEBUG));
+        init(ch);
         // 路由处理器
-        socketChannel.pipeline().addLast(RouterService.getInstance());
+        ch.pipeline().addLast(RouterService.getInstance());
         // 处理握手请求还携带payload的场景
-        socketChannel.pipeline().addLast(RequestAppendHandler.getInstance());
+        ch.pipeline().addLast(RequestAppendHandler.getInstance());
         // 连接目标服务器
-        socketChannel.pipeline().addLast(TcpTunnelConnectorHandler.getInstance());
+        ch.pipeline().addLast(TcpTunnelConnectorHandler.getInstance());
     }
 
-    protected abstract void init(SocketChannel socketChannel);
+    protected abstract void init(Channel socketChannel);
 
-    protected void processSSL(SocketChannel socketChannel) {
+
+    protected void processSSL(Channel socketChannel) {
         // 开启TLS
         if (Objects.equals(inboundConfig.getTlsEnabled(), true) && inboundConfig.getProtocol() != ProtocolType.SHADOW_SOCKS) {
             SslContext sslContext = TlsContextManager.getInstance().getServerContext(inboundConfig);
@@ -55,7 +57,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Sock
         }
     }
 
-    protected void pipeLineContextInit(SocketChannel socketChannel) {
+    protected void pipeLineContextInit(Channel socketChannel) {
         ChannelAttributes.setInboundConfig(socketChannel, inboundConfig);
         // 构建并填充代理上下文
         ProxyContext context = new ProxyContext();

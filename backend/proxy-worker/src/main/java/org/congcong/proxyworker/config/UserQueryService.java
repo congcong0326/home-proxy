@@ -13,14 +13,14 @@ public class UserQueryService   {
             case SHADOW_SOCKS -> {
                 return inboundConfig.getUsersMap().values().stream().findAny().orElse(null);
             }
-            case TP_PROXY -> {
+            case TP_PROXY,DNS_SERVER -> {
                 UserConfig userConfig = inboundConfig.getDeviceIpMapUser().get(key);
                 if (userConfig != null) {
                     return userConfig;
                 }
             }
         }
-        // 目前只有TP_PROXY允许匿名访问
+        // 目前只有TP_PROXY,DNS服务器允许匿名访问
         return inboundConfig.getAnonymousUser();
     }
 }

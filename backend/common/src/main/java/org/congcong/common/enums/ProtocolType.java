@@ -7,6 +7,8 @@ public enum ProtocolType {
     SOCKS5_HTTPS("SOCKS5_HTTPS", "SOCKS5+HTTPS混合协议"),
     NONE("NONE", "直接转发"),
     TP_PROXY("TP_PROXY", "透明代理"),
+    DNS_SERVER("DNS_SERVER", "dns 服务器"),
+    DOT("DOT","dns over tls 服务器"),
     SHADOW_SOCKS("SHADOW_SOCKS", "Shadowsocks协议");
     private final String value;
     private final String description;

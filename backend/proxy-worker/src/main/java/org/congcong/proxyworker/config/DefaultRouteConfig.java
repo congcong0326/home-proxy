@@ -7,6 +7,7 @@ import org.congcong.common.enums.RoutePolicy;
 
 import java.util.Collections;
 
+@Deprecated
 public class DefaultRouteConfig extends RouteConfig {
 
 

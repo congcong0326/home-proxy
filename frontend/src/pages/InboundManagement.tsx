@@ -100,6 +100,7 @@ const InboundManagement: React.FC = () => {
     { value: ProtocolType.SOCKS5_HTTPS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5_HTTPS] },
     { value: ProtocolType.SS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SS] },
     { value: ProtocolType.TP_PROXY, label: PROTOCOL_TYPE_LABELS[ProtocolType.TP_PROXY] },
+    { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
   ]), []);
 
   const statusSelectOptions = useMemo(() => ([

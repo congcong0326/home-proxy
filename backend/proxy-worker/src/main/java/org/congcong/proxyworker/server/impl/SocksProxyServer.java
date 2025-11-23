@@ -1,12 +1,13 @@
 package org.congcong.proxyworker.server.impl;
 
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.protocol.socks.SocksServerInitializer;
-import org.congcong.proxyworker.server.ProxyServer;
+import org.congcong.proxyworker.server.TcpProxyServer;
 
-public class SocksProxyServer extends ProxyServer  {
+public class SocksProxyServer extends TcpProxyServer {
 
     private final InboundConfig cfg;
 
@@ -30,7 +31,7 @@ public class SocksProxyServer extends ProxyServer  {
     }
 
     @Override
-    public ChannelInitializer<SocketChannel> getChildHandler() {
+    public ChannelInitializer<Channel> getChildHandler() {
         return new SocksServerInitializer(getInboundConfig());
     }
 

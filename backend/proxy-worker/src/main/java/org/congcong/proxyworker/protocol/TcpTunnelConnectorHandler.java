@@ -86,9 +86,7 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         Promise<Channel> promise = ctx.executor().newPromise();
         promise.addListener(future -> {
             Channel outboundChannel = (Channel) future.getNow();
-            InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-            ProtocolType protocol = inboundConfig.getProtocol();
-            ProtocolStrategy strategy = ProtocolStrategyRegistry.get(protocol);
+            ProtocolStrategy strategy = ProtocolStrategyRegistry.get(proxyTunnelRequest);
             // 需要注意 SOCKS5 在建立连接成功后根据协议会写回成功 DefaultSocks5CommandResponse，失败的时候也有响应返回
             // HTTPS_CONNECT 协议会写回 "HTTP/1.1 200 Connection Established\r\n" +
             //                "Proxy-agent: https://github.com/cong/cong\r\n" +
@@ -96,8 +94,10 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
             // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
             if (future.isSuccess()) {
                 // 连接成功设置中继服务器
-                setRelay(ctx.channel(), outboundChannel);
-                log.debug("设置中继服务器成功");
+                if (strategy.needRelay()) {
+                    setRelay(ctx.channel(), outboundChannel);
+                    log.debug("设置中继服务器成功");
+                }
                 // 写回成功
                 strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
                 log.debug("执行成功回调");

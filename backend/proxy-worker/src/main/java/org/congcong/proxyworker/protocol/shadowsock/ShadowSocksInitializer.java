@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.shadowsock;
 
+import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProxyEncAlgo;
@@ -21,7 +22,7 @@ public class ShadowSocksInitializer extends AbstractChannelInitializer {
     }
 
     @Override
-    protected void init(SocketChannel socketChannel) {
+    protected void init(Channel socketChannel) {
         UserConfig userConfig = FindUser.find(null, inboundConfig);
         ProxyEncAlgo ssMethod = inboundConfig.getSsMethod();
         String credential = userConfig.getCredential();

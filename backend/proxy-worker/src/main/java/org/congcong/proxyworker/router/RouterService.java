@@ -8,6 +8,7 @@ import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
+import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.config.DefaultRouteConfig;
@@ -15,6 +16,7 @@ import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
+import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.GeoIPUtil;
 import org.congcong.proxyworker.util.GeoLocation;
@@ -42,21 +44,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
     private static class Holder {
         private static final RouterService INSTANCE = new RouterService();
-    }
-
-
-    private Set<String> findRewriteHosts(List<RouteConfig> routes) {
-        Set<String> rewriteHosts = new HashSet<>();
-        for (RouteConfig route : routes) {
-            if(route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE) {
-                for (RouteRule rule : route.getRules()) {
-                    if (rule.getConditionType() == RouteConditionType.DOMAIN) {
-                        rewriteHosts.add(rule.getValue());
-                    }
-                }
-            }
-        }
-        return rewriteHosts;
     }
 
     @Override
@@ -93,6 +80,11 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                     //支持子域名匹配，如：sub.example.com
                     case DOMAIN -> {
                         String host = proxyTunnelRequest.getTargetHost();
+//                        if (inboundConfig.getProtocol() == ProtocolType.DNS_SERVER) {
+//                            // 需要将dns查询的域名当作目标服务器地址
+//                            DnsProxyContext dnsProxyContext = (DnsProxyContext) proxyTunnelRequest.getProtocolAttachment();
+//                            host = dnsProxyContext.getQName();
+//                        }
                         boolean matchCondition = matchDomain(host, value);
                         boolean matched = (op == MatchOp.IN) == matchCondition;
                         if (matched) {
@@ -109,10 +101,12 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
         }
 
-        // 未命中任何路由，继续向下传递请求
-        proxyTunnelRequest.setRouteConfig(DefaultRouteConfig.getInstance());
-        ProxyContextFillUtil.proxyContextRouteFill(proxyTunnelRequest.getRouteConfig(), ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
-        channelHandlerContext.fireChannelRead(proxyTunnelRequest);
+        // 配置中已经内置了兜底策略，一般不可能走到这里
+        log.error("未找到任何路由策略，关闭连接");
+        if (proxyTunnelRequest.getInitialPayload() != null) {
+            proxyTunnelRequest.getInitialPayload().release();
+        }
+        channelHandlerContext.close();
     }
 
 
@@ -181,6 +175,21 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         proxyContext.setClientIp(clientIp);
         proxyContext.setClientPort(clientPort == null ? 0 : clientPort);
 
+    }
+
+    private Set<String> findRewriteHosts(List<RouteConfig> routes) {
+        Set<String> rewriteHosts = new HashSet<>();
+        for (RouteConfig route : routes) {
+            if(route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE ||
+                route.getPolicy() == RoutePolicy.DNS_REWRITING) {
+                for (RouteRule rule : route.getRules()) {
+                    if (rule.getConditionType() == RouteConditionType.DOMAIN) {
+                        rewriteHosts.add(rule.getValue());
+                    }
+                }
+            }
+        }
+        return rewriteHosts;
     }
 
     private boolean matchGeo(String country, String value) {

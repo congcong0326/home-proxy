@@ -45,7 +45,9 @@ import {
   ROUTE_POLICY_COLORS,
   PageResponse,
   RouteConditionType,
-  MatchOp
+  MatchOp,
+  ProtocolType,
+  PROTOCOL_TYPE_LABELS,
 } from '../types/route';
 import { apiService } from '../services/api';
 import RouteForm from '../components/RouteForm';
@@ -452,18 +454,22 @@ const RouteManagement: React.FC = () => {
               </li>
             ))}
           </ul>
-          {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DESTINATION_OVERRIDE) && (
+          {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DESTINATION_OVERRIDE || route.policy === RoutePolicy.DNS_REWRITING) && (
             <>
               <p><strong>出站标签：</strong>{route.outboundTag}</p>
               {route.policy === RoutePolicy.OUTBOUND_PROXY && (
                 <>
-                  <p><strong>代理类型：</strong>{route.outboundProxyType}</p>
+                  <p><strong>代理类型：</strong>{route.outboundProxyType ? PROTOCOL_TYPE_LABELS[route.outboundProxyType as ProtocolType] : '未设置'}</p>
                   {route.outboundProxyType === 'SHADOW_SOCKS' && (
                     <p><strong>加密算法：</strong>{route.outboundProxyEncAlgo || '未设置'}</p>
                   )}
                 </>
               )}
-              <p><strong>{route.policy === RoutePolicy.OUTBOUND_PROXY ? '代理地址' : '目标地址'}：</strong>{route.outboundProxyHost}:{route.outboundProxyPort}</p>
+              {route.policy === RoutePolicy.DNS_REWRITING ? (
+                <p><strong>应答IP：</strong>{route.outboundProxyHost}</p>
+              ) : (
+                <p><strong>{route.policy === RoutePolicy.OUTBOUND_PROXY ? '代理地址' : '目标地址'}：</strong>{route.outboundProxyHost}:{route.outboundProxyPort}</p>
+              )}
             </>
           )}
           <p><strong>状态：</strong>

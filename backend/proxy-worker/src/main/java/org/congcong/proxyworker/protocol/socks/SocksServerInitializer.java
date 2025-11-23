@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.socks;
 
+import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.socksx.v5.Socks5InitialRequestDecoder;
 import io.netty.handler.codec.socksx.v5.Socks5ServerEncoder;
@@ -12,7 +13,7 @@ public class SocksServerInitializer extends AbstractChannelInitializer {
     }
 
     @Override
-    protected void init(SocketChannel socketChannel) {
+    protected void init(Channel socketChannel) {
         socketChannel.pipeline().addLast(
                 Socks5ServerEncoder.DEFAULT,
                 new Socks5InitialRequestDecoder(),

@@ -10,7 +10,7 @@ import java.util.*;
 public class ProxyContext {
 
 
-    private final Map<Long, ProxyServer> servers = new HashMap<>();
+    private final Map<Long, AbstractProxyServer> servers = new HashMap<>();
     private final Map<Long, InboundConfig> configs = new HashMap<>();
 
     private ProxyContext() {}
@@ -34,11 +34,11 @@ public class ProxyContext {
         }
 
         // 1) 关闭并移除下线的服务
-        for (Iterator<Map.Entry<Long, ProxyServer>> it = servers.entrySet().iterator(); it.hasNext(); ) {
-            Map.Entry<Long, ProxyServer> entry = it.next();
+        for (Iterator<Map.Entry<Long, AbstractProxyServer>> it = servers.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<Long, AbstractProxyServer> entry = it.next();
             Long id = entry.getKey();
             if (!newConfigs.containsKey(id)) {
-                ProxyServer server = entry.getValue();
+                AbstractProxyServer server = entry.getValue();
                 try {
                     server.close();
                 } catch (InterruptedException e) {
@@ -54,7 +54,7 @@ public class ProxyContext {
             Long id = e.getKey();
             InboundConfig newCfg = e.getValue();
             InboundConfig oldCfg = configs.get(id);
-            ProxyServer existing = servers.get(id);
+            AbstractProxyServer existing = servers.get(id);
 
             boolean needsRestart = (oldCfg == null) || !Objects.equals(oldCfg, newCfg);
             if (needsRestart) {
@@ -68,7 +68,7 @@ public class ProxyContext {
                 }
 
                 // 启动新服务
-                ProxyServer newServer = ProxyServerFactory.create(newCfg);
+                AbstractProxyServer newServer = ProxyServerFactory.create(newCfg);
                 try {
                     newServer.start();
                 } catch (InterruptedException ex) {
@@ -84,7 +84,7 @@ public class ProxyContext {
     }
 
     public synchronized void closeAll() {
-        for (ProxyServer proxyServer : servers.values()) {
+        for (AbstractProxyServer proxyServer : servers.values()) {
             try {
                 proxyServer.close();
             } catch (InterruptedException e) {
