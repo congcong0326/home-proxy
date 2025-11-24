@@ -36,16 +36,16 @@ public class LogController {
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
     }
 
-    /**
-     * 接收认证日志批量
-     */
-    @PostMapping("/auth")
-    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@RequestBody List<AuthLog> logs) {
-        int saved = logService.saveAuthLogs(logs);
-        Map<String, Object> resp = new HashMap<>();
-        resp.put("saved", saved);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
-    }
+//    /**
+//     * 接收认证日志批量
+//     */
+//    @PostMapping("/auth")
+//    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@RequestBody List<AuthLog> logs) {
+//        int saved = logService.saveAuthLogs(logs);
+//        Map<String, Object> resp = new HashMap<>();
+//        resp.put("saved", saved);
+//        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
+//    }
 
     /**
      * 分页检索访问日志
@@ -85,7 +85,7 @@ public class LogController {
      * 访问日志详情
      */
     @GetMapping("/access/{id}")
-    public ResponseEntity<AccessLogDetail> getAccessLogDetail(@PathVariable("id") Long id) {
+    public ResponseEntity<AccessLogDetail> getAccessLogDetail(@PathVariable("id") String id) {
         return logService.getAccessLogDetail(id)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());

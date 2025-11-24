@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 public class AccessLogDetail {
-    private Long id;
     private LocalDateTime ts;
     private String requestId;
     private Long userId;

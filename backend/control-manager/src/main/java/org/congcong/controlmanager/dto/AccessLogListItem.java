@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 public class AccessLogListItem {
-    private Long id;
     private LocalDateTime ts;
     private String requestId;
     private Long userId;
@@ -24,4 +23,7 @@ public class AccessLogListItem {
 
     private String srcGeoCountry;
     private String dstGeoCountry;
+
+    private String routePolicyName;
+    private Long routePolicyId;
 }

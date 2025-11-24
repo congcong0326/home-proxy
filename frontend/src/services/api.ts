@@ -406,7 +406,7 @@ class ApiService {
   }
 
   // 访问日志详情
-  async getAccessLogById(id: number): Promise<AccessLogDetail> {
+  async getAccessLogById(id: string): Promise<AccessLogDetail> {
     return this.request<AccessLogDetail>(`/logs/access/${id}`);
   }
 

@@ -1,11 +1,13 @@
 // 访问日志列表项（与后端 AccessLogListItem 对齐）
 export interface AccessLogListItem {
-  id: number;
+  id?: number;
   ts: string; // 时间戳 ISO 字符串
   requestId: string;
   userId?: number;
   username?: string;
   proxyName?: string;
+  routePolicyName?: string;
+  routePolicyId?: number;
   inboundId?: number;
   clientIp?: string;
   status?: number;
@@ -23,7 +25,7 @@ export interface AccessLogListItem {
 
 // 访问日志详情（与后端 AccessLogDetail 对齐，保留常用字段）
 export interface AccessLogDetail {
-  id: number;
+  id?: number;
   ts: string;
   requestId: string;
   userId?: number;

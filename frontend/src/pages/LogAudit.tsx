@@ -83,7 +83,7 @@ const LogAudit: React.FC = () => {
     fetchData({ page: 0, size: 10 });
   };
 
-  const openDetail = async (id: number) => {
+  const openDetail = async (id: string) => {
     try {
       const d = await apiService.getAccessLogById(id);
       setDetail(d);
@@ -98,6 +98,8 @@ const LogAudit: React.FC = () => {
     { title: '用户', dataIndex: 'username', key: 'username' },
     { title: '客户端IP', dataIndex: 'clientIp', key: 'clientIp' },
     { title: '原目标', dataIndex: 'originalTargetHost', key: 'originalTargetHost' },
+    { title: '代理名称', dataIndex: 'proxyName', key: 'proxyName' },
+    { title: '路由策略', dataIndex: 'routePolicyName', key: 'routePolicyName' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (v: number) => <Tag color={v === 200 ? 'green' : 'red'}>{v}</Tag> },
     { title: '源地理', key: 'srcGeo', render: (_: any, r: AccessLogListItem) => `${r.srcGeoCountry || ''} ${r.srcGeoCity || ''}`.trim() || '-' },
     { title: '目标地理', key: 'dstGeo', render: (_: any, r: AccessLogListItem) => `${r.dstGeoCountry || ''} ${r.dstGeoCity || ''}`.trim() || '-' },
@@ -109,7 +111,7 @@ const LogAudit: React.FC = () => {
       key: 'action',
       render: (_: any, record: AccessLogListItem) => (
         <Space>
-          <Button type="link" onClick={() => openDetail(record.id)}>详情</Button>
+          <Button type="link" onClick={() => openDetail(record.requestId)}>详情</Button>
         </Space>
       ),
     },
@@ -162,7 +164,7 @@ const LogAudit: React.FC = () => {
 
       <Card bordered={false}>
         <Table
-          rowKey="id"
+          rowKey="requestId"
           loading={loading}
           columns={columns}
           dataSource={data}
