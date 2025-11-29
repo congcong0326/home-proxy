@@ -141,12 +141,21 @@ public class UserService {
         }
 
         // 更新字段
-        existingUser.setUsername(updatedUser.getUsername());
-        existingUser.setCredential(updatedUser.getCredential());
-        existingUser.setIpAddress(updatedUser.getIpAddress());
-        existingUser.setStatus(updatedUser.getStatus());
-        existingUser.setRemark(updatedUser.getRemark());
-
+        if (updatedUser.getUsername() != null) {
+            existingUser.setUsername(updatedUser.getUsername());
+        }
+        if (updatedUser.getCredential() != null) {
+            existingUser.setCredential(updatedUser.getCredential());
+        }
+        if (updatedUser.getIpAddress() != null) {
+            existingUser.setIpAddress(updatedUser.getIpAddress());
+        }
+        if (updatedUser.getStatus() != null) {
+            existingUser.setStatus(updatedUser.getStatus());
+        }
+        if (updatedUser.getRemark() != null) {
+            existingUser.setRemark(updatedUser.getRemark());
+        }
         User savedUser = userRepository.save(existingUser);
 
         return convertToDTO(savedUser);
