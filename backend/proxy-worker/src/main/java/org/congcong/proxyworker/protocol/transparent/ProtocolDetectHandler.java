@@ -8,7 +8,9 @@ import org.congcong.common.dto.ProxyContext;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 
 import java.net.InetSocketAddress;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 public class ProtocolDetectHandler extends ByteToMessageDecoder {
@@ -21,7 +23,14 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
     private final HttpsSniffer httpsSniffer = new HttpsSniffer();
     private final HttpSniffer  httpSniffer  = new HttpSniffer();
 
+    // 小米这个上不了网，域名很神奇，不知道为啥
+    private static final String MIJIA = "Mijia Cloud";
 
+    private static final Set<String> specialHost = new HashSet<>();
+
+    static {
+        specialHost.add(MIJIA);
+    }
 
     enum PayloadProtocolType {
         HTTPS, HTTP, OTHER;
@@ -80,6 +89,11 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
                 // 按理不会走到这里
                 //proxyContext.setOriginalTargetHost("unknown");
                 break;
+        }
+
+        String originalTargetHost = proxyContext.getOriginalTargetHost();
+        if (specialHost.contains(originalTargetHost)) {
+            proxyContext.setOriginalTargetHost(proxyContext.getOriginalTargetIP());
         }
 
         // 3. 能走到这里说明已经 sniff 完成（host 已经写进 ProxyContext）
@@ -342,7 +356,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
             String sniHost = extractSniHostFromClientHello(in);
             log.debug("https sniffer try host:{} ", sniHost);
             proxyContext.setOriginalTargetHost(
-                    sniHost != null ? sniHost : "unknown"
+                    sniHost != null ? sniHost : "Https Sniffer Failed"
             );
             return true;
         }
@@ -360,7 +374,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
             String host = extractHttpHost(in);
             log.debug("http sniffer try host:{} ", host);
             proxyContext.setOriginalTargetHost(
-                    host != null ? host : "unknown"
+                    host != null ? host : "Http Sniffer Failed"
             );
             return true;
         }
