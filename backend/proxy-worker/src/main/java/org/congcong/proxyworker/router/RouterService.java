@@ -11,16 +11,15 @@ import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.proxyworker.config.DefaultRouteConfig;
 import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
-import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
-import org.congcong.proxyworker.util.GeoIPUtil;
-import org.congcong.proxyworker.util.GeoLocation;
+
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
+import org.congcong.proxyworker.util.geo.GeoIPUtil;
+import org.congcong.proxyworker.util.geo.GeoLocation;
 
 import java.net.SocketAddress;
 import java.util.HashSet;

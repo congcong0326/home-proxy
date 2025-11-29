@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.util;
+package org.congcong.proxyworker.util.geo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

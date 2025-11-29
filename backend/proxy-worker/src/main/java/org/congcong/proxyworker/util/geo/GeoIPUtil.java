@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.util;
+package org.congcong.proxyworker.util.geo;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -6,7 +6,6 @@ import com.maxmind.geoip2.DatabaseReader;
 import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.exception.AddressNotFoundException;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.proxyworker.server.ProxyContext;
 
 import java.io.File;
 import java.io.IOException;

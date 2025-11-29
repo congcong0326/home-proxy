@@ -13,6 +13,9 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.service.AggregateConfigService;
+import org.congcong.proxyworker.util.geo.DomainClassifier;
+import org.congcong.proxyworker.util.geo.DomainRuleSet;
+import org.congcong.proxyworker.util.geo.GeolocationNotCnLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,9 +30,10 @@ import java.util.stream.Collectors;
 public class ProxyWorkerApplication {
     private static final ProxyContext PROXY_CONTEXT = ProxyContext.getInstance();
     
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         log.info("启动代理工作节点应用程序");
-        
+        DomainRuleSet foreignRuleSet = GeolocationNotCnLoader.load();
+        DomainClassifier.init(foreignRuleSet);
         // 创建配置服务
         AggregateConfigService configService = new AggregateConfigService();
         
