@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.util.geo;
+package org.congcong.common.util.geo;
 
 import java.util.HashMap;
 import java.util.Map;

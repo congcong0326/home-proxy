@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.util.geo;
+package org.congcong.common.util.geo;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
@@ -13,6 +13,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Logger;
 
 /**
  * IP/域名地理位置解析工具。
@@ -23,7 +24,6 @@ import java.util.concurrent.TimeUnit;
  */
 @Slf4j
 public class GeoIPUtil implements AutoCloseable {
-
 
 
     private static class Holder {
@@ -76,11 +76,24 @@ public class GeoIPUtil implements AutoCloseable {
     }
 
 
+    public boolean isForeign(String ip, InetAddress addr) {
+        Optional<GeoLocation> lookup = lookup(ip, addr);
+        if (lookup.isPresent()) {
+            GeoLocation geoLocation = lookup.get();
+            String country = geoLocation.getCountry();
+            return !"中国".equalsIgnoreCase(country);
+        }
+        return false;
+    }
 
+
+    public Optional<GeoLocation> lookup(String hostOrIp) {
+        return lookup(hostOrIp, null);
+    }
     /**
      * 根据域名或IP获取地理位置。
      */
-    public Optional<GeoLocation> lookup(String hostOrIp) {
+    public Optional<GeoLocation> lookup(String hostOrIp, InetAddress addr) {
         if (hostOrIp == null || hostOrIp.isBlank()) {
             return Optional.empty();
         }
@@ -94,7 +107,7 @@ public class GeoIPUtil implements AutoCloseable {
         }
 
         // 统一解析一次 InetAddress，后续复用，避免重复 getByName 调用
-        Optional<InetAddress> optAddr = resolveToInetAddress(hostOrIp);
+        Optional<InetAddress> optAddr = addr == null ? resolveToInetAddress(hostOrIp) : Optional.of(addr);
         if (optAddr.isEmpty()) {
             // 域名解析失败，返回占位值，避免因地理位置为空导致直通
             GeoLocation result = new GeoLocation("解析失败", null, null);

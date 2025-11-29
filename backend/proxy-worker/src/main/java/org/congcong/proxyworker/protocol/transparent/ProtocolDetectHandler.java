@@ -78,7 +78,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
 
             default:
                 // 按理不会走到这里
-                proxyContext.setOriginalTargetHost("unknown");
+                //proxyContext.setOriginalTargetHost("unknown");
                 break;
         }
 
@@ -340,6 +340,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
                 return false;
             }
             String sniHost = extractSniHostFromClientHello(in);
+            log.debug("https sniffer try host:{} ", sniHost);
             proxyContext.setOriginalTargetHost(
                     sniHost != null ? sniHost : "unknown"
             );
@@ -357,6 +358,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
                 return false;
             }
             String host = extractHttpHost(in);
+            log.debug("http sniffer try host:{} ", host);
             proxyContext.setOriginalTargetHost(
                     host != null ? host : "unknown"
             );

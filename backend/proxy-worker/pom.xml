@@ -93,6 +93,14 @@
             <version>4.0.1</version>
         </dependency>
 
+        <!-- pom.xml -->
+        <dependency>
+            <groupId>commons-validator</groupId>
+            <artifactId>commons-validator</artifactId>
+            <version>1.7</version>
+        </dependency>
+
+
         <!-- BouncyCastle: enable Netty SelfSignedCertificate on JDK 17 without sun.security.x509 access -->
         <dependency>
             <groupId>org.bouncycastle</groupId>

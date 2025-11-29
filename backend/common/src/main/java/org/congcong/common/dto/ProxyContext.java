@@ -25,7 +25,7 @@ public class ProxyContext {
     private String clientIp;
     private Integer clientPort;
 
-    // 地理位置信息
+    // 地理位置信息 由日志进程丰富
     private String srcGeoCountry;
     private String srcGeoCity;
     private String dstGeoCountry;

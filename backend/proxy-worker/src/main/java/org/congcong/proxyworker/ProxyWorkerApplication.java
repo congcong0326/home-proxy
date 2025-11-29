@@ -5,22 +5,17 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.*;
-import org.congcong.common.enums.RouteConditionType;
-import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.service.AggregateConfigService;
-import org.congcong.proxyworker.util.geo.DomainClassifier;
-import org.congcong.proxyworker.util.geo.DomainRuleSet;
-import org.congcong.proxyworker.util.geo.GeolocationNotCnLoader;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.congcong.common.util.geo.DomainClassifier;
+import org.congcong.common.util.geo.DomainRuleSet;
+import org.congcong.common.util.geo.GeolocationNotCnLoader;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 代理工作节点主应用程序

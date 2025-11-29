@@ -4,7 +4,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.common.dto.ProxyContext;
+import org.apache.commons.validator.routines.DomainValidator;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
@@ -18,14 +18,12 @@ import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
-import org.congcong.proxyworker.util.geo.GeoIPUtil;
-import org.congcong.proxyworker.util.geo.GeoLocation;
+import org.congcong.common.util.geo.DomainClassifier;
+import org.congcong.common.util.geo.GeoIPUtil;
 
-import java.net.SocketAddress;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.Set;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.util.*;
 
 @ChannelHandler.Sharable
 @Slf4j
@@ -45,14 +43,37 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         private static final RouterService INSTANCE = new RouterService();
     }
 
+    private static final DomainValidator domainValidator = DomainValidator.getInstance();
+
+
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
         ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
-        proxyTimeContext.setDnsStartTime(System.currentTimeMillis());
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
         List<RouteConfig> routes = FindRoutes.find(proxyTunnelRequest.getUser().getId(), inboundConfig);
-        locationLookupAndContextFill(channelHandlerContext, proxyTunnelRequest, routes);
+
+
+        // dns 解析
+        proxyTimeContext.setDnsStartTime(System.currentTimeMillis());
+        boolean isDnsServer = proxyTunnelRequest.getInboundConfig().getProtocol() == ProtocolType.DNS_SERVER;
+        Set<String> rewriteHosts = findRewriteHosts(routes);
+        // 这是代理服务器需要连接的目标地址，可能是域名也可能是IP
+        String targetHost = proxyTunnelRequest.getTargetHost();
+        // 非DNS服务器记录下DNS解析耗时
+        // 目标改写的域名就不要解析
+        InetAddress inetAddress = null;
+        if (!isDnsServer && !rewriteHosts.contains(targetHost)) {
+            inetAddress = dnsInetAddress(targetHost);
+            if (inetAddress != null) {
+                proxyTunnelRequest.setTargetIp(inetAddress.getHostAddress());
+            }
+            // 不是域名，则是IP
+            else {
+                proxyTunnelRequest.setTargetIp(targetHost);
+            }
+        }
         proxyTimeContext.setDnsEndTime(System.currentTimeMillis());
+        // dns解析完毕
         for (RouteConfig route : routes) {
             List<RouteRule> rules = route.getRules();
             for (RouteRule rule : rules) {
@@ -61,9 +82,33 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                 MatchOp op = rule.getOp();
                 switch (conditionType) {
                     case GEO -> {
+                        if (!proxyTunnelRequest.isLocationResolveSuccess()) {
+                            // 域名和IP相等，说明是IP
+                            boolean foreign;
+                            if (targetHost.equals(proxyTunnelRequest.getTargetIp())) {
+                                 foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
+                            }
+                            // 否则按照域名解析
+                            else {
+                                foreign = DomainClassifier.isForeign(targetHost);
+                                if (foreign) {
+                                    log.debug("{} mapping not china", targetHost);
+                                }
+                                // 双保险，如果不在列表中，也有可能是国外的IP
+                                else {
+                                    foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
+                                }
+                            }
+                            if (foreign) {
+                                proxyTunnelRequest.setCountry("国外");
+                            } else {
+                                proxyTunnelRequest.setCountry("中国");
+                            }
+                            proxyTunnelRequest.setLocationResolveSuccess(true);
+                        }
                         if (proxyTunnelRequest.isLocationResolveSuccess()) {
                             String country = proxyTunnelRequest.getCountry();
-                            boolean matchCondition = matchGeo(country, value);
+                            boolean matchCondition = Objects.equals(country, value);
                             boolean matched = (op == MatchOp.IN) == matchCondition;
                             if (matched) {
                                 log.debug("地理路由策略命中 {}", route.getName());
@@ -79,11 +124,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                     //支持子域名匹配，如：sub.example.com
                     case DOMAIN -> {
                         String host = proxyTunnelRequest.getTargetHost();
-//                        if (inboundConfig.getProtocol() == ProtocolType.DNS_SERVER) {
-//                            // 需要将dns查询的域名当作目标服务器地址
-//                            DnsProxyContext dnsProxyContext = (DnsProxyContext) proxyTunnelRequest.getProtocolAttachment();
-//                            host = dnsProxyContext.getQName();
-//                        }
                         boolean matchCondition = matchDomain(host, value);
                         boolean matched = (op == MatchOp.IN) == matchCondition;
                         if (matched) {
@@ -99,7 +139,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             }
 
         }
-
         // 配置中已经内置了兜底策略，一般不可能走到这里
         log.error("未找到任何路由策略，关闭连接");
         if (proxyTunnelRequest.getInitialPayload() != null) {
@@ -108,78 +147,17 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         channelHandlerContext.close();
     }
 
-
-
-    private void locationLookupAndContextFill(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest, List<RouteConfig> routes) {
-        Set<String> rewriteHosts = findRewriteHosts(routes);
-        GeoLocation geoLocation = null;
-        log.debug("target host: {}", proxyTunnelRequest.getTargetHost());
-        boolean isDnsServer = proxyTunnelRequest.getInboundConfig().getProtocol() == ProtocolType.DNS_SERVER;
-        if (rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
-            proxyTunnelRequest.setCity("代理重写");
-            proxyTunnelRequest.setCountry("内网");
-            proxyTunnelRequest.setLocationResolveSuccess(false);
-        } else if (isDnsServer) {
-            proxyTunnelRequest.setCity("DNS查询");
-            proxyTunnelRequest.setCountry("内网");
-            proxyTunnelRequest.setLocationResolveSuccess(false);
+    private InetAddress dnsInetAddress(String targetHost) {
+        boolean isDomain = domainValidator.isValid(targetHost);
+        if (isDomain) {
+            try {
+                return InetAddress.getByName(targetHost);
+            } catch (UnknownHostException e) {
+                throw new RuntimeException(e);
+            }
         } else {
-            Optional<GeoLocation> lookup = GeoIPUtil.getInstance().lookup(proxyTunnelRequest.getTargetHost());
-            if (lookup.isPresent()) {
-                geoLocation = lookup.get();
-                proxyTunnelRequest.setCity(geoLocation.getCity());
-                proxyTunnelRequest.setCountry(geoLocation.getCountry());
-                proxyTunnelRequest.setLocationResolveSuccess(true);
-            }
+            return null;
         }
-        // 获取客户端源地址信息（IP/端口）
-        java.net.InetSocketAddress remote = null;
-        SocketAddress remoteAddr = channelHandlerContext.channel().remoteAddress();
-        if (remoteAddr instanceof java.net.InetSocketAddress) {
-            remote = (java.net.InetSocketAddress) remoteAddr;
-        }
-
-        String clientIp = null;
-        Integer clientPort = null;
-        if (remote != null) {
-            clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : null;
-            clientPort = remote.getPort();
-        }
-
-        // 解析客户端地理位置
-        GeoLocation srcGeo = clientIp != null && !isDnsServer
-                ? GeoIPUtil.getInstance().lookup(clientIp).orElse(null) : null;
-        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
-        // 准备目标 IP（无论 GeoIP 是否成功都尽量解析）
-        String dstIp = proxyContext.getOriginalTargetIP();
-        if (dstIp == null && !isDnsServer) {
-            if (geoLocation != null) {
-                dstIp = geoLocation.getIp();
-            } else {
-                if (!rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
-                    dstIp = GeoIPUtil.getInstance().resolveToIp(proxyTunnelRequest.getTargetHost());
-                } else {
-                    dstIp = proxyTunnelRequest.getTargetHost();
-                }
-            }
-        }
-        if (srcGeo != null) {
-            proxyContext.setSrcGeoCity(srcGeo.getCity());
-            proxyContext.setSrcGeoCountry(srcGeo.getCountry());
-        }
-        if (geoLocation != null) {
-            proxyContext.setDstGeoCity(geoLocation.getCity());
-            proxyContext.setDstGeoCountry(geoLocation.getCountry());
-        }
-        if (proxyContext.getOriginalTargetHost() == null) {
-            proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
-        }
-        proxyContext.setOriginalTargetIP(dstIp);
-        proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
-
-        proxyContext.setClientIp(clientIp);
-        proxyContext.setClientPort(clientPort == null ? 0 : clientPort);
-
     }
 
     private Set<String> findRewriteHosts(List<RouteConfig> routes) {
@@ -195,25 +173,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             }
         }
         return rewriteHosts;
-    }
-
-    private boolean matchGeo(String country, String value) {
-        if (country == null || value == null) {
-            return false;
-        }
-        String normalizedCountry = normalizeCountryName(country);
-        String np = normalizeCountryName(value);
-        return np.equalsIgnoreCase(normalizedCountry);
-    }
-
-    private String normalizeCountryName(String input) {
-        String p = input == null ? null : input.trim();
-        if (p == null || p.isEmpty()) return "";
-        if (p.equalsIgnoreCase("CN") || p.equalsIgnoreCase("China") || p.equalsIgnoreCase("People's Republic of China") || p.equals("中国")) {
-            // 统一中国的名字到中文以适配 GeoIP zh-CN
-            return "中国";
-        }
-        return p;
     }
 
     /**

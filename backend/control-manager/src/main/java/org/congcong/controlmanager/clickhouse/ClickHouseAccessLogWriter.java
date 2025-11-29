@@ -2,6 +2,8 @@ package org.congcong.controlmanager.clickhouse;
 
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.AccessLog;
+import org.congcong.common.util.geo.GeoIPUtil;
+import org.congcong.common.util.geo.GeoLocation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -9,6 +11,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
@@ -34,6 +37,7 @@ public class ClickHouseAccessLogWriter {
         if (logs == null || logs.isEmpty()) return 0;
         long now = System.currentTimeMillis();
         for (AccessLog l : logs) {
+            parse(l);
             buffer.add(l);
             int size = bufferSize.incrementAndGet();
             if (size == 1) firstBufferedAt = now;
@@ -42,6 +46,29 @@ public class ClickHouseAccessLogWriter {
             return flush();
         }
         return 0;
+    }
+
+    private void parse(AccessLog accessLog) {
+        String originalTargetHost = accessLog.getOriginalTargetHost();
+        String clientIp = accessLog.getClientIp();
+        Optional<GeoLocation> targetLocation = GeoIPUtil.getInstance().lookup(originalTargetHost);
+        Optional<GeoLocation> clientLocation = GeoIPUtil.getInstance().lookup(clientIp);
+        if (targetLocation.isPresent()) {
+            GeoLocation geoLocation = targetLocation.get();
+            String country = geoLocation.getCountry();
+            String city = geoLocation.getCity();
+            accessLog.setDstGeoCity(city);
+            accessLog.setDstGeoCountry(country);
+        }
+        if (clientLocation.isPresent()) {
+            GeoLocation geoLocation = clientLocation.get();
+            String country = geoLocation.getCountry();
+            String city = geoLocation.getCity();
+            accessLog.setSrcGeoCity(city);
+            accessLog.setSrcGeoCountry(country);
+        }
+
+
     }
 
     private boolean shouldFlush(long now) {

@@ -3,6 +3,7 @@ package org.congcong.proxyworker.protocol;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.audit.AccessLogUtil;
@@ -12,6 +13,8 @@ import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+
+import java.net.InetSocketAddress;
 
 @ChannelHandler.Sharable
 @Slf4j
@@ -34,6 +37,12 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
         proxyTimeContext.setConnectTargetStartTime(System.currentTimeMillis());
         Channel inboundChannel = channelHandlerContext.channel();
+        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
+
+        // 填下目标的IP与端口信息
+        proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
+        proxyContext.setOriginalTargetIP(proxyTunnelRequest.getTargetIp());
+        proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
 
         // 用统一的 promise 承载成功/失败，交由 getRelayPromise 处理中继与协议响应
         Promise<Channel> relayPromise = getRelayPromise(channelHandlerContext, proxyTunnelRequest);
@@ -56,8 +65,7 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
                 }
                 // 连接目标服务器失败
                 AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
-                log.warn("连接目标服务器失败" +
-                        " {}", future.cause().getMessage());
+                log.warn("{} 连接目标服务器 {} 失败 {}", proxyTunnelRequest.getRouteConfig().getName(), proxyTunnelRequest.getTargetHost(), future.cause().getMessage());
                 // 确保释放出站资源
                 Channel ch = future.channel();
                 if (ch != null && ch.isOpen()) {

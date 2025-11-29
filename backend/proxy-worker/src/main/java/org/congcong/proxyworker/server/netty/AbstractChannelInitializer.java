@@ -63,7 +63,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         ChannelAttributes.setInboundConfig(socketChannel, inboundConfig);
         // 构建并填充代理上下文
         ProxyContext context = new ProxyContext();
-        ProxyContextFillUtil.proxyContextInitFill(inboundConfig, context);
+        ProxyContextFillUtil.proxyContextInitFill(socketChannel, inboundConfig, context);
         ChannelAttributes.setProxyContext(socketChannel, context);
         ChannelAttributes.setProxyTimeContext(socketChannel, new ProxyTimeContext());
     }

@@ -74,7 +74,8 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
         private void sendConnectRequest(ChannelHandlerContext ctx) throws ProxyConnectException {
             // 构建连接请求（目标地址和端口）
             // 注意：CONNECT 的目标应为原始目的主机/端口，而不是上游代理地址
-            String host = proxyTunnelRequest.getTargetHost();
+            // 让代理服务器用IP直连，少走一次DNS解析
+            String host = proxyTunnelRequest.getFinalTargetHost();
             Socks5AddressType addrType = null;
             if (NetUtil.isValidIpV4Address(host)) {
                 addrType = Socks5AddressType.IPv4;
@@ -86,7 +87,7 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
             Socks5CommandRequest request = new DefaultSocks5CommandRequest(
                     Socks5CommandType.CONNECT,
                     addrType,
-                    proxyTunnelRequest.getTargetHost(),  // 原始目标主机
+                    host,  // 原始目标主机
                     proxyTunnelRequest.getTargetPort() // 原始目标端口
             );
             ctx.writeAndFlush(request);

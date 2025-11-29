@@ -1,4 +1,4 @@
-package org.congcong.proxyworker.util.geo;
+package org.congcong.common.util.geo;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -10,7 +10,7 @@ import java.net.URL;
 public class GeolocationNotCnLoader {
 
     private static final String GEOLOCATION_NOT_CN_URL =
-            "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/geolocation-!cn";
+            "https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/release/geolocation-!cn.txt";
 
     public static DomainRuleSet load() throws Exception {
         log.info("Loading Geolocation Not Cn...");

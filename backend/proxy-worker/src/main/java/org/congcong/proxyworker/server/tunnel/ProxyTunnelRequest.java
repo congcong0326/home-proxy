@@ -22,6 +22,8 @@ public class ProxyTunnelRequest {
     private final String targetHost;
     private final int targetPort;
     @Setter
+    private String targetIp;
+    @Setter
     private RouteConfig routeConfig;
     @Setter
     private String country;
@@ -45,7 +47,8 @@ public class ProxyTunnelRequest {
                 return routeConfig.getOutboundProxyHost();
             }
         }
-        return targetHost;
+        // targetHost;
+        return targetIp == null ? targetHost : targetIp;
     }
     public int getFinalTargetPort() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
@@ -64,6 +67,22 @@ public class ProxyTunnelRequest {
                               ByteBuf initialPayload) {
         this.protocolType = protocolType;
         this.targetHost = targetHost;
+        this.targetPort = targetPort;
+        this.user = user;
+        this.inboundConfig = inboundConfig;
+        this.initialPayload = initialPayload;
+    }
+
+    public ProxyTunnelRequest(ProtocolType protocolType,
+                              String targetHost,
+                              String targetIp,
+                              int targetPort,
+                              UserConfig user,
+                              InboundConfig inboundConfig,
+                              ByteBuf initialPayload) {
+        this.protocolType = protocolType;
+        this.targetHost = targetHost;
+        this.targetIp = targetIp;
         this.targetPort = targetPort;
         this.user = user;
         this.inboundConfig = inboundConfig;
