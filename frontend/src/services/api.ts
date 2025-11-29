@@ -371,6 +371,7 @@ class ApiService {
     if (params.status !== undefined) searchParams.append('status', String(params.status));
     if (params.protocol) searchParams.append('protocol', params.protocol);
     if (params.routePolicyId !== undefined) searchParams.append('routePolicyId', String(params.routePolicyId));
+    if (params.routePolicyName) searchParams.append('routePolicyName', params.routePolicyName);
     if (params.srcGeoCountry) searchParams.append('srcGeoCountry', params.srcGeoCountry);
     if (params.srcGeoCity) searchParams.append('srcGeoCity', params.srcGeoCity);
     if (params.dstGeoCountry) searchParams.append('dstGeoCountry', params.dstGeoCountry);

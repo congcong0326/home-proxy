@@ -42,6 +42,7 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         UserConfig userConfig = FindUser.find(clientIp, inboundConfig);
         proxyContext.setUserName(userConfig.getUsername());
         proxyContext.setUserId(userConfig.getId());
+        proxyContext.setClientIp(clientIp);
 
         DnsProxyContext dnsCtx = new DnsProxyContext(dnsId, qName, qType, client);
 

@@ -1,11 +1,14 @@
 package org.congcong.proxyworker.audit;
 
 import io.netty.channel.Channel;
+import io.netty.handler.codec.dns.DnsResponseCode;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.AccessLog;
 import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
+import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
+
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AccessLogUtil {
@@ -53,6 +56,21 @@ public class AccessLogUtil {
         accessLog.setErrorCode(errorCode);
         accessLog.setErrorMsg(errorMsg);
         
+        logPublisher.publishAccess(accessLog);
+    }
+
+    public static void logDns(Channel inboundChannel, DnsProxyContext dnsCtx, DnsResponseCode code) {
+        ProxyContext proxyContext = ChannelAttributes.getProxyContext(inboundChannel);
+        ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(inboundChannel);
+        if (proxyContext == null) return;
+        if (timeContext != null) {
+            timeContext.setRequestEndTime(System.currentTimeMillis());
+        }
+        AccessLog accessLog = createAccessLog(proxyContext, timeContext != null ? timeContext : new ProxyTimeContext());
+        accessLog.setOriginalTargetHost(dnsCtx.getQName());
+        accessLog.setOriginalTargetPort(53);
+        accessLog.setStatus(code == DnsResponseCode.NOERROR ? 200 : 502);
+
         logPublisher.publishAccess(accessLog);
     }
 

@@ -70,6 +70,7 @@ export interface AccessLogQueryParams {
   status?: number;
   protocol?: string;
   routePolicyId?: number;
+  routePolicyName?: string;
   srcGeoCountry?: string;
   srcGeoCity?: string;
   dstGeoCountry?: string;

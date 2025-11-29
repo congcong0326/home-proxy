@@ -9,8 +9,11 @@ import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.enums.RoutePolicy;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -81,6 +84,7 @@ public class DnsOverTlsProtocolStrategy implements ProtocolStrategy {
                 outboundId,                               // 分配给 DoT 的 ID
                 question.name(),                          // 查询域名
                 question.type().name());                  // 查询类型
+
         outboundChannel.writeAndFlush(dnsQuery);
     }
 
@@ -203,6 +207,8 @@ public class DnsOverTlsProtocolStrategy implements ProtocolStrategy {
 
             clientResp.setCode(resp.code());
 
+
+            AccessLogUtil.logDns(inboundChannel, dnsCtx, clientResp.code());
             inboundChannel.writeAndFlush(clientResp);
         }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { Card, Form, Row, Col, Input, Select, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
+import { Card, Form, Row, Col, Input, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
 import apiService from '../services/api';
 import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
 import { formatBytes } from '../utils/format';
@@ -95,11 +95,11 @@ const LogAudit: React.FC = () => {
 
   const columns = [
     { title: '时间', dataIndex: 'ts', key: 'ts', render: (v: string) => new Date(v).toLocaleString() },
+    { title: '代理名称', dataIndex: 'proxyName', key: 'proxyName' },
+    { title: '路由策略', dataIndex: 'routePolicyName', key: 'routePolicyName' },
     { title: '用户', dataIndex: 'username', key: 'username' },
     { title: '客户端IP', dataIndex: 'clientIp', key: 'clientIp' },
     { title: '原目标', dataIndex: 'originalTargetHost', key: 'originalTargetHost' },
-    { title: '代理名称', dataIndex: 'proxyName', key: 'proxyName' },
-    { title: '路由策略', dataIndex: 'routePolicyName', key: 'routePolicyName' },
     { title: '状态', dataIndex: 'status', key: 'status', render: (v: number) => <Tag color={v === 200 ? 'green' : 'red'}>{v}</Tag> },
     { title: '源地理', key: 'srcGeo', render: (_: any, r: AccessLogListItem) => `${r.srcGeoCountry || ''} ${r.srcGeoCity || ''}`.trim() || '-' },
     { title: '目标地理', key: 'dstGeo', render: (_: any, r: AccessLogListItem) => `${r.dstGeoCountry || ''} ${r.dstGeoCity || ''}`.trim() || '-' },
@@ -136,7 +136,7 @@ const LogAudit: React.FC = () => {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="用户名" name="username"><Input placeholder="模糊匹配" allowClear /></Form.Item>
+              <Form.Item label="用户名" name="username"><Input allowClear /></Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="客户端IP" name="clientIp"><Input allowClear /></Form.Item>
@@ -147,12 +147,15 @@ const LogAudit: React.FC = () => {
               <Form.Item label="状态码" name="status"><Input placeholder="例如 200" allowClear /></Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="协议" name="protocol">
-                <Select allowClear options={[{ value: 'http', label: 'HTTP' }, { value: 'socks5', label: 'SOCKS5' }, { value: 'ss', label: 'SS' }]} />
-              </Form.Item>
+              <Form.Item label="代理名称" name="proxyName"><Input allowClear /></Form.Item>
             </Col>
             <Col xs={24} sm={12} md={8}>
-              <Form.Item label="关键字" name="q"><Input placeholder="支持主机、用户、错误信息等" allowClear /></Form.Item>
+              <Form.Item label="路由策略" name="routePolicyName"><Input allowClear /></Form.Item>
+            </Col>
+          </Row>
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="目标地址" name="originalTargetHost"><Input allowClear /></Form.Item>
             </Col>
           </Row>
           <Space>

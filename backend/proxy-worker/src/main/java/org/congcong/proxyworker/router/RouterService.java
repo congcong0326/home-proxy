@@ -115,8 +115,13 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         Set<String> rewriteHosts = findRewriteHosts(routes);
         GeoLocation geoLocation = null;
         log.debug("target host: {}", proxyTunnelRequest.getTargetHost());
+        boolean isDnsServer = proxyTunnelRequest.getInboundConfig().getProtocol() == ProtocolType.DNS_SERVER;
         if (rewriteHosts.contains(proxyTunnelRequest.getTargetHost())) {
             proxyTunnelRequest.setCity("代理重写");
+            proxyTunnelRequest.setCountry("内网");
+            proxyTunnelRequest.setLocationResolveSuccess(false);
+        } else if (isDnsServer) {
+            proxyTunnelRequest.setCity("DNS查询");
             proxyTunnelRequest.setCountry("内网");
             proxyTunnelRequest.setLocationResolveSuccess(false);
         } else {
@@ -143,11 +148,12 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         }
 
         // 解析客户端地理位置
-        GeoLocation srcGeo = clientIp != null ? GeoIPUtil.getInstance().lookup(clientIp).orElse(null) : null;
+        GeoLocation srcGeo = clientIp != null && !isDnsServer
+                ? GeoIPUtil.getInstance().lookup(clientIp).orElse(null) : null;
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
         // 准备目标 IP（无论 GeoIP 是否成功都尽量解析）
         String dstIp = proxyContext.getOriginalTargetIP();
-        if (dstIp == null) {
+        if (dstIp == null && !isDnsServer) {
             if (geoLocation != null) {
                 dstIp = geoLocation.getIp();
             } else {
