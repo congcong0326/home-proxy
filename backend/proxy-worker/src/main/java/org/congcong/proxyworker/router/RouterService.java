@@ -11,6 +11,7 @@ import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
+import org.congcong.common.util.geo.ForeignResult;
 import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
@@ -90,13 +91,11 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             }
                             // 否则按照域名解析
                             else {
-                                foreign = DomainClassifier.isForeign(targetHost);
-                                if (foreign) {
-                                    log.debug("{} mapping not china", targetHost);
-                                }
-                                // 双保险，如果不在列表中，也有可能是国外的IP
-                                else {
+                                ForeignResult foreignResult = DomainClassifier.isForeign(targetHost);
+                                if (!foreignResult.isSure()) {
                                     foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
+                                } else {
+                                    foreign = foreignResult.isForeign();
                                 }
                             }
                             if (foreign) {

@@ -27,8 +27,7 @@ public class ProxyWorkerApplication {
     
     public static void main(String[] args) throws Exception {
         log.info("启动代理工作节点应用程序");
-        DomainRuleSet foreignRuleSet = GeolocationNotCnLoader.load();
-        DomainClassifier.init(foreignRuleSet);
+        DomainClassifier.init();
         // 创建配置服务
         AggregateConfigService configService = new AggregateConfigService();
         
@@ -44,6 +43,7 @@ public class ProxyWorkerApplication {
             configService.stop();
             PROXY_CONTEXT.closeAll();
             AccessLogUtil.stop();
+            DomainClassifier.shutdown();
         }));
         
         // 主线程保持运行

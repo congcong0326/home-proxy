@@ -7,22 +7,10 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 @Slf4j
-public class GeolocationNotCnLoader {
+public class GeolocationNotCnLoader extends GeolocationLoader {
 
-    private static final String GEOLOCATION_NOT_CN_URL =
-            "https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/release/geolocation-!cn.txt";
-
-    public static DomainRuleSet load() throws Exception {
-        log.info("Loading Geolocation Not Cn...");
-        HttpURLConnection conn = (HttpURLConnection) new URL(GEOLOCATION_NOT_CN_URL).openConnection();
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(10000);
-        conn.setRequestMethod("GET");
-
-        try (InputStream in = conn.getInputStream()) {
-            return DomainRuleSet.loadFromStream(in);
-        } finally {
-            log.info("Geolocation Not Cn loaded");
-        }
+    @Override
+    protected String getGeolocationUrl() {
+        return "https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/release/geolocation-!cn.txt";
     }
 }
