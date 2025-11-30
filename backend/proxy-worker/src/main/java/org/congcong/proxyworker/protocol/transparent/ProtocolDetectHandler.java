@@ -355,9 +355,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
             }
             String sniHost = extractSniHostFromClientHello(in);
             log.debug("https sniffer try host:{} ", sniHost);
-            proxyContext.setOriginalTargetHost(
-                    sniHost != null ? sniHost : "Https Sniffer Failed"
-            );
+            proxyContext.setOriginalTargetHost(sniHost);
             return true;
         }
     }
@@ -373,9 +371,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
             }
             String host = extractHttpHost(in);
             log.debug("http sniffer try host:{} ", host);
-            proxyContext.setOriginalTargetHost(
-                    host != null ? host : "Http Sniffer Failed"
-            );
+            proxyContext.setOriginalTargetHost(host);
             return true;
         }
     }

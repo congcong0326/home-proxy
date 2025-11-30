@@ -29,9 +29,13 @@ public class TransparentServerHandler extends ByteToMessageDecoder {
         proxyContext.setUserId(userConfig.getId());
         int len = byteBuf.readableBytes();
         ByteBuf firstPacket = byteBuf.readRetainedSlice(len);
+        String originalTargetHost = proxyContext.getOriginalTargetHost();
+        if (originalTargetHost == null) {
+            originalTargetHost = proxyContext.getOriginalTargetIP();
+        }
         ProxyTunnelRequest tunnelRequest = new ProxyTunnelRequest(
                 ProtocolType.TP_PROXY,
-                proxyContext.getOriginalTargetHost(),
+                originalTargetHost,
                 proxyContext.getOriginalTargetIP(),
                 proxyContext.getOriginalTargetPort(),
                 userConfig,
