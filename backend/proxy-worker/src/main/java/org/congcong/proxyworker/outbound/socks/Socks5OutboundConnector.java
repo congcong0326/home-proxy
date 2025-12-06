@@ -75,7 +75,9 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
             // 构建连接请求（目标地址和端口）
             // 注意：CONNECT 的目标应为原始目的主机/端口，而不是上游代理地址
             // 让代理服务器用IP直连，少走一次DNS解析
-            String host = proxyTunnelRequest.getFinalTargetHost();
+            //String host = proxyTunnelRequest.getFinalTargetHost();
+            // 还是传递域名比较好，这样可以让代理服务器使用自己的dns解析，避免dns污染
+            String host = proxyTunnelRequest.getTargetHost();
             Socks5AddressType addrType = null;
             if (NetUtil.isValidIpV4Address(host)) {
                 addrType = Socks5AddressType.IPv4;

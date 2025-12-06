@@ -122,8 +122,8 @@ public class UserController {
      * PUT /api/users/{id}/credential
      */
     @PutMapping("/{id}/credential")
-    public ResponseEntity<Void> resetUserCredential(@PathVariable Long id, @Valid @RequestBody ResetCredentialRequest request) {
-        userService.resetCredential(id, request.getNewCredential());
+    public ResponseEntity<Void> resetUserCredential(@PathVariable Long id, @RequestBody String credential) {
+        userService.resetCredential(id, credential);
         return ResponseEntity.ok().build();
     }
 

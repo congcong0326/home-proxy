@@ -21,7 +21,7 @@ public class TerminalExceptionHandler extends ChannelInboundHandlerAdapter {
 
       @Override
       public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-          log.debug("Closing channel on unhandled exception: {}", cause.toString(), cause);
+          log.info("Closing channel on unhandled exception: {}", cause.toString());
           ctx.close();
       }
 }

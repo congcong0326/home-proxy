@@ -1,20 +1,17 @@
 package org.congcong.proxyworker.protocol;
 
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
-import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.audit.AccessLogUtil;
-import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
-
-import java.net.InetSocketAddress;
 
 @ChannelHandler.Sharable
 @Slf4j
@@ -60,8 +57,10 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
             if (!future.isSuccess()) {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
                 relayPromise.setFailure(future.cause());
-                if (proxyTunnelRequest.getInitialPayload() != null) {
-                    proxyTunnelRequest.getInitialPayload().release();
+                ByteBuf payload = proxyTunnelRequest.getInitialPayload();
+                if (payload != null && payload.refCnt() > 0) {
+                    payload.release();
+                    proxyTunnelRequest.setInitialPayload(null);
                 }
                 // 连接目标服务器失败
                 AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
@@ -111,7 +110,18 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
                 log.debug("执行成功回调");
                 if (proxyTunnelRequest.getInitialPayload() != null) {
                     log.debug("写入首次负载");
-                    outboundChannel.writeAndFlush(proxyTunnelRequest.getInitialPayload());
+                    ByteBuf initialPayload = proxyTunnelRequest.getInitialPayload();
+                    outboundChannel.writeAndFlush(initialPayload).addListener(f -> {
+                        if (!f.isSuccess()) {
+                            // 写失败也释放
+                            if (initialPayload.refCnt() > 0) {
+                                initialPayload.release();
+                                proxyTunnelRequest.setInitialPayload(null);
+                            }
+                        } else {
+                            proxyTunnelRequest.setInitialPayload(null); // 已被下游消费
+                        }
+                    });
                 }
             }
             // 连接失败
@@ -129,5 +139,19 @@ public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<Proxy
         outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel, false));
     }
 
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        ProxyTunnelRequest req = ChannelAttributes.getProxyTunnelRequest(ctx.channel());
+        if (req != null) {
+            ByteBuf payload = req.getInitialPayload();
+            if (payload != null && payload.refCnt() > 0) {
+                payload.release();
+                req.setInitialPayload(null);
+            }
+            ChannelAttributes.removeProxyTunnelRequest(ctx.channel());
+        }
+        super.channelInactive(ctx);
+    }
 
 }

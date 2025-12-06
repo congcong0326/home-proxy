@@ -22,9 +22,7 @@ public class TransparentServerHandler extends ByteToMessageDecoder {
     protected void decode(ChannelHandlerContext ctx, ByteBuf byteBuf, List<Object> list) throws Exception {
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(ctx.channel());
         InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(ctx.channel());
-        InetSocketAddress remote = (InetSocketAddress) ctx.channel().remoteAddress();
-        String hostName = remote.getHostName();
-        UserConfig userConfig = FindUser.find(hostName, inboundConfig);
+        UserConfig userConfig = FindUser.find(proxyContext.getClientIp(), inboundConfig);
         proxyContext.setUserName(userConfig.getUsername());
         proxyContext.setUserId(userConfig.getId());
         int len = byteBuf.readableBytes();

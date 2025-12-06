@@ -60,7 +60,7 @@ public class AsyncHttpLogPublisher implements LogPublisher {
 
         this.scheduler = Executors.newScheduledThreadPool(2);
         // 定时任务：按时间窗口发送
-        this.scheduler.scheduleAtFixedRate(this::drainAndSendAuth, this.flushIntervalMs, this.flushIntervalMs, TimeUnit.MILLISECONDS);
+        //this.scheduler.scheduleAtFixedRate(this::drainAndSendAuth, this.flushIntervalMs, this.flushIntervalMs, TimeUnit.MILLISECONDS);
         this.scheduler.scheduleAtFixedRate(this::drainAndSendAccess, this.flushIntervalMs, this.flushIntervalMs, TimeUnit.MILLISECONDS);
         log.info("AsyncHttpLogPublisher started: batchSize={}, flushIntervalMs={}", batchSize, flushIntervalMs);
     }

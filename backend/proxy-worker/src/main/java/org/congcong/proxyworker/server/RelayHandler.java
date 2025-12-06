@@ -57,10 +57,11 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         relayChannel.write(msg).addListener(future -> {
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
-                log.warn("Relaying write failed: {}", cause.getMessage());
+                String errorMsg = cause != null ? cause.getMessage() : "unknown (maybe channel closed)";
+                log.warn("Relaying write failed: {}", errorMsg);
                 Channel contextChannel = isClient ? ctx.channel() : relayChannel;
                 if (contextChannel != null) {
-                    AccessLogUtil.logFailure(contextChannel, 500, "WRITE_ERROR", cause.getMessage());
+                    AccessLogUtil.logFailure(contextChannel, 500, "WRITE_ERROR", errorMsg);
                 }
                 closeOnFlush(ctx.channel());
                 closeOnFlush(relayChannel);
