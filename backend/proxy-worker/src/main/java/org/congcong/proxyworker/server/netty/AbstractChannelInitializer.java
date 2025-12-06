@@ -2,15 +2,14 @@ package org.congcong.proxyworker.server.netty;
 
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.InboundConfig;
+import org.congcong.proxyworker.protocol.ProxyTunnelConnectorHandler;
 import org.congcong.proxyworker.protocol.RequestAppendHandler;
-import org.congcong.proxyworker.protocol.TcpTunnelConnectorHandler;
 import org.congcong.proxyworker.router.RouterService;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 import io.netty.handler.ssl.SslContext;
@@ -42,7 +41,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         // 处理握手请求还携带payload的场景
         ch.pipeline().addLast(RequestAppendHandler.getInstance());
         // 连接目标服务器
-        ch.pipeline().addLast(TcpTunnelConnectorHandler.getInstance());
+        ch.pipeline().addLast(ProxyTunnelConnectorHandler.getInstance());
         // 兜底异常消费
         ch.pipeline().addLast(TerminalExceptionHandler.getInstance());
     }

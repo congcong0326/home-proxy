@@ -15,18 +15,18 @@ import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 @ChannelHandler.Sharable
 @Slf4j
-public class TcpTunnelConnectorHandler extends SimpleChannelInboundHandler<ProxyTunnelRequest>  {
+public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<ProxyTunnelRequest>  {
 
-    private TcpTunnelConnectorHandler() {
+    private ProxyTunnelConnectorHandler() {
 
     }
 
-    public static TcpTunnelConnectorHandler getInstance() {
-        return TcpTunnelConnectorHandler.Holder.INSTANCE;
+    public static ProxyTunnelConnectorHandler getInstance() {
+        return ProxyTunnelConnectorHandler.Holder.INSTANCE;
     }
 
     private static class Holder {
-        private static final TcpTunnelConnectorHandler INSTANCE = new TcpTunnelConnectorHandler();
+        private static final ProxyTunnelConnectorHandler INSTANCE = new ProxyTunnelConnectorHandler();
     }
 
     @Override

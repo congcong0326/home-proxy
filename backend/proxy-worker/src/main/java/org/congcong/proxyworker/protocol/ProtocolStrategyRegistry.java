@@ -4,6 +4,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
+import org.congcong.proxyworker.protocol.dns.DnsForwardProtocolStrategy;
 import org.congcong.proxyworker.protocol.dns.DnsOverTlsProtocolStrategy;
 import org.congcong.proxyworker.protocol.dns.DnsRewritingProtocolStrategy;
 import org.congcong.proxyworker.protocol.shadowsock.ShadowSocksProtocolStrategy;
@@ -21,6 +22,9 @@ public class ProtocolStrategyRegistry {
     private static final Map<ProtocolType, ProtocolStrategy> STRATEGIES = new EnumMap<>(ProtocolType.class);
     private static final DnsOverTlsProtocolStrategy dnsOverTlsProtocolStrategy = new DnsOverTlsProtocolStrategy();
     private static final DnsRewritingProtocolStrategy dnsRewritingProtocolStrategy = new DnsRewritingProtocolStrategy();
+    private static final DnsForwardProtocolStrategy dnsForwardProtocolStrategy = new DnsForwardProtocolStrategy();
+
+
     static {
         STRATEGIES.put(ProtocolType.SOCKS5, new Socks5ProtocolStrategy());
         STRATEGIES.put(ProtocolType.HTTPS_CONNECT, new HttpsConnectProtocolStrategy());
@@ -41,6 +45,9 @@ public class ProtocolStrategyRegistry {
             ProtocolType outboundProxyType = routeConfig.getOutboundProxyType();
             if (outboundProxyType == ProtocolType.DOT) {
                 return dnsOverTlsProtocolStrategy;
+            }
+            if (outboundProxyType == ProtocolType.DNS_SERVER) {
+                return dnsForwardProtocolStrategy;
             }
             RoutePolicy policy = routeConfig.getPolicy();
             if (policy == RoutePolicy.DNS_REWRITING) {

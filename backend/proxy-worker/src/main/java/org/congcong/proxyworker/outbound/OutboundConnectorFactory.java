@@ -5,6 +5,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.block.BlockOutboundConnector;
 import org.congcong.proxyworker.outbound.direct.DirectOutboundConnector;
+import org.congcong.proxyworker.outbound.dns.DNSConnector;
 import org.congcong.proxyworker.outbound.dns.DOTOutboundConnector;
 import org.congcong.proxyworker.outbound.dns.DnsRewriteOutboundConnector;
 import org.congcong.proxyworker.outbound.http.HttpProxyOutboundConnector;
@@ -41,6 +42,7 @@ public final class OutboundConnectorFactory {
         if (outboundType == ProtocolType.SOCKS5) return new Socks5OutboundConnector();
         if (outboundType == ProtocolType.SHADOW_SOCKS) return new ShadowSocksOutboundConnector();
         if (outboundType == ProtocolType.DOT)  return new DOTOutboundConnector();
+        if (outboundType == ProtocolType.DNS_SERVER) return new DNSConnector();
         // 默认回退为直连，避免中断
         return new DirectOutboundConnector();
     }

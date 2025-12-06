@@ -1,7 +1,5 @@
 package org.congcong.proxyworker.protocol.dns;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -9,61 +7,51 @@ import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.common.dto.ProxyContext;
-import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.AccessLogUtil;
-import org.congcong.proxyworker.protocol.ProtocolStrategy;
-import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
-import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
-public class DnsOverTlsProtocolStrategy extends AbstractDnsProxyProtocolStrategy {
+public class DnsForwardProtocolStrategy extends AbstractDnsProxyProtocolStrategy {
 
-    public DnsOverTlsProtocolStrategy() {
-        super("dnsDot");
+
+    public DnsForwardProtocolStrategy() {
+        super("dnsForward");
     }
 
     @Override
     protected void sendQuery(Channel outbound, int outboundId, DnsProxyContext dnsCtx) {
-        DefaultDnsQuestion question = new DefaultDnsQuestion(dnsCtx.getQName(), dnsCtx.getQType());
-        DefaultDnsQuery dnsQuery = new DefaultDnsQuery(outboundId);
-        dnsQuery.setRecursionDesired(true);
-        dnsQuery.addRecord(DnsSection.QUESTION, question);
+        InetSocketAddress upstream = (InetSocketAddress) outbound.remoteAddress();
+        DefaultDnsQuestion q = new DefaultDnsQuestion(dnsCtx.getQName(), dnsCtx.getQType());
 
-        log.debug("Send DoT query: upstream={} client={} inboundId={} outboundId={} qname={} qtype={}",
-                outbound.remoteAddress(),
-                dnsCtx.getClient(),
-                dnsCtx.getId(),
-                outboundId,
-                question.name(),
-                question.type().name());
+        DatagramDnsQuery query = new DatagramDnsQuery(null, upstream, outboundId);
+        query.setRecursionDesired(true);
+        query.addRecord(DnsSection.QUESTION, q);
 
-        outbound.writeAndFlush(dnsQuery);
+        log.debug("Send DNS query upstream={} client={} inboundId={} outboundId={} qname={} qtype={}",
+                upstream, dnsCtx.getClient(), dnsCtx.getId(), outboundId, q.name(), q.type().name());
+
+        outbound.writeAndFlush(query);
     }
 
     @Override
     protected SimpleChannelInboundHandler<? extends DnsMessage> buildResponseHandler(
             Channel inbound,
             AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey) {
+        return new SimpleChannelInboundHandler<DatagramDnsResponse>() {
 
-        return new SimpleChannelInboundHandler<DnsResponse>() {
             @Override
-            protected void channelRead0(ChannelHandlerContext ctx, DnsResponse resp) {
+            protected void channelRead0(ChannelHandlerContext ctx, DatagramDnsResponse resp) {
                 ConcurrentMap<Integer, Pending> pending = ctx.channel().attr(pendingKey).get();
                 if (pending == null) {
-                    log.warn("DoT: pending map missing");
+                    log.debug("DNS forward: missing pending map");
                     return;
                 }
                 Pending entry = pending.remove(resp.id());
                 if (entry == null) {
-                    log.debug("DoT response id={} has no pending entry", resp.id());
+                    log.debug("DNS forward: no pending entry for id={}", resp.id());
                     return;
                 }
 
@@ -99,10 +87,9 @@ public class DnsOverTlsProtocolStrategy extends AbstractDnsProxyProtocolStrategy
 
             @Override
             public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-                log.warn("DotDnsResponseHandler exception: {}", cause.getMessage(), cause);
+                log.warn("DnsForward response handler exception: {}", cause.getMessage(), cause);
                 ctx.close();
             }
         };
     }
-
 }

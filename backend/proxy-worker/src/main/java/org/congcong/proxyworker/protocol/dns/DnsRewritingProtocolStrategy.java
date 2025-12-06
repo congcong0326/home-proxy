@@ -11,7 +11,7 @@ import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
-public class DnsRewritingProtocolStrategy implements ProtocolStrategy  {
+public class DnsRewritingProtocolStrategy implements ProtocolStrategy {
 
 
     @Override
