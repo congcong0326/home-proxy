@@ -149,7 +149,10 @@ const RouteForm: React.FC<RouteFormProps> = ({
 
   const handleRuleConditionChange = (index: number, value: RouteConditionType) => {
     const newRules = [...rules];
-    newRules[index] = { ...newRules[index], conditionType: value };
+    const defaults =
+      value === RouteConditionType.GEO ? 'CN' :
+      value === RouteConditionType.AD_BLOCK ? '是' : '';
+    newRules[index] = { ...newRules[index], conditionType: value, value: defaults };
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
   };
@@ -300,15 +303,16 @@ const RouteForm: React.FC<RouteFormProps> = ({
           {rules.map((rule, index) => (
             <Row key={index} gutter={8} style={{ marginBottom: 8 }}>
               <Col>
-                <Select
-                  value={rule.conditionType}
-                  onChange={(val) => handleRuleConditionChange(index, val as RouteConditionType)}
-                  style={{ width: 120 }}
-                  options={[
-                    { value: RouteConditionType.DOMAIN, label: '域名' },
-                    { value: RouteConditionType.GEO, label: '地理位置' },
-                  ]}
-                />
+              <Select
+                value={rule.conditionType}
+                onChange={(val) => handleRuleConditionChange(index, val as RouteConditionType)}
+                style={{ width: 120 }}
+                options={[
+                  { value: RouteConditionType.DOMAIN, label: '域名' },
+                  { value: RouteConditionType.GEO, label: '地理位置' },
+                  { value: RouteConditionType.AD_BLOCK, label: '去除广告' },
+                ]}
+              />
               </Col>
               <Col>
                 <Select
@@ -322,12 +326,28 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 />
               </Col>
               <Col flex="auto">
-                <Input
-                  placeholder={rule.conditionType === RouteConditionType.DOMAIN ? '请输入域名，如：*.example.com' : '请输入地理位置，如：CN/US'}
-                  value={rule.value}
-                  onChange={(e) => handleRuleValueChange(index, e.target.value)}
-                  addonBefore={`规则 ${index + 1}`}
-                />
+                {rule.conditionType === RouteConditionType.GEO ? (
+                  <Select
+                    value={rule.value || 'CN'}
+                    onChange={(val) => handleRuleValueChange(index, val as string)}
+                    style={{ width: '100%' }}
+                    options={[{ value: 'CN', label: '中国' }]}
+                  />
+                ) : rule.conditionType === RouteConditionType.AD_BLOCK ? (
+                  <Select
+                    value={rule.value || '是'}
+                    onChange={(val) => handleRuleValueChange(index, val as string)}
+                    style={{ width: '100%' }}
+                    options={[{ value: '是', label: '是' }]}
+                  />
+                ) : (
+                  <Input
+                    placeholder={'请输入域名，如：*.example.com'}
+                    value={rule.value}
+                    onChange={(e) => handleRuleValueChange(index, e.target.value)}
+                    addonBefore={`规则 ${index + 1}`}
+                  />
+                )}
               </Col>
               <Col>
                 <Space>
@@ -375,6 +395,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                     { value: ProtocolType.SOCKS5, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5] },
                     { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
                     { value: ProtocolType.DOT, label: PROTOCOL_TYPE_LABELS[ProtocolType.DOT] },
+                    { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
                     { value: ProtocolType.SHADOW_SOCKS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SHADOW_SOCKS] },
                   ]}
                 />

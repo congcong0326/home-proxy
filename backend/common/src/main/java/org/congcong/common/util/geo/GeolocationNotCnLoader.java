@@ -2,12 +2,8 @@ package org.congcong.common.util.geo;
 
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
-
 @Slf4j
-public class GeolocationNotCnLoader extends GeolocationLoader {
+public class GeolocationNotCnLoader extends V2rayRulesLoader {
 
     @Override
     protected String getGeolocationUrl() {

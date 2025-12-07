@@ -5,15 +5,13 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.*;
+import org.congcong.common.util.geo.DomainRuleEngine;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.service.AggregateConfigService;
-import org.congcong.common.util.geo.DomainClassifier;
-import org.congcong.common.util.geo.DomainRuleSet;
-import org.congcong.common.util.geo.GeolocationNotCnLoader;
 
 import java.util.*;
 
@@ -27,7 +25,7 @@ public class ProxyWorkerApplication {
     
     public static void main(String[] args) throws Exception {
         log.info("启动代理工作节点应用程序");
-        DomainClassifier.init();
+        DomainRuleEngine.init();
         // 创建配置服务
         AggregateConfigService configService = new AggregateConfigService();
         
@@ -43,7 +41,7 @@ public class ProxyWorkerApplication {
             configService.stop();
             PROXY_CONTEXT.closeAll();
             AccessLogUtil.stop();
-            DomainClassifier.shutdown();
+            DomainRuleEngine.shutdown();
         }));
         
         // 主线程保持运行

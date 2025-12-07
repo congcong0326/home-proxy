@@ -1,6 +1,6 @@
 package org.congcong.common.util.geo;
 
-public class GeolocationCnLoader extends GeolocationLoader {
+public class GeolocationCnLoader extends V2rayRulesLoader {
 
     @Override
     protected String getGeolocationUrl() {

@@ -7,11 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.validator.routines.DomainValidator;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
-import org.congcong.common.enums.MatchOp;
-import org.congcong.common.enums.ProtocolType;
-import org.congcong.common.enums.RouteConditionType;
-import org.congcong.common.enums.RoutePolicy;
-import org.congcong.common.util.geo.ForeignResult;
+import org.congcong.common.enums.*;
+import org.congcong.common.util.geo.*;
 import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
@@ -19,8 +16,6 @@ import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
-import org.congcong.common.util.geo.DomainClassifier;
-import org.congcong.common.util.geo.GeoIPUtil;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -57,6 +52,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         // dns 解析
         proxyTimeContext.setDnsStartTime(System.currentTimeMillis());
         boolean isDnsServer = proxyTunnelRequest.getInboundConfig().getProtocol() == ProtocolType.DNS_SERVER;
+        boolean hostIsIp = false;
         Set<String> rewriteHosts = findRewriteHosts(routes);
         // 这是代理服务器需要连接的目标地址，可能是域名也可能是IP
         String targetHost = proxyTunnelRequest.getTargetHost();
@@ -70,6 +66,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             }
             // 不是域名，则是IP
             else {
+                hostIsIp = true;
                 proxyTunnelRequest.setTargetIp(targetHost);
             }
         }
@@ -86,16 +83,21 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                         if (!proxyTunnelRequest.isLocationResolveSuccess()) {
                             // 域名和IP相等，说明是IP
                             boolean foreign;
-                            if (targetHost.equals(proxyTunnelRequest.getTargetIp())) {
+                            if (hostIsIp) {
                                  foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
                             }
                             // 否则按照域名解析
                             else {
-                                ForeignResult foreignResult = DomainClassifier.isForeign(targetHost);
-                                if (!foreignResult.isSure()) {
-                                    foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
+                                MatchResult foreignResult = DomainRuleEngine.match(DomainRuleType.GEO_FOREIGN, targetHost);
+                                if (!foreignResult.isMatched()) {
+                                    MatchResult cnResult = DomainRuleEngine.match(DomainRuleType.GEO_CN, targetHost);
+                                    if (!cnResult.isMatched()) {
+                                        foreign = GeoIPUtil.getInstance().isForeign(targetHost, inetAddress);
+                                    } else {
+                                        foreign = false;
+                                    }
                                 } else {
-                                    foreign = foreignResult.isForeign();
+                                    foreign = true;
                                 }
                             }
                             if (foreign) {
@@ -110,7 +112,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             boolean matchCondition = Objects.equals(country, value);
                             boolean matched = (op == MatchOp.IN) == matchCondition;
                             if (matched) {
-                                log.debug("地理路由策略命中 {}", route.getName());
+                                log.info("地理路由策略命中 {}", route.getName());
                                 ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
                                 proxyTunnelRequest.setRouteConfig(route);
                                 channelHandlerContext.fireChannelRead(proxyTunnelRequest);
@@ -122,19 +124,31 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                     //支持通配符匹配，如：*.example.com
                     //支持子域名匹配，如：sub.example.com
                     case DOMAIN -> {
-                        String host = proxyTunnelRequest.getTargetHost();
-                        boolean matchCondition = matchDomain(host, value);
-                        boolean matched = (op == MatchOp.IN) == matchCondition;
+                        MatchResult match = DomainRuleEngine.match(DomainRuleType.DOMAIN, targetHost, value);
+                        boolean matched = (op == MatchOp.IN) == match.isMatched();
                         if (matched) {
-                            log.debug("域名路由策略命中 {}", route.getName());
+                            log.info("域名路由策略命中 {}", route.getName());
                             ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
                             proxyTunnelRequest.setRouteConfig(route);
                             channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                             return;
                         }
                     }
+                    case AD_BLOCK -> {
+                        // 非域名再做判断
+                        if (!hostIsIp) {
+                            MatchResult match = DomainRuleEngine.match(DomainRuleType.AD, targetHost);
+                            boolean matched = (op == MatchOp.IN) == match.isMatched();
+                            if (matched) {
+                                log.info("广告路由策略命中 {}", route.getName());
+                                ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
+                                proxyTunnelRequest.setRouteConfig(route);
+                                channelHandlerContext.fireChannelRead(proxyTunnelRequest);
+                                return;
+                            }
+                        }
+                    }
                 }
-
             }
 
         }
@@ -172,58 +186,5 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             }
         }
         return rewriteHosts;
-    }
-
-    /**
-     * 支持域名匹配，如：example.com
-     * 支持通配符匹配，如：*.example.com
-     * 支持子域名匹配，如：sub.example.com
-     * todo 这里如何设计一个全匹配
-     * @param host
-     * @param value
-     * @return
-     */
-    private boolean matchDomain(String host, String value) {
-        if (host == null || value == null) {
-            return false;
-        }
-        String h = normalizeHost(host);
-        String v = normalizeHost(value);
-
-        // 全匹配：任意非空 host
-        if ("*".equals(v)) {
-            return !h.isEmpty();
-        }
-
-        // 后缀匹配（含主域）：".example.com" -> 匹配 example.com 与 *.example.com
-        if (v.startsWith(".")) {
-            String base = v.substring(1);       // "example.com"
-            String suffix = v;                  // ".example.com"
-            return h.equals(base) || (h.endsWith(suffix) && h.length() > suffix.length());
-        }
-
-        // 仅子域通配： "*.example.com" 不匹配主域
-        if (v.startsWith("*.")) {
-            String suffix = v.substring(1);     // ".example.com"
-            return h.endsWith(suffix) && h.length() > suffix.length();
-        }
-
-        // 精确匹配
-        return h.equals(v);
-    }
-
-    private String normalizeHost(String input) {
-        String s = input.trim();
-        // 去掉 FQDN 末尾点
-        if (s.endsWith(".")) {
-            s = s.substring(0, s.length() - 1);
-        }
-        // 统一小写并处理 IDN
-        try {
-            s = java.net.IDN.toASCII(s.toLowerCase());
-        } catch (IllegalArgumentException e) {
-            s = s.toLowerCase();
-        }
-        return s;
     }
 }

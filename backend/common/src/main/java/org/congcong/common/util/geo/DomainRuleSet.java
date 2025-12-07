@@ -25,11 +25,11 @@ public class DomainRuleSet {
         return set;
     }
 
-    public boolean isMatched(String host) {
-        return trie.matches(host);
+    public DomainTrie.MatchType matchType(String host, String target) {
+        return trie.matchType(host);
     }
 
-    public DomainTrie.MatchType matchType(String host) {
+    private DomainTrie.MatchType matchType(String host) {
         return trie.matchType(host);
     }
 
@@ -75,6 +75,7 @@ public class DomainRuleSet {
             value = rulePart.substring(colonIdx + 1).trim();
         } else {
             // 无前缀，按照 domain: 处理
+            type = "domain";
             value = rulePart.trim();
         }
 

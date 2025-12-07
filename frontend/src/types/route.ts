@@ -1,7 +1,8 @@
 // 路由条件类型（与后端保持一致）
 export enum RouteConditionType {
   DOMAIN = 'DOMAIN',
-  GEO = 'GEO'
+  GEO = 'GEO',
+  AD_BLOCK = 'AD_BLOCK'
 }
 
 // 路由匹配操作（与后端保持一致）
@@ -39,7 +40,7 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议',
   [ProtocolType.TP_PROXY]: '透明代理',
   [ProtocolType.DOT]: 'dns over tls 服务器',
-  [ProtocolType.DNS_SERVER]: 'DNS 服务器'
+  [ProtocolType.DNS_SERVER]: 'dns服务器'
 };
 
 // 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）

@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.clickhouse;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.AccessLog;
 import org.congcong.common.util.geo.GeoIPUtil;
 import org.congcong.common.util.geo.GeoLocation;
@@ -18,6 +19,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class ClickHouseAccessLogWriter {
 
     private final ClickHouseJdbcClient client;
@@ -79,6 +81,7 @@ public class ClickHouseAccessLogWriter {
 
     private int flush() {
         if (!flushLock.tryLock()) return 0;
+        long startTime = System.currentTimeMillis();
         try {
             int size = bufferSize.get();
             if (size <= 0) return 0;
@@ -103,6 +106,7 @@ public class ClickHouseAccessLogWriter {
             client.batchExecute(sql, params);
             return params.size();
         } finally {
+            log.info("write cost time {} ms", System.currentTimeMillis() - startTime);
             flushLock.unlock();
         }
     }
