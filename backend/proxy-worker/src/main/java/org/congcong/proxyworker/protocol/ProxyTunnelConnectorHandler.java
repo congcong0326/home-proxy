@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.audit.AccessLogUtil;
+import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.server.RelayHandler;
@@ -31,10 +32,10 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
-        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+        ProxyTimeContext proxyTimeContext = ProxyContextResolver.resolveProxyTimeContext(channelHandlerContext.channel(), proxyTunnelRequest);
         proxyTimeContext.setConnectTargetStartTime(System.currentTimeMillis());
         Channel inboundChannel = channelHandlerContext.channel();
-        ProxyContext proxyContext = ChannelAttributes.getProxyContext(channelHandlerContext.channel());
+        ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
 
         // 填下目标的IP与端口信息
         proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());

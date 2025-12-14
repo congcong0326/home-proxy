@@ -5,6 +5,8 @@ import lombok.Getter;
 import lombok.Setter;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
+import org.congcong.common.dto.ProxyContext;
+import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
@@ -40,6 +42,12 @@ public class ProxyTunnelRequest {
     private Status status = Status.init;
     @Getter
     private Object protocolAttachment;
+    @Getter
+    @Setter
+    private ProxyContext proxyContext;
+    @Getter
+    @Setter
+    private ProxyTimeContext proxyTimeContext;
 
     public String getFinalTargetHost() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {

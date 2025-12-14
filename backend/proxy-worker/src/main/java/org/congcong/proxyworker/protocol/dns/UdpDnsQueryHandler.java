@@ -36,13 +36,19 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         log.debug("DNS query from {} name={} type={}", client, qName, qType);
 
 
-        ProxyContext proxyContext = ChannelAttributes.getProxyContext(ctx.channel());
         InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(ctx.channel());
         String clientIp = client.getAddress().getHostAddress();
         UserConfig userConfig = FindUser.find(clientIp, inboundConfig);
+
+        ProxyContext proxyContext = new ProxyContext();
+        proxyContext.setProxyId(inboundConfig.getId() == null ? 0 : inboundConfig.getId());
+        proxyContext.setProxyName(inboundConfig.getName());
+        proxyContext.setInboundProtocolType(inboundConfig.getProtocol());
+        proxyContext.setInboundProxyEncAlgo(inboundConfig.getSsMethod());
         proxyContext.setUserName(userConfig.getUsername());
         proxyContext.setUserId(userConfig.getId());
         proxyContext.setClientIp(clientIp);
+        proxyContext.setClientPort(client.getPort());
 
         DnsProxyContext dnsCtx = new DnsProxyContext(dnsId, qName, qType, client);
 
@@ -55,8 +61,10 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
                 dnsCtx
         );
 
-        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(ctx.channel());
+        ProxyTimeContext proxyTimeContext = new ProxyTimeContext();
         proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
+        tunnelRequest.setProxyContext(proxyContext);
+        tunnelRequest.setProxyTimeContext(proxyTimeContext);
         ctx.fireChannelRead(tunnelRequest);
     }
 

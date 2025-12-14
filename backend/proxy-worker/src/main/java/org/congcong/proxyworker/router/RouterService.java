@@ -5,6 +5,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.validator.routines.DomainValidator;
+import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.*;
@@ -12,7 +13,7 @@ import org.congcong.common.util.geo.*;
 import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
-import org.congcong.proxyworker.server.netty.ChannelAttributes;
+import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
@@ -44,7 +45,8 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
-        ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
+        ProxyTimeContext proxyTimeContext = ProxyContextResolver.resolveProxyTimeContext(channelHandlerContext.channel(), proxyTunnelRequest);
+        ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
         List<RouteConfig> routes = FindRoutes.find(proxyTunnelRequest.getUser().getId(), inboundConfig);
 
@@ -113,7 +115,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             boolean matched = (op == MatchOp.IN) == matchCondition;
                             if (matched) {
                                 log.info("地理路由策略命中 {}", route.getName());
-                                ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
+                                ProxyContextFillUtil.proxyContextRouteFill(route, proxyContext);
                                 proxyTunnelRequest.setRouteConfig(route);
                                 channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                                 return;
@@ -128,7 +130,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                         boolean matched = (op == MatchOp.IN) == match.isMatched();
                         if (matched) {
                             log.info("域名路由策略命中 {}", route.getName());
-                            ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
+                            ProxyContextFillUtil.proxyContextRouteFill(route, proxyContext);
                             proxyTunnelRequest.setRouteConfig(route);
                             channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                             return;
@@ -141,7 +143,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                             boolean matched = (op == MatchOp.IN) == match.isMatched();
                             if (matched) {
                                 log.info("广告路由策略命中 {}", route.getName());
-                                ProxyContextFillUtil.proxyContextRouteFill(route, ChannelAttributes.getProxyContext(channelHandlerContext.channel()));
+                                ProxyContextFillUtil.proxyContextRouteFill(route, proxyContext);
                                 proxyTunnelRequest.setRouteConfig(route);
                                 channelHandlerContext.fireChannelRead(proxyTunnelRequest);
                                 return;

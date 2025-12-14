@@ -84,7 +84,7 @@ public class DnsOverTlsProtocolStrategy extends AbstractDnsProxyProtocolStrategy
                 copySection(resp, clientResp, DnsSection.ADDITIONAL);
                 clientResp.setCode(resp.code());
 
-                AccessLogUtil.logDns(inbound, dnsCtx, clientResp.code());
+                AccessLogUtil.logDns(entry.proxyContext(), entry.timeContext(), dnsCtx, clientResp.code());
                 inbound.writeAndFlush(clientResp);
             }
 

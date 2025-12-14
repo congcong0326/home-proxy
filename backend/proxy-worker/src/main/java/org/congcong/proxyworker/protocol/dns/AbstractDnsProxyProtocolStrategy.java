@@ -7,6 +7,9 @@ import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.audit.AccessLogUtil;
+import org.congcong.common.dto.ProxyContext;
+import org.congcong.common.dto.ProxyTimeContext;
+import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
@@ -22,7 +25,7 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
     private final AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey;
     private final AttributeKey<AtomicInteger> nextIdKey;
 
-    protected record Pending(int inboundId, DnsProxyContext ctx) {
+    protected record Pending(int inboundId, DnsProxyContext ctx, ProxyContext proxyContext, ProxyTimeContext timeContext) {
     }
 
     protected AbstractDnsProxyProtocolStrategy(String keyPrefix) {
@@ -58,7 +61,9 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         }
 
         int outboundId = allocateId(pending, nextId);
-        pending.put(outboundId, new Pending(dnsCtx.getId(), dnsCtx));
+        ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(inboundCtx.channel(), request);
+        ProxyTimeContext timeContext = ProxyContextResolver.resolveProxyTimeContext(inboundCtx.channel(), request);
+        pending.put(outboundId, new Pending(dnsCtx.getId(), dnsCtx, proxyContext, timeContext));
 
         sendQuery(outbound, outboundId, dnsCtx);
     }
@@ -77,7 +82,7 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
             resp.addRecord(DnsSection.QUESTION, q);
             resp.setCode(DnsResponseCode.SERVFAIL);
             inbound.writeAndFlush(resp);
-            AccessLogUtil.logDns(inbound, dnsCtx, resp.code());
+            AccessLogUtil.logDns(request.getProxyContext(), request.getProxyTimeContext(), dnsCtx, resp.code());
         }
         log.warn("{} upstream connect failed: {}", getClass().getSimpleName(), cause.getMessage(), cause);
     }

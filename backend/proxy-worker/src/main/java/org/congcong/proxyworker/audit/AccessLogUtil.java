@@ -59,14 +59,12 @@ public class AccessLogUtil {
         logPublisher.publishAccess(accessLog);
     }
 
-    public static void logDns(Channel inboundChannel, DnsProxyContext dnsCtx, DnsResponseCode code) {
-        ProxyContext proxyContext = ChannelAttributes.getProxyContext(inboundChannel);
-        ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(inboundChannel);
+    public static void logDns(ProxyContext proxyContext, ProxyTimeContext timeContext, DnsProxyContext dnsCtx, DnsResponseCode code) {
         if (proxyContext == null) return;
-        if (timeContext != null) {
-            timeContext.setRequestEndTime(System.currentTimeMillis());
-        }
-        AccessLog accessLog = createAccessLog(proxyContext, timeContext != null ? timeContext : new ProxyTimeContext());
+        ProxyTimeContext ctx = timeContext != null ? timeContext : new ProxyTimeContext();
+        ctx.setRequestEndTime(System.currentTimeMillis());
+
+        AccessLog accessLog = createAccessLog(proxyContext, ctx);
         accessLog.setOriginalTargetHost(dnsCtx.getQName());
         accessLog.setOriginalTargetPort(53);
         accessLog.setStatus(code == DnsResponseCode.NOERROR ? 200 : 502);
