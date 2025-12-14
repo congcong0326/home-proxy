@@ -44,6 +44,7 @@ public class ClickHouseAccessLogWriter {
             int size = bufferSize.incrementAndGet();
             if (size == 1) firstBufferedAt = now;
         }
+        log.info("parse {} logs cost time {} ms", logs.size(), (System.currentTimeMillis() - now));
         if (shouldFlush(now)) {
             return flush();
         }
@@ -82,8 +83,9 @@ public class ClickHouseAccessLogWriter {
     private int flush() {
         if (!flushLock.tryLock()) return 0;
         long startTime = System.currentTimeMillis();
+        int size = 0;
         try {
-            int size = bufferSize.get();
+            size = bufferSize.get();
             if (size <= 0) return 0;
             List<List<Object>> params = new ArrayList<>(size);
             AccessLog l;
@@ -106,7 +108,7 @@ public class ClickHouseAccessLogWriter {
             client.batchExecute(sql, params);
             return params.size();
         } finally {
-            log.info("write cost time {} ms", System.currentTimeMillis() - startTime);
+            log.info("write {} cost time {} ms", size, System.currentTimeMillis() - startTime);
             flushLock.unlock();
         }
     }

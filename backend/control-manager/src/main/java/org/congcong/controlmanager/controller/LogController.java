@@ -62,6 +62,7 @@ public class LogController {
             @RequestParam(value = "status", required = false) Integer status,
             @RequestParam(value = "protocol", required = false) String protocol,
             @RequestParam(value = "routePolicyId", required = false) Long routePolicyId,
+            @RequestParam(value = "routePolicyName", required = false) String routePolicyName,
             @RequestParam(value = "srcGeoCountry", required = false) String srcGeoCountry,
             @RequestParam(value = "srcGeoCity", required = false) String srcGeoCity,
             @RequestParam(value = "dstGeoCountry", required = false) String dstGeoCountry,
@@ -75,7 +76,7 @@ public class LogController {
             @RequestParam(value = "sort", required = false) String sort
     ) {
         AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
-                protocol, routePolicyId, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
+                protocol, routePolicyId, routePolicyName, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
                 page, size, sort);
         PageResponse<AccessLogListItem> resp = logService.queryAccessLogs(req);
         return ResponseEntity.ok(resp);

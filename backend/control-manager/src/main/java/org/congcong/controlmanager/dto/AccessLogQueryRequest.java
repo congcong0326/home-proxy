@@ -18,6 +18,7 @@ public class AccessLogQueryRequest {
     private Integer status;
     private String protocol; // inbound/outbound
     private Long routePolicyId;
+    private String routePolicyName;
     private String srcGeoCountry;
     private String srcGeoCity;
     private String dstGeoCountry;

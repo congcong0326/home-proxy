@@ -183,6 +183,9 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
             case "dst_geo":
                 sb.append("concat(coalesce(dst_geo_country,''), '/', coalesce(dst_geo_city,'')) AS k, ");
                 break;
+            case "route_policies": // 按路由规则聚合（ID:名称）
+                sb.append("concat(toString(route_policy_id), ':', coalesce(route_policy_name, '')) AS k, ");
+                break;
             default:
                 sb.append("original_target_host AS k, ");
                 break;
@@ -218,6 +221,9 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         if (notBlank(req.getProtocol())) {
             if ("inbound".equalsIgnoreCase(req.getProtocol())) sb.append(" AND inbound_protocol_type != ''");
             else if ("outbound".equalsIgnoreCase(req.getProtocol())) sb.append(" AND outbound_protocol_type != ''");
+        }
+        if (notBlank(req.getRoutePolicyName())) {
+            sb.append(" AND route_policy_name = ?"); params.add(req.getStatus());
         }
         if (req.getRoutePolicyId() != null) { sb.append(" AND route_policy_id = ?"); params.add(req.getRoutePolicyId()); }
         if (notBlank(req.getSrcGeoCountry())) { sb.append(" AND src_geo_country = ?"); params.add(req.getSrcGeoCountry()); }

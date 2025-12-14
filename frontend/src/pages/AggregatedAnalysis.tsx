@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
 
-type Dimension = 'users' | 'apps' | 'user_apps' | 'src_geo' | 'dst_geo';
+type Dimension = 'users' | 'apps' | 'user_apps' | 'src_geo' | 'dst_geo' | 'route_policies';
 type Metric = 'requests' | 'bytes';
 
 const dimensionOptions: { label: string; value: Dimension }[] = [
@@ -19,6 +19,7 @@ const dimensionOptions: { label: string; value: Dimension }[] = [
   { label: '用户-应用', value: 'user_apps' },
   { label: '来源国家', value: 'src_geo' },
   { label: '目标国家', value: 'dst_geo' },
+  { label: '路由规则', value: 'route_policies' },
 ];
 
 const metricOptions: { label: string; value: Metric }[] = [

@@ -101,9 +101,9 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                                 }
                             }
                             if (foreign) {
-                                proxyTunnelRequest.setCountry("国外");
+                                proxyTunnelRequest.setCountry("NOT CN");
                             } else {
-                                proxyTunnelRequest.setCountry("中国");
+                                proxyTunnelRequest.setCountry("CN");
                             }
                             proxyTunnelRequest.setLocationResolveSuccess(true);
                         }
