@@ -32,8 +32,7 @@ public final class DomainRuleEngine {
     }
 
     public static void init() {
-        refreshAll();
-        EXECUTOR.scheduleAtFixedRate(DomainRuleEngine::refreshAll, 1, 1, TimeUnit.DAYS);
+        EXECUTOR.scheduleAtFixedRate(DomainRuleEngine::refreshAll, 0, 1, TimeUnit.DAYS);
     }
 
     public static void shutdown() {
