@@ -71,6 +71,10 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                     ch.close();
                 }
             }
+            RequestAppendHandler appendHandler = channelHandlerContext.pipeline().get(RequestAppendHandler.class);
+            if (appendHandler != null) {
+                appendHandler.onConnectComplete(channelHandlerContext);
+            }
         });
         //
         channelHandlerContext.channel().closeFuture().addListener(f -> {

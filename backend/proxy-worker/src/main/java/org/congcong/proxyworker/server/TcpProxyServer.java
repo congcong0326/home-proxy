@@ -33,7 +33,7 @@ public abstract class TcpProxyServer extends AbstractProxyServer {
 
         ServerBootstrap bootstrap = new ServerBootstrap();
         bootstrap.group(bossGroup, workerGroup)
-                .handler(new LoggingHandler(LogLevel.DEBUG))
+                //.handler(new LoggingHandler(LogLevel.DEBUG))
                 .childHandler(getChildHandler());
 
         if (useEpoll()) {

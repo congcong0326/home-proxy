@@ -34,12 +34,12 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         processSSL(ch);
         // 添加根据各个协议的channelHandler
         // 认证相关的处理器
-        ch.pipeline().addFirst(new LoggingHandler(LogLevel.DEBUG));
+        // ch.pipeline().addFirst(new LoggingHandler(LogLevel.DEBUG));
         init(ch);
         // 路由处理器
         ch.pipeline().addLast(RouterService.getInstance());
-        // 处理握手请求还携带payload的场景
-        ch.pipeline().addLast(RequestAppendHandler.getInstance());
+        // 处理握手请求还携带payload的场景，每个连接在连上目标服务器前最多暂存1M
+        ch.pipeline().addLast(new RequestAppendHandler(1_048_576));
         // 连接目标服务器
         ch.pipeline().addLast(ProxyTunnelConnectorHandler.getInstance());
         // 兜底异常消费
