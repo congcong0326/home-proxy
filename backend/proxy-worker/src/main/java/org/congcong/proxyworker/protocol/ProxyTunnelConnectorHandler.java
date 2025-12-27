@@ -57,7 +57,9 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
             proxyTunnelRequest.setStatus(ProxyTunnelRequest.Status.finish);
             if (!future.isSuccess()) {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
-                relayPromise.setFailure(future.cause());
+                if (!relayPromise.isDone()) {
+                    relayPromise.setFailure(future.cause());
+                }
                 ByteBuf payload = proxyTunnelRequest.getInitialPayload();
                 if (payload != null && payload.refCnt() > 0) {
                     payload.release();

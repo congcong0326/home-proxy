@@ -60,5 +60,15 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
 
     protected void pipeLineContextInit(Channel socketChannel) {
         ChannelAttributes.setInboundConfig(socketChannel, inboundConfig);
+        // 生成上下文对象
+        ProxyContext proxyContext = new ProxyContext();
+        // 填写默认值
+        ProxyContextFillUtil.proxyContextInitFill(socketChannel, inboundConfig, proxyContext);
+
+        ChannelAttributes.setProxyContext(socketChannel, proxyContext);
+
+        ProxyTimeContext proxyTimeContext = new ProxyTimeContext();
+
+        ChannelAttributes.setProxyTimeContext(socketChannel, proxyTimeContext);
     }
 }

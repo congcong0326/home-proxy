@@ -48,6 +48,7 @@ public abstract class V2rayRulesLoader implements DomainRuleLoader {
 
     private DomainRuleSet tryLoadFromCache(Path cacheFile) {
         if (!Files.exists(cacheFile)) {
+            log.warn("no cached geolocation rules at {}", cacheFile.toAbsolutePath());
             return null;
         }
 
@@ -91,11 +92,12 @@ public abstract class V2rayRulesLoader implements DomainRuleLoader {
     }
 
     private Path resolveCacheFile() throws Exception {
-        URL url = new URL(getGeolocationUrl());
-        String fileName = Paths.get(url.getPath()).getFileName().toString();
+        String fileName = getFileName();
         // Same directory as application working dir
         return Paths.get(System.getProperty("user.dir")).resolve(fileName);
     }
+
+    protected abstract String getFileName();
 
 
 }

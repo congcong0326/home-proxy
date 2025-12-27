@@ -9,4 +9,9 @@ public class GeolocationNotCnLoader extends V2rayRulesLoader {
     protected String getGeolocationUrl() {
         return "https://raw.githubusercontent.com/v2fly/domain-list-community/refs/heads/release/geolocation-!cn.txt";
     }
+
+    @Override
+    protected String getFileName() {
+        return "not-cn.txt";
+    }
 }

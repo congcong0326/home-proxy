@@ -48,7 +48,7 @@ public class GeoIPUtil implements AutoCloseable {
         this.cacheEnabled = cacheEnabled;
         this.cache = cacheEnabled ? CacheBuilder.newBuilder()
                 .maximumSize(Math.max(1000, maximumCacheSize))
-                .expireAfterWrite(4, TimeUnit.HOURS)  // 4小时后过期
+                .expireAfterWrite(24, TimeUnit.HOURS)  // 4小时后过期
                 .build() : null;
 
         try {
