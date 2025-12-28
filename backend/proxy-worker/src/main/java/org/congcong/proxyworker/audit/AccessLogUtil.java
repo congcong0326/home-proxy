@@ -108,7 +108,7 @@ public class AccessLogUtil {
         
         // 目标地址信息（原始与改写）
         accessLog.setOriginalTargetHost(proxyContext.getOriginalTargetHost());
-        accessLog.setOriginalTargetIP(proxyContext.getOriginalTargetIP());
+        accessLog.setOriginalTargetIP(proxyContext.getOriginalTargetIP() == null ? proxyContext.getRealTargetIp() : proxyContext.getOriginalTargetIP());
         accessLog.setOriginalTargetPort(proxyContext.getOriginalTargetPort());
         accessLog.setRewriteTargetHost(proxyContext.getRewriteTargetHost());
         accessLog.setRewriteTargetPort(proxyContext.getRewriteTargetPort());

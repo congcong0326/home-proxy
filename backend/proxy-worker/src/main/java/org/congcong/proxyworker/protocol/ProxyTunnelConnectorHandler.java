@@ -15,6 +15,9 @@ import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+
 @ChannelHandler.Sharable
 @Slf4j
 public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<ProxyTunnelRequest>  {
@@ -38,9 +41,8 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         Channel inboundChannel = channelHandlerContext.channel();
         ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
 
-        // 填下目标的IP与端口信息
+        // 填下目标的地址与端口信息
         proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
-        proxyContext.setOriginalTargetIP(proxyTunnelRequest.getTargetIp());
         proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
 
         // 用统一的 promise 承载成功/失败，交由 getRelayPromise 处理中继与协议响应
@@ -53,6 +55,12 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         ChannelFuture connect = connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
         //
         connect.addListener((ChannelFutureListener) future -> {
+            //
+            SocketAddress socketAddress = future.channel().remoteAddress();
+            if (socketAddress instanceof InetSocketAddress remoteAddress) {
+                String hostOrIp = remoteAddress.getHostString();
+                proxyContext.setRealTargetIp(hostOrIp);
+            }
             // 第一次请求的生命周期结束
             proxyTimeContext.setConnectTargetEndTime(System.currentTimeMillis());
             proxyTunnelRequest.setStatus(ProxyTunnelRequest.Status.finish);

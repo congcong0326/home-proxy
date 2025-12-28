@@ -16,6 +16,7 @@ public class ProxyContext {
     // 原访问目标
     private String originalTargetHost;
     private String originalTargetIP;
+    private String realTargetIp;
     private Integer originalTargetPort;
     // 改写目标
     private String rewriteTargetHost;

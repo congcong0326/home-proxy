@@ -163,18 +163,22 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         StringBuilder sb = new StringBuilder();
         List<Object> params = new ArrayList<>();
         sb.append("SELECT ");
+        String appKeyExpr = "multiIf(" +
+                "IPv4StringToNumOrNull(coalesce(original_target_host, '')) IS NOT NULL, original_target_host, " +
+                "IPv6StringToNumOrNull(coalesce(original_target_host, '')) IS NOT NULL, original_target_host, " +
+                "cutToFirstSignificantSubdomain(lower(coalesce(original_target_host, ''))))";
         switch (dim) {
             case "users":
                 sb.append("multiIf(length(username)>0, username, toString(user_id)) AS k, ");
                 break;
             case "apps":
-                sb.append("original_target_host AS k, ");
+                sb.append(appKeyExpr).append(" AS k, ");
                 break;
             case "user_apps":
                 if (userId != null) {
-                    sb.append("original_target_host AS k, ");
+                    sb.append(appKeyExpr).append(" AS k, ");
                 } else {
-                    sb.append("concat(multiIf(length(username)>0, username, toString(user_id)), '@', original_target_host) AS k, ");
+                    sb.append("concat(multiIf(length(username)>0, username, toString(user_id)), '@', ").append(appKeyExpr).append(") AS k, ");
                 }
                 break;
             case "src_geo":
@@ -223,7 +227,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
             else if ("outbound".equalsIgnoreCase(req.getProtocol())) sb.append(" AND outbound_protocol_type != ''");
         }
         if (notBlank(req.getRoutePolicyName())) {
-            sb.append(" AND route_policy_name = ?"); params.add(req.getStatus());
+            sb.append(" AND route_policy_name = ?"); params.add(req.getRoutePolicyName());
         }
         if (req.getRoutePolicyId() != null) { sb.append(" AND route_policy_id = ?"); params.add(req.getRoutePolicyId()); }
         if (notBlank(req.getSrcGeoCountry())) { sb.append(" AND src_geo_country = ?"); params.add(req.getSrcGeoCountry()); }
@@ -231,7 +235,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         if (notBlank(req.getDstGeoCountry())) { sb.append(" AND dst_geo_country = ?"); params.add(req.getDstGeoCountry()); }
         if (notBlank(req.getDstGeoCity())) { sb.append(" AND dst_geo_city = ?"); params.add(req.getDstGeoCity()); }
         if (notBlank(req.getHost())) { sb.append(" AND (original_target_host = ? OR rewrite_target_host = ?)"); params.add(req.getHost()); params.add(req.getHost()); }
-        if (notBlank(req.getOriginalTargetHost())) { sb.append(" AND original_target_host = ?"); params.add(req.getOriginalTargetHost()); }
+        if (notBlank(req.getOriginalTargetHost())) { sb.append(" AND original_target_host like ?"); params.add("%" + req.getOriginalTargetHost() + "%"); }
         if (notBlank(req.getRewriteTargetHost())) { sb.append(" AND rewrite_target_host = ?"); params.add(req.getRewriteTargetHost()); }
         if (notBlank(req.getQ())) {
             sb.append(" AND (client_ip LIKE ? OR username LIKE ? OR proxy_name LIKE ? OR original_target_host LIKE ? OR rewrite_target_host LIKE ? OR error_msg LIKE ?)");

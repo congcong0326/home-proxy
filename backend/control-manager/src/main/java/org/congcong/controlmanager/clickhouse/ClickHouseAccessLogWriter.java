@@ -27,7 +27,7 @@ public class ClickHouseAccessLogWriter {
     @Value("${logs.clickhouse.batchSize:3000}")
     private int batchSize;
 
-    @Value("${logs.clickhouse.maxDelayMs:10000}")
+    @Value("${logs.clickhouse.maxDelayMs:60000}")
     private long maxDelayMs;
 
     private final ConcurrentLinkedQueue<AccessLog> buffer = new ConcurrentLinkedQueue<>();
@@ -44,7 +44,7 @@ public class ClickHouseAccessLogWriter {
             int size = bufferSize.incrementAndGet();
             if (size == 1) firstBufferedAt = now;
         }
-        log.info("parse {} logs cost time {} ms", logs.size(), (System.currentTimeMillis() - now));
+        log.debug("parse {} logs cost time {} ms", logs.size(), (System.currentTimeMillis() - now));
         if (shouldFlush(now)) {
             return flush();
         }
@@ -52,9 +52,9 @@ public class ClickHouseAccessLogWriter {
     }
 
     private void parse(AccessLog accessLog) {
-        String originalTargetHost = accessLog.getOriginalTargetHost();
+        String originalTargetIP = accessLog.getOriginalTargetIP();
         String clientIp = accessLog.getClientIp();
-        Optional<GeoLocation> targetLocation = GeoIPUtil.getInstance().lookup(originalTargetHost);
+        Optional<GeoLocation> targetLocation = GeoIPUtil.getInstance().lookup(originalTargetIP == null ? accessLog.getOriginalTargetHost() : originalTargetIP);
         Optional<GeoLocation> clientLocation = GeoIPUtil.getInstance().lookup(clientIp);
         if (targetLocation.isPresent()) {
             GeoLocation geoLocation = targetLocation.get();
