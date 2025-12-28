@@ -10,6 +10,7 @@ import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
+import org.congcong.proxyworker.outbound.block.BlockOutboundConnector;
 import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
@@ -67,7 +68,9 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 }
                 // 连接目标服务器失败
                 AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
-                log.warn("{} 连接目标服务器 {} 失败 {}", proxyTunnelRequest.getRouteConfig().getName(), proxyTunnelRequest.getTargetHost(), future.cause().getMessage());
+                if (!(future.cause() instanceof BlockOutboundConnector.BlockedByPolicyException)) {
+                    log.warn("{} 连接目标服务器 {} 失败 {}", proxyTunnelRequest.getRouteConfig().getName(), proxyTunnelRequest.getTargetHost(), future.cause().getMessage());
+                }
                 // 确保释放出站资源
                 Channel ch = future.channel();
                 if (ch != null && ch.isOpen()) {

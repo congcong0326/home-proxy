@@ -67,7 +67,7 @@ public class ProxyWorkerApplication {
             log.info("  限流配置数量: {}", newConfig.getRateLimits() != null ? newConfig.getRateLimits().size() : 0);
             log.info("  用户配置数量: {}", newConfig.getUsers() != null ? newConfig.getUsers().size() : 0);
             log.info("  配置哈希: {}", newConfig.getConfigHash());
-           
+            log.info("  配置数据: {}", newConfig.toString());
             ObjectMapper mapper = new ObjectMapper();
             mapper.registerModule(new JavaTimeModule());
             // 忽略来源对象中在目标类中不存在的字段（如 allowedUserIds、routeIds 等）

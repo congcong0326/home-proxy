@@ -95,7 +95,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         boolean matchCondition = Objects.equals(country, expectedCountry);
         boolean matched = (op == MatchOp.IN) == matchCondition;
         if (matched) {
-            log.info("地理路由策略命中 {}", route.getName());
+            log.debug("地理路由策略命中 {}", targetHost);
         }
         return matched;
     }
@@ -126,7 +126,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         MatchResult match = DomainRuleEngine.match(DomainRuleType.DOMAIN, targetHost, ruleValue);
         boolean matched = (op == MatchOp.IN) == match.isMatched();
         if (matched) {
-            log.info("域名路由策略命中 {}", route.getName());
+            log.debug("域名路由策略命中 {}", targetHost);
         }
         return matched;
     }
@@ -138,7 +138,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         MatchResult match = DomainRuleEngine.match(DomainRuleType.AD, targetHost);
         boolean matched = (op == MatchOp.IN) == match.isMatched();
         if (matched) {
-            log.info("广告路由策略命中 {}", route.getName());
+            log.debug("广告路由策略命中 {}", targetHost);
         }
         return matched;
     }

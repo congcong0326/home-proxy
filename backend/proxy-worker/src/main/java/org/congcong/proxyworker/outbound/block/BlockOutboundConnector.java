@@ -20,7 +20,7 @@ public class BlockOutboundConnector implements OutboundConnector {
           return failed;
       }
 
-      private static class BlockedByPolicyException extends Exception {
+      public static class BlockedByPolicyException extends Exception {
           BlockedByPolicyException(String host, int port) {
               super("blocked by route policy: " + host + ":" + port);
           }
