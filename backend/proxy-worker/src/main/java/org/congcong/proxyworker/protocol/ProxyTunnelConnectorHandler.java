@@ -93,6 +93,7 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         //
         channelHandlerContext.channel().closeFuture().addListener(f -> {
             if (f.isSuccess()) {
+                // todo block策略会导致两条重复日志
                 // 只有在正常关闭的情况下才记录成功日志
                 AccessLogUtil.logSuccess(channelHandlerContext.channel());
             }

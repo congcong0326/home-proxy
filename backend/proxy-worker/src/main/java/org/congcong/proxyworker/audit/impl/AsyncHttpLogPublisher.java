@@ -59,10 +59,9 @@ public class AsyncHttpLogPublisher implements LogPublisher {
         this.config = ProxyWorkerConfig.getInstance();
 
         this.scheduler = Executors.newScheduledThreadPool(2);
-        // 定时任务：按时间窗口发送
-        //this.scheduler.scheduleAtFixedRate(this::drainAndSendAuth, this.flushIntervalMs, this.flushIntervalMs, TimeUnit.MILLISECONDS);
-        this.scheduler.scheduleAtFixedRate(this::drainAndSendAccess, this.flushIntervalMs, this.flushIntervalMs, TimeUnit.MILLISECONDS);
-        log.info("AsyncHttpLogPublisher started: batchSize={}, flushIntervalMs={}", batchSize, flushIntervalMs);
+        this.scheduler.execute(() -> processQueue(authQueue, config.getAuthLogUrl(), "auth"));
+        this.scheduler.execute(() -> processQueue(accessQueue, config.getAccessLogUrl(), "access"));
+        log.info("AsyncHttpLogPublisher started with batch dispatch: batchSize={}, flushIntervalMs={}", batchSize, this.flushIntervalMs);
     }
 
     @Override
@@ -84,22 +83,39 @@ public class AsyncHttpLogPublisher implements LogPublisher {
         }
     }
 
-    private void drainAndSendAuth() {
-        List<AuthLog> batch = drainBatch(authQueue, batchSize);
-        if (batch.isEmpty()) return;
-        sendBatch(batch, config.getAuthLogUrl());
-    }
+    // 单线程消费者：达到批量阈值或等待窗口到期即发送，避免固定调度导致堆积
+    private <T> void processQueue(BlockingQueue<T> queue, String url, String queueName) {
+        List<T> buffer = new ArrayList<>(batchSize);
+        long lastFlushTime = System.nanoTime();
+        final long maxWaitNanos = TimeUnit.MILLISECONDS.toNanos(flushIntervalMs);
 
-    private void drainAndSendAccess() {
-        List<AccessLog> batch = drainBatch(accessQueue, batchSize);
-        if (batch.isEmpty()) return;
-        sendBatch(batch, config.getAccessLogUrl());
-    }
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                // 等待下一条日志或超时，避免空转
+                T item = queue.poll(flushIntervalMs, TimeUnit.MILLISECONDS);
+                if (item != null) {
+                    buffer.add(item);
+                    queue.drainTo(buffer, batchSize - buffer.size());
+                }
 
-    private <T> List<T> drainBatch(BlockingQueue<T> queue, int max) {
-        List<T> list = new ArrayList<>(max);
-        queue.drainTo(list, max);
-        return list;
+                boolean hitBatchSize = buffer.size() >= batchSize;
+                boolean hitMaxWait = !buffer.isEmpty() && (System.nanoTime() - lastFlushTime >= maxWaitNanos);
+                if (hitBatchSize || hitMaxWait) {
+                    sendBatch(new ArrayList<>(buffer), url);
+                    buffer.clear();
+                    lastFlushTime = System.nanoTime();
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.info("Log worker for {} interrupted", queueName);
+        } catch (Exception e) {
+            log.warn("Unexpected error in log worker {}: {}", queueName, e.toString());
+        } finally {
+            if (!buffer.isEmpty()) {
+                sendBatch(buffer, url);
+            }
+        }
     }
 
     private <T> void sendBatch(List<T> batch, String url) {
@@ -117,13 +133,13 @@ public class AsyncHttpLogPublisher implements LogPublisher {
             } else {
                 log.warn("Failed to send logs: status={}, url={}, bodyLen={}", resp.statusCode(), url, body.length());
             }
-        } catch (IOException | InterruptedException e) {
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            log.warn("Error sending logs (interrupted): {}", e.toString());
+        } catch (IOException e) {
             log.warn("Error sending logs: {}", e.toString());
         }
     }
-
-
 
     @Override
     public void shutdown() {

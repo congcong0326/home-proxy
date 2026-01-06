@@ -21,6 +21,7 @@ import Dashboard from './pages/Dashboard';
 import TrafficOverview from './pages/TrafficOverview';
 import WolManagement from './pages/WolManagement';
 import DiskMonitor from './pages/DiskMonitor';
+import MailGateway from './pages/MailGateway';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -110,6 +111,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard/traffic" element={<TrafficOverview />} />
           <Route path="dashboard/wol" element={<WolManagement />} />
           <Route path="dashboard/disk" element={<DiskMonitor />} />
+          <Route path="dashboard/mail-gateway" element={<MailGateway />} />
         </Route>
         
         {/* 默认路由重定向 */}

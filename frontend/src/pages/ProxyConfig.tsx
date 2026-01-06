@@ -26,7 +26,8 @@ import {
   MenuUnfoldOutlined,
   AreaChartOutlined,
   DashboardOutlined,
-  HddOutlined
+  HddOutlined,
+  MailOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -65,6 +66,11 @@ const ProxyConfig: React.FC = () => {
           key: '/config/dashboard/disk',
           icon: <HddOutlined />,
           label: '磁盘监控',
+        },
+        {
+          key: '/config/dashboard/mail-gateway',
+          icon: <MailOutlined />,
+          label: '邮件网关',
         },
       ],
     },
@@ -309,6 +315,8 @@ const getCardDescription = (key: string): string => {
       return '综合用户与应用TopN聚合分析';
     case '/config/overview/geo':
       return '访问来源地理分布与热点';
+    case '/config/dashboard/mail-gateway':
+      return 'SMTP网关、bizKey目标配置与发送日志';
     default:
       return '配置项说明';
   }

@@ -48,6 +48,14 @@ import {
   TrafficStatsParams
 } from '../types/dashboard';
 import { DiskInfo, DiskDetail } from '../types/disk';
+import {
+  MailGateway,
+  MailTarget,
+  MailSendRequest,
+  MailSendResponse,
+  MailSendLogPage,
+  MailSendLogQuery
+} from '../types/mail';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -688,6 +696,79 @@ class ApiService {
     // 后端参数需要去掉前导'/'，并让 'dev/' 被后端剥离为设备名
     const param = device.replace(/^\//, '');
     return this.request<DiskDetail>(`/disk/detail/${encodeURIComponent(param)}`);
+  }
+
+  // ========== 邮件网关 ==========
+  async listMailGateways(): Promise<MailGateway[]> {
+    return this.adminRequest<MailGateway[]>('/admin/gateways');
+  }
+
+  async createMailGateway(data: Omit<MailGateway, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailGateway> {
+    return this.adminRequest<MailGateway>('/admin/gateways', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateMailGateway(id: number, data: Omit<MailGateway, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailGateway> {
+    return this.adminRequest<MailGateway>(`/admin/gateways/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async toggleMailGateway(id: number, enabled: boolean): Promise<MailGateway> {
+    return this.adminRequest<MailGateway>(`/admin/gateways/${id}/enable`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled })
+    });
+  }
+
+  async listMailTargets(bizKey?: string): Promise<MailTarget[]> {
+    const searchParams = new URLSearchParams();
+    if (bizKey) {
+      searchParams.append('bizKey', bizKey);
+    }
+    const qs = searchParams.toString();
+    const endpoint = qs ? `/admin/targets?${qs}` : '/admin/targets';
+    return this.adminRequest<MailTarget[]>(endpoint);
+  }
+
+  async getMailTarget(bizKey: string): Promise<MailTarget> {
+    return this.adminRequest<MailTarget>(`/admin/targets/${encodeURIComponent(bizKey)}`);
+  }
+
+  async createMailTarget(data: Omit<MailTarget, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailTarget> {
+    return this.adminRequest<MailTarget>('/admin/targets', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateMailTarget(id: number, data: Omit<MailTarget, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailTarget> {
+    return this.adminRequest<MailTarget>(`/admin/targets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async sendMail(data: MailSendRequest): Promise<MailSendResponse> {
+    return this.adminRequest<MailSendResponse>('/internal/mail/send', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async listMailSendLogs(params: MailSendLogQuery = {}): Promise<MailSendLogPage> {
+    const searchParams = new URLSearchParams();
+    if (params.bizKey) searchParams.append('bizKey', params.bizKey);
+    if (params.status) searchParams.append('status', params.status);
+    if (params.timeRange) searchParams.append('timeRange', params.timeRange);
+    if (params.page) searchParams.append('page', params.page.toString());
+    if (params.size) searchParams.append('size', params.size.toString());
+    const qs = searchParams.toString();
+    const endpoint = qs ? `/admin/send-logs?${qs}` : '/admin/send-logs';
+    return this.adminRequest<MailSendLogPage>(endpoint);
   }
 }
 
