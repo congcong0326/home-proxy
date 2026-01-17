@@ -49,4 +49,6 @@ export interface DiskDetail {
   // 类型与温度曲线
   diskType: DiskType;
   historyTemperature: number[];
+  historyReadBytes?: number[];
+  historyWriteBytes?: number[];
 }
