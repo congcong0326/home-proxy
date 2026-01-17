@@ -1,14 +1,13 @@
 package org.congcong.proxyworker.protocol.dns;
 
-import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.dns.*;
+import io.netty.util.NetUtil;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class DnsRewritingProtocolStrategy implements ProtocolStrategy {
@@ -36,13 +35,17 @@ public class DnsRewritingProtocolStrategy implements ProtocolStrategy {
         resp.addRecord(DnsSection.QUESTION, question);
 
         try {
-            byte[] addr = InetAddress.getByName(answerIp).getAddress();
-            if (addr.length == 4 && dnsCtx.getQType() == DnsRecordType.A) {
-                resp.addRecord(DnsSection.ANSWER,
-                        new DefaultDnsRawRecord(dnsCtx.getQName(), DnsRecordType.A, 60,
-                                inboundCtx.alloc().buffer(addr.length).writeBytes(addr)));
-            } // 其他类型可选返回空答案
-            resp.setCode(DnsResponseCode.NOERROR);
+            byte[] addr = NetUtil.createByteArrayFromIpAddressString(answerIp);
+            if (addr != null) {
+                if (addr.length == 4 && dnsCtx.getQType() == DnsRecordType.A) {
+                    resp.addRecord(DnsSection.ANSWER,
+                            new DefaultDnsRawRecord(dnsCtx.getQName(), DnsRecordType.A, 60,
+                                    inboundCtx.alloc().buffer(addr.length).writeBytes(addr)));
+                } // 其他类型可选返回空答案
+                resp.setCode(DnsResponseCode.NOERROR);
+            } else {
+                resp.setCode(DnsResponseCode.SERVFAIL);
+            }
         } catch (Exception e) {
             resp.setCode(DnsResponseCode.SERVFAIL);
         }

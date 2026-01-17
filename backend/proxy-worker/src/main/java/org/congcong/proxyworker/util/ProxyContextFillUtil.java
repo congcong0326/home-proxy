@@ -41,8 +41,10 @@ public class ProxyContextFillUtil {
             clientIp = remote.getAddress() != null ? remote.getAddress().getHostAddress() : null;
             clientPort = remote.getPort();
         }
-        context.setClientIp(clientIp);
-        context.setClientPort(clientPort == null ? 0 : clientPort);
+        if (clientIp != null) {
+            context.setClientIp(clientIp);
+            context.setClientPort(clientPort);
+        }
     }
 
 }

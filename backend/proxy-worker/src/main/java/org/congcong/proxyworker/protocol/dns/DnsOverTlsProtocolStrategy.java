@@ -9,8 +9,6 @@ import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 
-import java.net.InetSocketAddress;
-
 @Slf4j
 public class DnsOverTlsProtocolStrategy extends AbstractDnsProxyProtocolStrategy {
 
