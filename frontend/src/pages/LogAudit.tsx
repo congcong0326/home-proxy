@@ -34,6 +34,8 @@ const LogAudit: React.FC = () => {
     return `${hours.toFixed(2)} h`;
   };
 
+  const formatDnsIps = (ips?: string[]) => (ips && ips.length ? ips.join(', ') : '-');
+
   const buildQueryParams = (params?: Partial<AccessLogQueryParams>): AccessLogQueryParams => {
     const values = form.getFieldsValue() as AccessLogFormValues;
     const { range, ...restValues } = values;
@@ -198,6 +200,9 @@ const LogAudit: React.FC = () => {
               <p><Text type="secondary">原目标</Text>: {detail.originalTargetHost} {detail.originalTargetPort ? `:${detail.originalTargetPort}` : ''}</p>
               <p><Text type="secondary">改写目标</Text>: {detail.rewriteTargetHost} {detail.rewriteTargetPort ? `:${detail.rewriteTargetPort}` : ''}</p>
               <p><Text type="secondary">目标地理</Text>: {detail.dstGeoCountry} {detail.dstGeoCity}</p>
+            </Card>
+            <Card size="small" title="DNS信息" style={{ marginBottom: 12 }}>
+              <p><Text type="secondary">回答IP</Text>: {formatDnsIps(detail.dnsAnswerIps)}</p>
             </Card>
             <Card size="small" title="路由与协议" style={{ marginBottom: 12 }}>
               <p><Text type="secondary">入站协议</Text>: {detail.inboundProtocolType}</p>

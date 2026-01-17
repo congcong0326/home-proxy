@@ -16,8 +16,11 @@ import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+import org.congcong.proxyworker.protocol.dns.util.DnsMessageUtil;
 
 import java.net.InetSocketAddress;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -103,8 +106,12 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
                     (InetSocketAddress) inbound.localAddress(), client, dnsCtx.getId());
             resp.addRecord(DnsSection.QUESTION, q);
             resp.setCode(DnsResponseCode.SERVFAIL);
+            ProxyContext proxyContext = request.getProxyContext();
+            if (proxyContext != null) {
+                proxyContext.setBytesOut(DnsMessageUtil.estimateMessageSize(resp));
+            }
             inbound.writeAndFlush(resp);
-            AccessLogUtil.logDns(request.getProxyContext(), request.getProxyTimeContext(), dnsCtx, resp.code());
+            AccessLogUtil.logDns(proxyContext, request.getProxyTimeContext(), dnsCtx, resp.code(), Collections.emptyList());
         }
         log.warn("{} upstream connect failed: {}", getClass().getSimpleName(), cause.getMessage(), cause);
     }
@@ -164,7 +171,12 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         copySection(resp, clientResp, DnsSection.ADDITIONAL);
         clientResp.setCode(resp.code());
 
-        AccessLogUtil.logDns(entry.proxyContext(), entry.timeContext(), dnsCtx, clientResp.code());
+        List<String> answerIps = DnsMessageUtil.extractAnswerIps(resp);
+        ProxyContext proxyContext = entry.proxyContext();
+        if (proxyContext != null) {
+            proxyContext.setBytesOut(DnsMessageUtil.estimateMessageSize(clientResp));
+        }
+        AccessLogUtil.logDns(proxyContext, entry.timeContext(), dnsCtx, clientResp.code(), answerIps);
         inbound.writeAndFlush(clientResp);
     }
 

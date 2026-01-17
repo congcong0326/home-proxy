@@ -99,10 +99,10 @@ public class ClickHouseAccessLogWriter {
                     "original_target_host, original_target_ip, original_target_port, " +
                     "rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, " +
                     "inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, " +
-                    "bytes_in, bytes_out, status, error_code, error_msg, " +
+                    "bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, " +
                     "request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms" +
                     ") VALUES (" +
-                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
                     ")";
             client.batchExecute(sql, params);
             return params.size();
@@ -113,7 +113,7 @@ public class ClickHouseAccessLogWriter {
     }
 
     private List<Object> toParams(AccessLog l) {
-        List<Object> p = new ArrayList<>(30);
+        List<Object> p = new ArrayList<>(31);
         p.add(toTimestamp(l.getTs()));
         p.add(l.getRequestId());
         p.add(nullToZero(l.getUserId()));
@@ -140,6 +140,7 @@ public class ClickHouseAccessLogWriter {
         p.add(nullToZero(l.getStatus()));
         p.add(l.getErrorCode());
         p.add(l.getErrorMsg());
+        p.add(l.getDnsAnswerIps() == null ? List.of() : l.getDnsAnswerIps());
         p.add(nullToZero(l.getRequestDurationMs()));
         p.add(nullToZero(l.getDnsDurationMs()));
         p.add(nullToZero(l.getConnectDurationMs()));

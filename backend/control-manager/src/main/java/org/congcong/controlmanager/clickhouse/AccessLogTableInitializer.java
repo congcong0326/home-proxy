@@ -48,6 +48,7 @@ public class AccessLogTableInitializer implements ApplicationRunner {
                     error_code                 LowCardinality(String),
                     error_msg                  Nullable(String),
 
+                    dns_answer_ips             Array(String),
                     request_duration_ms        UInt32,
                     dns_duration_ms            UInt32,
                     connect_duration_ms        UInt32,
@@ -59,5 +60,6 @@ public class AccessLogTableInitializer implements ApplicationRunner {
                 SETTINGS index_granularity = 8192
                 """;
         client.execute(createTable);
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS dns_answer_ips Array(String)");
     }
 }

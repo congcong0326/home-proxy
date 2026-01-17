@@ -2,6 +2,7 @@ package org.congcong.common.dto;
 
 import lombok.Data;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 访问日志
@@ -46,6 +47,9 @@ public class AccessLog {
     private Integer status; // 访问结果状态（如CONNECT/SOCKS握手成功=200，失败为错误码）
     private String errorCode; // 可选错误码
     private String errorMsg;  // 可选错误信息
+
+    // DNS 应答内容
+    private List<String> dnsAnswerIps;
 
     // 时延信息（来自 ProxyTimeContext）
     private Long requestDurationMs;

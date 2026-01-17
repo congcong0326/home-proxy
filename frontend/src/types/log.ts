@@ -52,6 +52,7 @@ export interface AccessLogDetail {
   status?: number;
   errorCode?: string;
   errorMsg?: string;
+  dnsAnswerIps?: string[];
   requestDurationMs?: number;
   dnsDurationMs?: number;
   connectDurationMs?: number;

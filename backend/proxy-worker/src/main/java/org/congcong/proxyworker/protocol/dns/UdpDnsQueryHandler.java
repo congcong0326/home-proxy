@@ -14,6 +14,7 @@ import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
+import org.congcong.proxyworker.protocol.dns.util.DnsMessageUtil;
 
 import java.net.InetSocketAddress;
 
@@ -66,6 +67,7 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         );
         proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
         ProxyContextFillUtil.proxyContextInitFill(ctx.channel(), inboundConfig, proxyContext);
+        proxyContext.setBytesIn(DnsMessageUtil.estimateMessageSize(query));
         tunnelRequest.setProxyContext(proxyContext);
         tunnelRequest.setProxyTimeContext(proxyTimeContext);
         ctx.fireChannelRead(tunnelRequest);

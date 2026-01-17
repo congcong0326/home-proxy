@@ -3,6 +3,7 @@ package org.congcong.controlmanager.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @AllArgsConstructor
@@ -33,6 +34,7 @@ public class AccessLogDetail {
     private Integer status;
     private String errorCode;
     private String errorMsg;
+    private List<String> dnsAnswerIps;
     private Long requestDurationMs;
     private Long dnsDurationMs;
     private Long connectDurationMs;

@@ -5,10 +5,13 @@ import io.netty.handler.codec.dns.DnsResponseCode;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.AccessLog;
+import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AccessLogUtil {
@@ -27,7 +30,11 @@ public class AccessLogUtil {
         if (proxyContext == null || timeContext == null) {
             return; // 如果上下文为空，直接返回
         }
-        
+        RoutePolicy routePolicy = proxyContext.getRoutePolicy();
+        // 太多无用的广告屏蔽策略
+        if (routePolicy == RoutePolicy.BLOCK) {
+            return;
+        }
         // 设置请求结束时间
         timeContext.setRequestEndTime(System.currentTimeMillis());
         
@@ -59,7 +66,11 @@ public class AccessLogUtil {
         logPublisher.publishAccess(accessLog);
     }
 
-    public static void logDns(ProxyContext proxyContext, ProxyTimeContext timeContext, DnsProxyContext dnsCtx, DnsResponseCode code) {
+    public static void logDns(ProxyContext proxyContext,
+                              ProxyTimeContext timeContext,
+                              DnsProxyContext dnsCtx,
+                              DnsResponseCode code,
+                              List<String> answerIps) {
         if (proxyContext == null) return;
         ProxyTimeContext ctx = timeContext != null ? timeContext : new ProxyTimeContext();
         ctx.setRequestEndTime(System.currentTimeMillis());
@@ -67,7 +78,13 @@ public class AccessLogUtil {
         AccessLog accessLog = createAccessLog(proxyContext, ctx);
         accessLog.setOriginalTargetHost(dnsCtx.getQName());
         accessLog.setOriginalTargetPort(53);
-        accessLog.setStatus(code == DnsResponseCode.NOERROR ? 200 : 502);
+        boolean ok = code == DnsResponseCode.NOERROR;
+        accessLog.setStatus(ok ? 200 : 502);
+        accessLog.setDnsAnswerIps(answerIps == null ? Collections.emptyList() : answerIps);
+        if (!ok) {
+            accessLog.setErrorCode(code.toString());
+            accessLog.setErrorMsg("DNS response code: " + code);
+        }
 
         logPublisher.publishAccess(accessLog);
     }
