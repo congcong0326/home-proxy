@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
+import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.common.dto.ProxyContext;
@@ -23,13 +24,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Slf4j
 public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrategy {
 
-    private static final int MAX_PENDING = 65535;
-    private static final int PENDING_TTL_SECONDS = 20;
+    private static final int MAX_PENDING = 0x10000;
+    private static final int PENDING_TTL_SECONDS = 10;
 
     private final AttributeKey<Cache<Integer, Pending>> pendingKey;
     private final AttributeKey<AtomicInteger> nextIdKey;
 
-    protected record Pending(int inboundId, DnsProxyContext ctx, ProxyContext proxyContext, ProxyTimeContext timeContext) {
+    protected record Pending(int inboundId,
+                             DnsProxyContext ctx,
+                             ProxyContext proxyContext,
+                             ProxyTimeContext timeContext,
+                             String qName,
+                             DnsRecordType qType) {
     }
 
     protected AbstractDnsProxyProtocolStrategy(String keyPrefix) {
@@ -72,7 +78,14 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(inboundCtx.channel(), request);
         ProxyTimeContext timeContext = ProxyContextResolver.resolveProxyTimeContext(inboundCtx.channel(), request);
         // 通过缓存维护关系：外部dns服务器----outboundId-----缓存----dnsCtx.id-----内部请求客户端
-        pending.put(outboundId, new Pending(dnsCtx.getId(), dnsCtx, proxyContext, timeContext));
+        pending.put(outboundId, new Pending(
+                dnsCtx.getId(),
+                dnsCtx,
+                proxyContext,
+                timeContext,
+                dnsCtx.getQName(),
+                dnsCtx.getQType()
+        ));
 
         sendQuery(outbound, outboundId, dnsCtx);
     }
@@ -111,6 +124,62 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
                 .maximumSize(MAX_PENDING)
                 .expireAfterWrite(PENDING_TTL_SECONDS, TimeUnit.SECONDS)
                 .build();
+    }
+
+    protected void handleResponse(String logPrefix,
+                                  Channel inbound,
+                                  Cache<Integer, Pending> pending,
+                                  DnsResponse resp) {
+        Pending entry = pending.asMap().remove(resp.id());
+        if (entry == null) {
+            log.debug("{}: no pending entry for id={}", logPrefix, resp.id());
+            return;
+        }
+
+        DnsQuestion q = resp.recordAt(DnsSection.QUESTION);
+        if (!validQuestion(q, entry)) {
+            log.warn("{}: response id={} question mismatch, drop. expected name={} type={} actual={}/{}",
+                    logPrefix,
+                    resp.id(),
+                    entry.qName(),
+                    entry.qType(),
+                    q == null ? "null" : q.name(),
+                    q == null ? "null" : q.type());
+            return;
+        }
+
+        DnsProxyContext dnsCtx = entry.ctx();
+        DatagramDnsResponse clientResp = new DatagramDnsResponse(
+                (InetSocketAddress) inbound.localAddress(),
+                dnsCtx.getClient(),
+                entry.inboundId()
+        );
+
+        if (q != null) {
+            ReferenceCountUtil.retain(q);
+            clientResp.addRecord(DnsSection.QUESTION, q);
+        }
+        copySection(resp, clientResp, DnsSection.ANSWER);
+        copySection(resp, clientResp, DnsSection.AUTHORITY);
+        copySection(resp, clientResp, DnsSection.ADDITIONAL);
+        clientResp.setCode(resp.code());
+
+        AccessLogUtil.logDns(entry.proxyContext(), entry.timeContext(), dnsCtx, clientResp.code());
+        inbound.writeAndFlush(clientResp);
+    }
+
+    protected void copySection(DnsMessage from, DatagramDnsResponse to, DnsSection section) {
+        int count = from.count(section);
+        for (int i = 0; i < count; i++) {
+            DnsRecord r = from.recordAt(section, i);
+            ReferenceCountUtil.retain(r);
+            to.addRecord(section, r);
+        }
+    }
+
+    private boolean validQuestion(DnsQuestion q, Pending entry) {
+        if (q == null) return false;
+        return entry.qName().equalsIgnoreCase(q.name()) && entry.qType() == q.type();
     }
 
     protected abstract void sendQuery(Channel outbound, int outboundId, DnsProxyContext dnsCtx);

@@ -6,9 +6,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
-import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 
 import java.net.InetSocketAddress;
@@ -49,40 +47,7 @@ public class DnsForwardProtocolStrategy extends AbstractDnsProxyProtocolStrategy
                     log.debug("DNS forward: missing pending map");
                     return;
                 }
-                Pending entry = pending.asMap().remove(resp.id());
-                if (entry == null) {
-                    log.debug("DNS forward: no pending entry for id={}", resp.id());
-                    return;
-                }
-
-                DnsProxyContext dnsCtx = entry.ctx();
-                DatagramDnsResponse clientResp = new DatagramDnsResponse(
-                        (InetSocketAddress) inbound.localAddress(),
-                        dnsCtx.getClient(),
-                        entry.inboundId()
-                );
-
-                DnsQuestion q = resp.recordAt(DnsSection.QUESTION);
-                if (q != null) {
-                    ReferenceCountUtil.retain(q);
-                    clientResp.addRecord(DnsSection.QUESTION, q);
-                }
-                copySection(resp, clientResp, DnsSection.ANSWER);
-                copySection(resp, clientResp, DnsSection.AUTHORITY);
-                copySection(resp, clientResp, DnsSection.ADDITIONAL);
-                clientResp.setCode(resp.code());
-
-                AccessLogUtil.logDns(entry.proxyContext(), entry.timeContext(), dnsCtx, clientResp.code());
-                inbound.writeAndFlush(clientResp);
-            }
-
-            private void copySection(DnsMessage from, DatagramDnsResponse to, DnsSection section) {
-                int count = from.count(section);
-                for (int i = 0; i < count; i++) {
-                    DnsRecord r = from.recordAt(section, i);
-                    ReferenceCountUtil.retain(r);
-                    to.addRecord(section, r);
-                }
+                handleResponse("DNS forward", inbound, pending, resp);
             }
 
             @Override
