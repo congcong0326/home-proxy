@@ -66,11 +66,26 @@ public class SmartCtlParser {
         
         switch (diskType) {
             case "NVME_SSD":
-                return parseNvmeSsdDetail(device, fullOutput, historyTemperature);
+                return parseNvmeSsdDetail(device, fullOutput, historyTemperature, null, null);
             case "SATA_SSD":
-                return parseSataSsdDetail(device, fullOutput, historyTemperature);
+                return parseSataSsdDetail(device, fullOutput, historyTemperature, null, null);
             default: // HDD
-                return parseHddDetail(device, fullOutput, historyTemperature);
+                return parseHddDetail(device, fullOutput, historyTemperature, null, null);
+        }
+    }
+
+    public static DiskDetail parseDetail(String device, String fullOutput, List<Integer> historyTemperature,
+                                         List<Long> historyReadBytes, List<Long> historyWriteBytes) {
+        // 判断磁盘类型
+        String diskType = determineDiskType(fullOutput);
+
+        switch (diskType) {
+            case "NVME_SSD":
+                return parseNvmeSsdDetail(device, fullOutput, historyTemperature, historyReadBytes, historyWriteBytes);
+            case "SATA_SSD":
+                return parseSataSsdDetail(device, fullOutput, historyTemperature, historyReadBytes, historyWriteBytes);
+            default: // HDD
+                return parseHddDetail(device, fullOutput, historyTemperature, historyReadBytes, historyWriteBytes);
         }
     }
     
@@ -114,7 +129,8 @@ public class SmartCtlParser {
      * @param historyTemperature
      * @return
      */
-    private static DiskDetail parseHddDetail(String device, String fullOutput, List<Integer> historyTemperature) {
+    private static DiskDetail parseHddDetail(String device, String fullOutput, List<Integer> historyTemperature,
+                                             List<Long> historyReadBytes, List<Long> historyWriteBytes) {
         Map<String, Long> attributes = parseAttributes(fullOutput);
 
         // 转换 LBA -> 字节（每 LBA 为 512 字节）
@@ -161,11 +177,14 @@ public class SmartCtlParser {
                 0, // maxEraseCount
                 0, // totalEraseCount
                 "HDD",
-                historyTemperature
+                historyTemperature,
+                historyReadBytes,
+                historyWriteBytes
         );
     }
 
-    private static DiskDetail parseNvmeSsdDetail(String device, String fullOutput, List<Integer> historyTemperature) {
+    private static DiskDetail parseNvmeSsdDetail(String device, String fullOutput, List<Integer> historyTemperature,
+                                                 List<Long> historyReadBytes, List<Long> historyWriteBytes) {
         long dataUnitsReadBytes = parseNvmeLongValue(fullOutput, NVME_DATA_UNITS_READ) * 512000;
         long dataUnitsWrittenBytes = parseNvmeLongValue(fullOutput, NVME_DATA_UNITS_WRITTEN) * 512000;
 
@@ -197,11 +216,14 @@ public class SmartCtlParser {
                 0, // SATA SSD特有
                 0, // SATA SSD特有
                 "NVME_SSD",
-                historyTemperature
+                historyTemperature,
+                historyReadBytes,
+                historyWriteBytes
         );
     }
 
-    private static DiskDetail parseSataSsdDetail(String device, String fullOutput, List<Integer> historyTemperature) {
+    private static DiskDetail parseSataSsdDetail(String device, String fullOutput, List<Integer> historyTemperature,
+                                                 List<Long> historyReadBytes, List<Long> historyWriteBytes) {
         Map<Integer, Map<String, String>> attributesMap = parseSataAttributes(fullOutput);
 
         // 提取SATA SSD特有的属性
@@ -251,8 +273,38 @@ public class SmartCtlParser {
                 maxEraseCount,
                 totalEraseCount,
                 "SATA_SSD",
-                historyTemperature
+                historyTemperature,
+                historyReadBytes,
+                historyWriteBytes
         );
+    }
+
+    /**
+     * 从 smartctl 输出中解析累计读写字节数。
+     */
+    public static long[] parseReadWriteBytes(String fullOutput) {
+        String diskType = determineDiskType(fullOutput);
+        switch (diskType) {
+            case "NVME_SSD":
+                long readNvme = parseNvmeLongValue(fullOutput, NVME_DATA_UNITS_READ) * 512000;
+                long writeNvme = parseNvmeLongValue(fullOutput, NVME_DATA_UNITS_WRITTEN) * 512000;
+                return new long[]{readNvme, writeNvme};
+            case "SATA_SSD": {
+                Map<Integer, Map<String, String>> attrs = parseSataAttributes(fullOutput);
+                long lifetimeReadsGiB = getAttributeValue(attrs, ATTR_LIFETIME_READS_GIB, "RAW_VALUE", 0L);
+                long lifetimeWritesGiB = getAttributeValue(attrs, ATTR_LIFETIME_WRITES_GIB, "RAW_VALUE", 0L);
+                long readBytes = lifetimeReadsGiB * 1024L * 1024L * 1024L;
+                long writeBytes = lifetimeWritesGiB * 1024L * 1024L * 1024L;
+                return new long[]{readBytes, writeBytes};
+            }
+            default: {
+                Map<String, Long> attributes = parseAttributes(fullOutput);
+                long totalLbasWritten = attributes.getOrDefault("Total_LBAs_Written", 0L);
+                long totalLbasRead = attributes.getOrDefault("Total_LBAs_Read", 0L);
+                long bytesPerLba = 512L;
+                return new long[]{totalLbasRead * bytesPerLba, totalLbasWritten * bytesPerLba};
+            }
+        }
     }
     
     private static Map<Integer, Map<String, String>> parseSataAttributes(String input) {

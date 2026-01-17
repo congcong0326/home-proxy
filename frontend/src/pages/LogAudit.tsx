@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
+import type { Dayjs } from 'dayjs';
 import { Card, Form, Row, Col, Input, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
 import apiService from '../services/api';
 import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
@@ -8,8 +9,12 @@ import { formatBytes } from '../utils/format';
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
 
+type AccessLogFormValues = AccessLogQueryParams & { range?: [Dayjs, Dayjs] };
+
+const getTodayRange = (): [Dayjs, Dayjs] => [dayjs().startOf('day'), dayjs().endOf('day')];
+
 const LogAudit: React.FC = () => {
-  const [form] = Form.useForm<AccessLogQueryParams>();
+  const [form] = Form.useForm<AccessLogFormValues>();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AccessLogListItem[]>([]);
   const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 0, pageSize: 10 });
@@ -29,23 +34,31 @@ const LogAudit: React.FC = () => {
     return `${hours.toFixed(2)} h`;
   };
 
+  const buildQueryParams = (params?: Partial<AccessLogQueryParams>): AccessLogQueryParams => {
+    const values = form.getFieldsValue() as AccessLogFormValues;
+    const { range, ...restValues } = values;
+    const [start, end] = range || [];
+    const merged: AccessLogQueryParams = {
+      ...restValues,
+      page: pageInfo.page,
+      size: pageInfo.pageSize,
+      ...params,
+    };
+    merged.from = params?.from ?? restValues.from ?? (start ? start.toISOString() : undefined);
+    merged.to = params?.to ?? restValues.to ?? (end ? end.toISOString() : undefined);
+    return merged;
+  };
+
   const fetchData = async (params?: Partial<AccessLogQueryParams>) => {
     setLoading(true);
     try {
-      const values = form.getFieldsValue();
-      const merged: AccessLogQueryParams = {
-        page: pageInfo.page,
-        size: pageInfo.pageSize,
-        ...values,
-        ...params,
-      };
-
-      const res: PageResponse<AccessLogListItem> = await apiService.getAccessLogs(merged);
+      const query = buildQueryParams(params);
+      const res: PageResponse<AccessLogListItem> = await apiService.getAccessLogs(query);
       setData(res.content || []);
       setPageInfo({
         total: res.totalElements || 0,
         page: res.number || 0,
-        pageSize: res.size || merged.size || 10,
+        pageSize: res.size || query.size || 10,
       });
     } catch (e) {
       console.error(e);
@@ -53,18 +66,6 @@ const LogAudit: React.FC = () => {
       setLoading(false);
     }
   };
-
-  // 首次渲染：默认选择今天并加载数据
-  useEffect(() => {
-    const start = dayjs().startOf('day');
-    const end = dayjs().endOf('day');
-    form.setFieldsValue({
-      from: start.toISOString(),
-      to: end.toISOString(),
-    });
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // 分页变化时重新加载
   useEffect(() => {
@@ -79,8 +80,10 @@ const LogAudit: React.FC = () => {
 
   const onReset = () => {
     form.resetFields();
+    const [start, end] = getTodayRange();
+    form.setFieldsValue({ range: [start, end] });
     setPageInfo({ total: 0, page: 0, pageSize: 10 });
-    fetchData({ page: 0, size: 10 });
+    fetchData({ page: 0, size: 10, from: start.toISOString(), to: end.toISOString() });
   };
 
   const openDetail = async (id: string) => {
@@ -120,18 +123,12 @@ const LogAudit: React.FC = () => {
   return (
     <div>
       <Card title="日志审计" bordered={false} style={{ marginBottom: 16 }}>
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" initialValues={{ range: getTodayRange() }}>
           <Row gutter={16}>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="时间范围" name="range">
                 <RangePicker
                   showTime
-                  defaultValue={[dayjs().startOf('day'), dayjs().endOf('day')]}
-                  onChange={(val) => {
-                    const from = val?.[0]?.toISOString();
-                    const to = val?.[1]?.toISOString();
-                    form.setFieldsValue({ from, to });
-                  }}
                 />
               </Form.Item>
             </Col>

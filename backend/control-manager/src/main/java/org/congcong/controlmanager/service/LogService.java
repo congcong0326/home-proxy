@@ -102,4 +102,11 @@ public class LogService {
     public long countExpiredMinuteTrafficStats() {
         return accessLogStoreFactory.current().countExpiredMinuteTrafficStats();
     }
+
+    /**
+     * 统计指定时间范围的总流量（bytes_in + bytes_out）。
+     */
+    public long sumBytes(LocalDateTime from, LocalDateTime to) {
+        return accessLogStoreFactory.current().sumBytes(from, to);
+    }
 }

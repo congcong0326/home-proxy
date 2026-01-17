@@ -24,10 +24,12 @@ import {
   SendOutlined,
   ReloadOutlined,
   ThunderboltOutlined,
-  SafetyOutlined
+  SafetyOutlined,
+  ClockCircleOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { MailGateway, MailTarget, MailSendLog, MailSendRequest } from '../types/mail';
+import { MailGateway, MailTarget, MailSendLog } from '../types/mail';
+import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
 import './MailGateway.css';
 
 const { Title, Paragraph, Text } = Typography;
@@ -56,6 +58,8 @@ const templates: Record<TemplateKey, { title: string; desc: string; toList: stri
   }
 };
 
+const MAIL_TASK_TYPE = 'mail_biz';
+
 const MailGatewayPage: React.FC = () => {
   const [gateways, setGateways] = useState<MailGateway[]>([]);
   const [targets, setTargets] = useState<MailTarget[]>([]);
@@ -74,7 +78,13 @@ const MailGatewayPage: React.FC = () => {
 
   const [gatewayForm] = Form.useForm<MailGateway>();
   const [targetForm] = Form.useForm<MailTarget>();
-  const [sendForm] = Form.useForm<MailSendRequest>();
+  const [sendForm] = Form.useForm<{ bizKey: string }>();
+  const [scheduleForm] = Form.useForm<ScheduledTaskRequest>();
+
+  const [schedules, setSchedules] = useState<ScheduledTask[]>([]);
+  const [loadingSchedules, setLoadingSchedules] = useState(false);
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<ScheduledTask | null>(null);
 
   const gatewayMap = useMemo(() => {
     const map = new Map<number, MailGateway>();
@@ -88,6 +98,7 @@ const MailGatewayPage: React.FC = () => {
     loadGateways();
     loadTargets();
     loadLogs();
+    loadSchedules();
   }, []);
 
   const loadGateways = async () => {
@@ -127,6 +138,18 @@ const MailGatewayPage: React.FC = () => {
       message.error(e?.message || '加载发送日志失败');
     } finally {
       setLoadingLogs(false);
+    }
+  };
+
+  const loadSchedules = async () => {
+    try {
+      setLoadingSchedules(true);
+      const data = await apiService.listScheduledTasks();
+      setSchedules((data || []).filter((t) => t.taskType === MAIL_TASK_TYPE));
+    } catch (e: any) {
+      message.error(e?.message || '加载定时任务失败');
+    } finally {
+      setLoadingSchedules(false);
     }
   };
 
@@ -234,16 +257,12 @@ const MailGatewayPage: React.FC = () => {
   const handleSend = async () => {
     try {
       const values = await sendForm.validateFields();
-      const payload: MailSendRequest = {
-        ...values,
-        contentType: values.contentType || 'text/plain'
-      };
       setSending(true);
-      await apiService.sendMail(payload);
+      await apiService.sendMail({ bizKey: values.bizKey });
       message.success('发送成功，已记录日志');
-      loadLogs(logBizKeyFilter);
+      setLogBizKeyFilter(values.bizKey);
+      loadLogs(values.bizKey);
     } catch (e: any) {
-      if (e?.errorFields) return;
       message.error(e?.message || '发送失败');
     } finally {
       setSending(false);
@@ -259,14 +278,91 @@ const MailGatewayPage: React.FC = () => {
       enabled: true
     });
     sendForm.setFieldsValue({
-      bizKey,
-      subject: tpl.defaultSubject,
-      content: tpl.defaultContent,
-      contentType: tpl.contentType
+      bizKey
     });
     setTargetModalOpen(true);
     setEditingTarget(null);
   };
+
+  const openScheduleModal = (task?: ScheduledTask) => {
+    setEditingSchedule(task || null);
+    scheduleForm.resetFields();
+    if (task) {
+      scheduleForm.setFieldsValue({
+        taskKey: task.taskKey,
+        taskType: task.taskType,
+        bizKey: task.bizKey,
+        cronExpression: task.cronExpression,
+        description: task.description,
+        enabled: task.enabled
+      });
+    } else {
+      scheduleForm.setFieldsValue({
+        taskKey: '',
+        taskType: MAIL_TASK_TYPE,
+        bizKey: targets[0]?.bizKey,
+        cronExpression: '0 0 9 * * ?',
+        description: '自动发送邮件',
+        enabled: true
+      });
+    }
+    setScheduleModalOpen(true);
+  };
+
+  const handleScheduleSubmit = async () => {
+    try {
+      const values = await scheduleForm.validateFields();
+      const payload: ScheduledTaskRequest = {
+        ...values,
+        taskType: MAIL_TASK_TYPE,
+        config: { bizKey: values.bizKey },
+        enabled: values.enabled !== undefined ? values.enabled : true
+      };
+      if (editingSchedule?.id) {
+        await apiService.updateScheduledTask(editingSchedule.id, payload);
+        message.success('定时任务已更新');
+      } else {
+        await apiService.createScheduledTask(payload);
+        message.success('定时任务已创建');
+      }
+      setScheduleModalOpen(false);
+      loadSchedules();
+    } catch (e: any) {
+      if (e?.errorFields) return;
+      message.error(e?.message || '保存定时任务失败');
+    }
+  };
+
+  const handleScheduleToggle = async (task: ScheduledTask, enabled: boolean) => {
+    try {
+      await apiService.toggleScheduledTask(task.id, enabled);
+      message.success(enabled ? '已启用任务' : '已停用任务');
+      loadSchedules();
+    } catch (e: any) {
+      message.error(e?.message || '切换任务状态失败');
+    }
+  };
+
+  const handleScheduleDelete = (task: ScheduledTask) => {
+    Modal.confirm({
+      title: `删除任务 ${task.taskKey}?`,
+      onOk: async () => {
+        try {
+          await apiService.deleteScheduledTask(task.id);
+          message.success('任务已删除');
+          loadSchedules();
+        } catch (e: any) {
+          message.error(e?.message || '删除失败');
+        }
+      }
+    });
+  };
+
+  const applyCronPreset = (cron: string) => {
+    scheduleForm.setFieldsValue({ cronExpression: cron });
+  };
+
+  const formatDateTime = (value?: string) => (value ? new Date(value).toLocaleString() : '-');
 
   const gatewayColumns = [
     { title: '名称', dataIndex: 'name', key: 'name' },
@@ -364,6 +460,36 @@ const MailGatewayPage: React.FC = () => {
     }
   ];
 
+  const scheduleColumns = [
+    { title: '任务Key', dataIndex: 'taskKey', key: 'taskKey' },
+    { title: '业务Key', dataIndex: 'bizKey', key: 'bizKey' },
+    { title: 'Cron', dataIndex: 'cronExpression', key: 'cronExpression', ellipsis: true },
+    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+    {
+      title: '状态',
+      key: 'enabled',
+      render: (_: any, record: ScheduledTask) => (
+        <Switch checked={record.enabled} onChange={(val) => handleScheduleToggle(record, val)} />
+      )
+    },
+    {
+      title: '最近执行',
+      dataIndex: 'lastExecutedAt',
+      key: 'lastExecutedAt',
+      render: (text: string) => formatDateTime(text)
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      render: (_: any, record: ScheduledTask) => (
+        <Space size="small">
+          <Button type="link" size="small" onClick={() => openScheduleModal(record)}>编辑</Button>
+          <Button type="link" size="small" danger onClick={() => handleScheduleDelete(record)}>删除</Button>
+        </Space>
+      )
+    }
+  ];
+
   const activeTemplateState = (bizKey: TemplateKey) => {
     const target = targets.find((t) => t.bizKey === bizKey);
     const gateway = target?.gatewayId ? gatewayMap.get(target.gatewayId) : gateways.find((g) => g.enabled);
@@ -376,7 +502,7 @@ const MailGatewayPage: React.FC = () => {
         <div>
           <Title level={3} style={{ marginBottom: 4 }}>邮件网关</Title>
           <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            为内部业务提供简洁的邮件发送能力：网关配置、业务目标绑定（默认 bizKey = ops.alert / ops.traffic_report），同步发送并留痕。
+            为内部业务提供简洁的邮件发送能力：网关配置、业务目标绑定（默认 bizKey = ops.alert / ops.traffic_report），支持按 bizKey 测试发送与定时发送。
           </Paragraph>
         </div>
         <Space>
@@ -419,13 +545,10 @@ const MailGatewayPage: React.FC = () => {
                     </Button>
                     <Button size="small" icon={<SendOutlined />} type="primary" onClick={() => {
                       sendForm.setFieldsValue({
-                        bizKey: key,
-                        subject: tpl.defaultSubject,
-                        content: tpl.defaultContent,
-                        contentType: tpl.contentType
+                        bizKey: key
                       });
                     }}>
-                      填充发送表单
+                      选择此 bizKey 测试发送
                     </Button>
                   </Space>
                 </div>
@@ -471,46 +594,26 @@ const MailGatewayPage: React.FC = () => {
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col xs={24} lg={10}>
           <Card
-            title={<Space><SendOutlined />内部发送（同步）</Space>}
-            extra={<Tag color="purple">bizKey + 内容 = 发送</Tag>}
+            title={<Space><SendOutlined />测试发送（按 bizKey 构造）</Space>}
+            extra={<Tag color="purple">后端按 bizKey 构造内容</Tag>}
           >
             <Form
               layout="vertical"
               form={sendForm}
-              initialValues={{ contentType: 'text/plain', bizKey: 'ops.alert' }}
+              initialValues={{ bizKey: 'ops.traffic_report' }}
             >
               <Form.Item label="业务 Key" name="bizKey" rules={[{ required: true, message: '请选择业务 Key' }]}>
-                <Select placeholder="选择 bizKey" options={targets.map((t) => ({ label: t.bizKey, value: t.bizKey }))} />
+                <Select
+                  placeholder="选择 bizKey"
+                  options={targets.map((t) => ({ label: t.bizKey, value: t.bizKey }))}
+                />
               </Form.Item>
-              <Form.Item label="主题" name="subject" rules={[{ required: true, message: '请输入主题' }]}>
-                <Input placeholder="例如： [告警] ..." />
-              </Form.Item>
-              <Row gutter={12}>
-                <Col span={16}>
-                  <Form.Item label="正文" name="content" rules={[{ required: true, message: '请输入正文' }]}>
-                    <TextArea rows={6} placeholder="支持 text/plain 或 text/html" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item label="内容类型" name="contentType">
-                    <Select
-                      options={[
-                        { value: 'text/plain', label: 'text/plain' },
-                        { value: 'text/html', label: 'text/html' }
-                      ]}
-                    />
-                  </Form.Item>
-                  <Form.Item label="请求ID(可选)" name="requestId">
-                    <Input placeholder="用于幂等，例如 traceId" />
-                  </Form.Item>
-                </Col>
-              </Row>
               <Space>
                 <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={sending}>
-                  发送
+                  测试发送
                 </Button>
-                <Tooltip title="用模板填充告警示例">
-                  <Button onClick={() => applyTemplateToForms('ops.alert')}>填充告警模板</Button>
+                <Tooltip title="将快速选择模板 bizKey 并引导创建投递目标">
+                  <Button onClick={() => applyTemplateToForms('ops.traffic_report')}>填充流量报表</Button>
                 </Tooltip>
               </Space>
             </Form>
@@ -539,6 +642,31 @@ const MailGatewayPage: React.FC = () => {
               columns={logColumns}
               dataSource={logs}
               loading={loadingLogs}
+              pagination={false}
+              size="small"
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col xs={24}>
+          <Card
+            title={<Space><ClockCircleOutlined />定时发送配置</Space>}
+            extra={
+              <Space>
+                <Tag color="blue">任务类型：{MAIL_TASK_TYPE}</Tag>
+                <Button size="small" icon={<PlusOutlined />} type="primary" onClick={() => openScheduleModal()}>
+                  新建任务
+                </Button>
+              </Space>
+            }
+          >
+            <Table
+              rowKey="id"
+              columns={scheduleColumns}
+              dataSource={schedules}
+              loading={loadingSchedules}
               pagination={false}
               size="small"
             />
@@ -627,6 +755,51 @@ const MailGatewayPage: React.FC = () => {
                 <Select.Option value={g.id} key={g.id}>{g.name}</Select.Option>
               ))}
             </Select>
+          </Form.Item>
+          <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue>
+            <Switch defaultChecked />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={editingSchedule ? '编辑定时任务' : '新建定时任务'}
+        open={scheduleModalOpen}
+        onCancel={() => setScheduleModalOpen(false)}
+        onOk={handleScheduleSubmit}
+        destroyOnClose
+      >
+        <Form layout="vertical" form={scheduleForm}>
+          <Form.Item name="taskKey" label="任务 Key" rules={[{ required: true, message: '请输入唯一任务 Key' }]}>
+            <Input placeholder="例如：traffic-report-daily" />
+          </Form.Item>
+          <Form.Item name="taskType" hidden initialValue={MAIL_TASK_TYPE}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="bizKey" label="业务 Key" rules={[{ required: true, message: '请选择业务 Key' }]}>
+            <Select
+              placeholder="选择要发送的 bizKey"
+              options={targets.map((t) => ({ label: t.bizKey, value: t.bizKey }))}
+            />
+          </Form.Item>
+          <Form.Item
+            name="cronExpression"
+            label="Cron 表达式"
+            rules={[{ required: true, message: '请输入 cron 表达式' }]}
+            extra="示例：每天 09:00 -> 0 0 9 * * ? ，每10分钟 -> 0 */10 * * * ?"
+          >
+            <Input placeholder="如：0 0 9 * * ?" />
+          </Form.Item>
+          <div style={{ marginTop: -8, marginBottom: 8 }}>
+            <Text type="secondary">快速填充：</Text>
+            <Space size="small" style={{ marginLeft: 8 }}>
+              <Tag color="blue" onClick={() => applyCronPreset('0 0 9 * * ?')} style={{ cursor: 'pointer' }}>每天 09:00</Tag>
+              <Tag color="green" onClick={() => applyCronPreset('0 0/30 * * * ?')} style={{ cursor: 'pointer' }}>每30分钟</Tag>
+              <Tag color="purple" onClick={() => applyCronPreset('0 0 * * * ?')} style={{ cursor: 'pointer' }}>每小时</Tag>
+            </Space>
+          </div>
+          <Form.Item name="description" label="描述">
+            <Input placeholder="任务用途说明" />
           </Form.Item>
           <Form.Item name="enabled" label="启用" valuePropName="checked" initialValue>
             <Switch defaultChecked />

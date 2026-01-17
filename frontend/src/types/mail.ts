@@ -36,6 +36,10 @@ export interface MailSendRequest {
   requestId?: string;
 }
 
+export interface MailBizTypeRequest {
+  bizKey: string;
+}
+
 export interface MailSendResponse {
   sendLogId: number;
   status: MailSendStatus;

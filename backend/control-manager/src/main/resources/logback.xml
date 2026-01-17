@@ -22,6 +22,18 @@
         </encoder>
     </appender>
 
+    <!-- JavaMail SMTP 调试日志单独输出到文件，避免干扰主日志 -->
+    <appender name="MAIL_DEBUG" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/mail-debug.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/mail-debug.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxHistory>3</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level %logger - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <!-- 异步包装，允许丢弃日志避免阻塞 -->
     <appender name="ASYNC_CONSOLE" class="ch.qos.logback.classic.AsyncAppender">
         <queueSize>1024</queueSize>
@@ -38,11 +50,16 @@
     </appender>
 
     <!-- 根日志级别 -->
-    <root level="INFO">
+    <root level="info">
         <appender-ref ref="ASYNC_CONSOLE" />
         <appender-ref ref="ASYNC_FILE" />
     </root>
 
     <!-- 应用程序日志级别 -->
-    <logger name="org.congcong.controlmanager" level="INFO" />
+    <logger name="org.congcong.controlmanager" level="info" />
+
+    <!-- JavaMail 调试日志，仅写 mail-debug 文件 -->
+    <logger name="com.sun.mail" level="DEBUG" additivity="false">
+        <appender-ref ref="MAIL_DEBUG" />
+    </logger>
 </configuration>

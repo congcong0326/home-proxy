@@ -34,5 +34,7 @@ public record DiskDetail(
         int maxEraseCount,          // 最大擦除次数
         int totalEraseCount,        // 总擦除次数
         String diskType,            // 磁盘类型：HDD、SATA_SSD或NVME_SSD
-        List<Integer> historyTemperature
+        List<Integer> historyTemperature,
+        List<Long> historyReadBytes,    // 10分钟粒度读增量（字节）
+        List<Long> historyWriteBytes    // 10分钟粒度写增量（字节）
 ) {}

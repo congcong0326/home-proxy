@@ -5,6 +5,7 @@ import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.controlmanager.entity.disk.DiskDetail;
 import org.congcong.controlmanager.entity.disk.DiskInfo;
+import org.congcong.controlmanager.entity.disk.DiskIoStats;
 import org.springframework.stereotype.Service;
 
 
@@ -25,7 +26,11 @@ public class DiskService {
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final Map<String, List<Integer>> temperatureInfo = new HashMap<>();
+    private final Map<String, List<Long>> readDeltaInfo = new HashMap<>();
+    private final Map<String, List<Long>> writeDeltaInfo = new HashMap<>();
     private final Map<String, LocalDate> lastUpdateDate = new HashMap<>();
+    private final Map<String, Long> lastReadBytes = new HashMap<>();
+    private final Map<String, Long> lastWriteBytes = new HashMap<>();
     private final List<String> devices = new ArrayList<>();
     private boolean isSupport = false;
 
@@ -42,28 +47,33 @@ public class DiskService {
 
             for (String device : devices) {
                 try {
-                    int temperature = getTemperature(device);
+                    Sample sample = sampleDevice(device);
+
                     List<Integer> temps = temperatureInfo.computeIfAbsent(device, k -> new ArrayList<>());
+                    List<Long> reads = readDeltaInfo.computeIfAbsent(device, k -> new ArrayList<>());
+                    List<Long> writes = writeDeltaInfo.computeIfAbsent(device, k -> new ArrayList<>());
                     LocalDate lastDate = lastUpdateDate.get(device);
 
-                    // 如果是新的一天，重置list
+                    // 如果是新的一天，重置list（保持 lastRead/lastWrite 以便计算差值）
                     if (lastDate == null || !lastDate.equals(nowDate)) {
                         temps.clear();
+                        reads.clear();
+                        writes.clear();
                         lastUpdateDate.put(device, nowDate);
                     }
 
-                    // 补0直到当前位置
-                    while (temps.size() < currentSlot) {
-                        temps.add(0);
-                    }
+                    fillToSlot(temps, currentSlot, 0);
+                    fillToSlot(reads, currentSlot, 0L);
+                    fillToSlot(writes, currentSlot, 0L);
 
-                    if (temps.size() == currentSlot) {
-                        temps.add(temperature); // 正常采样
-                    } else {
-                        temps.set(currentSlot, temperature); // 覆盖（异常情况）
-                    }
+                    temps.set(currentSlot, sample.temperature());
+
+                    long readDelta = computeDelta(lastReadBytes, device, sample.readBytes());
+                    long writeDelta = computeDelta(lastWriteBytes, device, sample.writeBytes());
+                    reads.set(currentSlot, readDelta);
+                    writes.set(currentSlot, writeDelta);
                 } catch (Exception e) {
-                    log.error("获取磁盘温度失败", e);
+                    log.error("获取磁盘指标失败", e);
                 }
             }
         }, 0, 10, TimeUnit.MINUTES);
@@ -74,6 +84,34 @@ public class DiskService {
         return SmartCtlParser.parseTemperature(dataOutput);
     }
 
+    private Sample sampleDevice(String device) {
+        String output = executeSmartCtl(device, "-a");
+        int temperature = SmartCtlParser.parseTemperature(output);
+        long[] rw = SmartCtlParser.parseReadWriteBytes(output);
+        return new Sample(temperature, rw[0], rw[1]);
+    }
+
+    private void fillToSlot(List<Integer> list, int slot, Integer defaultVal) {
+        while (list.size() <= slot) {
+            list.add(defaultVal);
+        }
+    }
+
+    private void fillToSlot(List<Long> list, int slot, Long defaultVal) {
+        while (list.size() <= slot) {
+            list.add(defaultVal);
+        }
+    }
+
+    private long computeDelta(Map<String, Long> lastMap, String device, long current) {
+        Long last = lastMap.get(device);
+        long delta = (last == null) ? 0L : Math.max(0L, current - last);
+        lastMap.put(device, current);
+        return delta;
+    }
+
+    private record Sample(int temperature, long readBytes, long writeBytes) {}
+
     public List<DiskInfo> getAllDisks() {
         if (!isSupport) {
             return Collections.emptyList();
@@ -83,13 +121,37 @@ public class DiskService {
             .toList();
     }
 
+    public List<DiskIoStats> getDailyIoStats() {
+        List<DiskIoStats> list = new ArrayList<>();
+        for (String device : devices) {
+            List<Long> reads = readDeltaInfo.getOrDefault(device, Collections.emptyList());
+            List<Long> writes = writeDeltaInfo.getOrDefault(device, Collections.emptyList());
+            long totalRead = reads.stream().mapToLong(Long::longValue).sum();
+            long totalWrite = writes.stream().mapToLong(Long::longValue).sum();
+            list.add(new DiskIoStats(
+                    device,
+                    new ArrayList<>(reads),
+                    new ArrayList<>(writes),
+                    totalRead,
+                    totalWrite
+            ));
+        }
+        return list;
+    }
+
 
 
     public DiskDetail getDiskDetail(String device) {
         if (!devices.contains(device)) {
             throw new UnsupportedOperationException("Device not found");
         }
-        return SmartCtlParser.parseDetail(device, executeSmartCtl(device, "-a"), temperatureInfo.get(device));
+        return SmartCtlParser.parseDetail(
+                device,
+                executeSmartCtl(device, "-a"),
+                temperatureInfo.get(device),
+                readDeltaInfo.get(device),
+                writeDeltaInfo.get(device)
+        );
     }
 
     private DiskInfo getDiskInfo(String device) {

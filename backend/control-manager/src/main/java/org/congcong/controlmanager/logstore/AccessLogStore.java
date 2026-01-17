@@ -15,4 +15,8 @@ public interface AccessLogStore {
     List<TimeSeriesPoint> getUserTrafficTrend(Long userId, java.time.LocalDateTime from, java.time.LocalDateTime to);
     int cleanupExpiredMinuteTrafficStats();
     long countExpiredMinuteTrafficStats();
+    /**
+     * 统计区间内总流量（bytes_in + bytes_out）。
+     */
+    long sumBytes(java.time.LocalDateTime from, java.time.LocalDateTime to);
 }

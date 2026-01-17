@@ -51,11 +51,12 @@ import { DiskInfo, DiskDetail } from '../types/disk';
 import {
   MailGateway,
   MailTarget,
-  MailSendRequest,
+  MailBizTypeRequest,
   MailSendResponse,
   MailSendLogPage,
   MailSendLogQuery
 } from '../types/mail';
+import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -752,7 +753,7 @@ class ApiService {
     });
   }
 
-  async sendMail(data: MailSendRequest): Promise<MailSendResponse> {
+  async sendMail(data: MailBizTypeRequest): Promise<MailSendResponse> {
     return this.adminRequest<MailSendResponse>('/internal/mail/send', {
       method: 'POST',
       body: JSON.stringify(data)
@@ -769,6 +770,38 @@ class ApiService {
     const qs = searchParams.toString();
     const endpoint = qs ? `/admin/send-logs?${qs}` : '/admin/send-logs';
     return this.adminRequest<MailSendLogPage>(endpoint);
+  }
+
+  // ========== 通用定时任务 ==========
+  async listScheduledTasks(): Promise<ScheduledTask[]> {
+    return this.adminRequest<ScheduledTask[]>('/internal/scheduler/tasks');
+  }
+
+  async createScheduledTask(data: ScheduledTaskRequest): Promise<ScheduledTask> {
+    return this.adminRequest<ScheduledTask>('/internal/scheduler/tasks', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async updateScheduledTask(id: number, data: ScheduledTaskRequest): Promise<ScheduledTask> {
+    return this.adminRequest<ScheduledTask>(`/internal/scheduler/tasks/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async toggleScheduledTask(id: number, enabled: boolean): Promise<ScheduledTask> {
+    return this.adminRequest<ScheduledTask>(`/internal/scheduler/tasks/${id}/toggle`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled })
+    });
+  }
+
+  async deleteScheduledTask(id: number): Promise<void> {
+    return this.adminRequest<void>(`/internal/scheduler/tasks/${id}`, {
+      method: 'DELETE'
+    });
   }
 }
 

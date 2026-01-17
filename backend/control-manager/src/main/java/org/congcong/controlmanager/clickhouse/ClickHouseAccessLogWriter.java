@@ -44,7 +44,6 @@ public class ClickHouseAccessLogWriter {
             int size = bufferSize.incrementAndGet();
             if (size == 1) firstBufferedAt = now;
         }
-        log.debug("parse {} logs cost time {} ms", logs.size(), (System.currentTimeMillis() - now));
         if (shouldFlush(now)) {
             return flush();
         }

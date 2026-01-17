@@ -14,6 +14,7 @@ import org.congcong.controlmanager.enums.MailSendStatus;
 import org.congcong.controlmanager.repository.mail.MailGatewayRepository;
 import org.congcong.controlmanager.repository.mail.MailSendLogRepository;
 import org.congcong.controlmanager.repository.mail.MailTargetRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,11 @@ public class MailSendService {
     private final MailTargetRepository targetRepository;
     private final MailGatewayRepository gatewayRepository;
     private final MailSendLogRepository mailSendLogRepository;
+    /**
+     * Enable JavaMail session debug logging; configurable via application properties.
+     */
+    @Value("${mail.debug:false}")
+    private Boolean mailDebug;
 
     public PageResponse<MailSendLogDTO> queryLogs(String bizKey, MailSendStatus status, LocalDateTime startAt, LocalDateTime endAt, Pageable pageable) {
         Page<MailSendLog> page = mailSendLogRepository.queryLogs(bizKey, status, startAt, endAt, pageable);
@@ -50,7 +56,7 @@ public class MailSendService {
     public MailSendResponse send(MailSendRequest request) {
         MailTarget target = targetRepository.findByBizKeyAndEnabledTrue(request.getBizKey())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "bizKey not found or disabled"));
-
+        log.info("target mail is ={}", target);
         if (StringUtils.hasText(request.getRequestId())) {
             MailSendLog existing = mailSendLogRepository.findTopByBizKeyAndRequestIdOrderByIdDesc(request.getBizKey(), request.getRequestId()).orElse(null);
             if (existing != null) {
@@ -79,7 +85,16 @@ public class MailSendService {
             mailSendLogRepository.save(logEntry);
             return new MailSendResponse(logEntry.getId(), MailSendStatus.SUCCESS, null);
         } catch (Exception e) {
-            log.warn("Send mail failed for bizKey {}", target.getBizKey(), e);
+            log.warn("Send mail failed for bizKey {} via {}:{} as {} subject [{}] to [{}] cc [{}] bcc [{}]",
+                    target.getBizKey(),
+                    gateway.getHost(),
+                    gateway.getPort(),
+                    gateway.getUsername(),
+                    request.getSubject(),
+                    target.getToList(),
+                    target.getCcList(),
+                    target.getBccList(),
+                    e);
             logEntry.setStatus(MailSendStatus.FAILED);
             logEntry.setErrorMessage(truncate(e.getMessage(), 1000));
             mailSendLogRepository.save(logEntry);
@@ -111,6 +126,7 @@ public class MailSendService {
         properties.put("mail.smtp.starttls.enable", Boolean.toString(gateway.isStarttlsEnabled()));
         properties.put("mail.smtp.ssl.enable", Boolean.toString(gateway.isSslEnabled()));
         properties.put("mail.smtp.ssl.trust", gateway.getHost());
+        properties.put("mail.debug", Boolean.toString(mailDebug));
 
         MimeMessage message = mailSender.createMimeMessage();
         MimeMessageHelper helper = new MimeMessageHelper(message, false, StandardCharsets.UTF_8.name());
@@ -133,6 +149,14 @@ public class MailSendService {
         helper.setSubject(request.getSubject());
         boolean isHtml = "text/html".equalsIgnoreCase(normalizedContentType);
         helper.setText(request.getContent(), isHtml);
+
+        log.info("send mail for bizKey {} via {}:{} to [{}] cc [{}] bcc [{}]",
+                target.getBizKey(),
+                gateway.getHost(),
+                gateway.getPort(),
+                String.join(",", to),
+                String.join(",", cc),
+                String.join(",", bcc));
         mailSender.send(message);
     }
 

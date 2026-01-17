@@ -60,6 +60,18 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     @Override
+    public long sumBytes(LocalDateTime from, LocalDateTime to) {
+        StringBuilder sb = new StringBuilder("SELECT sum(bytes_in + bytes_out) AS total_bytes FROM default.access_log WHERE 1=1");
+        List<Object> params = new ArrayList<>();
+        if (from != null) { sb.append(" AND ts >= ?"); params.add(toTimestamp(from)); }
+        if (to != null) { sb.append(" AND ts <= ?"); params.add(toTimestamp(to)); }
+        List<Map<String,Object>> rows = client.query(sb.toString(), params.toArray());
+        if (rows.isEmpty()) return 0L;
+        Long v = toLong(rows.get(0).get("total_bytes"));
+        return v == null ? 0L : v;
+    }
+
+    @Override
     public PageResponse<AccessLogListItem> queryAccessLogs(AccessLogQueryRequest req) {
         StringBuilder sb = new StringBuilder();
         List<Object> params = new ArrayList<>();
