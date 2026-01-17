@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Tag, Table, Descriptions, Space, Button, Statistic, Row, Col, Alert } from 'antd';
-import { HddOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Card, Tag, Table, Descriptions, Space, Button, Statistic, Row, Col, Alert, Radio } from 'antd';
+import { HddOutlined, ReloadOutlined, LineChartOutlined, FireOutlined } from '@ant-design/icons';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -53,6 +53,7 @@ const DiskMonitor: React.FC = () => {
   const [detail, setDetail] = useState<DiskDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
+  const [metric, setMetric] = useState<'temperature' | 'read' | 'write'>('temperature');
 
   const loadDisks = async () => {
     try {
@@ -111,32 +112,56 @@ const DiskMonitor: React.FC = () => {
     return tips;
   }, [detail]);
 
-  const temperatureData = useMemo(() => {
-    const temps = detail?.historyTemperature ?? [];
-    // 补齐到144槽位，缺失以null表示断点
-    const data = Array.from({ length: 144 }, (_, i) => (i < temps.length ? temps[i] : null));
+  const chartCtx = useMemo(() => {
+    const labels = temperatureLabels;
+    let data: (number | null)[] = [];
+    let label = '';
+    let color = '#3b82f6';
+    let yTitle = '';
+    if (metric === 'temperature') {
+      const temps = detail?.historyTemperature ?? [];
+      data = Array.from({ length: 144 }, (_, i) => (i < temps.length ? temps[i] : null));
+      label = '温度 (°C)';
+      color = '#3b82f6';
+      yTitle = '°C';
+    } else if (metric === 'read') {
+      const reads = detail?.historyReadBytes ?? [];
+      data = Array.from({ length: 144 }, (_, i) => (i < reads.length ? reads[i] / (1024 * 1024) : null));
+      label = '读取 (MB/10分钟)';
+      color = '#10b981';
+      yTitle = 'MB';
+    } else {
+      const writes = detail?.historyWriteBytes ?? [];
+      data = Array.from({ length: 144 }, (_, i) => (i < writes.length ? writes[i] / (1024 * 1024) : null));
+      label = '写入 (MB/10分钟)';
+      color = '#f59e0b';
+      yTitle = 'MB';
+    }
     return {
-      labels: temperatureLabels,
-      datasets: [
-        {
-          label: '温度 (°C)',
-          data,
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59, 130, 246, 0.15)',
-          tension: 0.2,
-          spanGaps: true,
-          pointRadius: 0,
-        },
-      ],
+      data: {
+        labels,
+        datasets: [
+          {
+            label,
+            data,
+            borderColor: color,
+            backgroundColor: `${color}33`,
+            tension: 0.2,
+            spanGaps: true,
+            pointRadius: 0,
+          },
+        ],
+      },
+      yTitle,
     };
-  }, [detail]);
+  }, [detail, metric]);
 
   const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: { position: 'top' as const },
-      title: { display: true, text: '今日温度曲线（每10分钟采样）' },
+      title: { display: true, text: metric === 'temperature' ? '今日温度曲线（每10分钟采样）' : '今日读写曲线（每10分钟采样）' },
       tooltip: { mode: 'index' as const, intersect: false },
     },
     scales: {
@@ -144,17 +169,16 @@ const DiskMonitor: React.FC = () => {
       y: {
         display: true,
         suggestedMin: 0,
-        suggestedMax: 100,
-        title: { display: true, text: '°C' },
+        title: { display: true, text: chartCtx.yTitle },
       },
     },
-  }), []);
+  }), [metric, chartCtx]);
 
   return (
     <div className="traffic-overview">
       <div className="page-header">
         <h2>磁盘监控</h2>
-        <p>查看磁盘健康状态与当天温度曲线</p>
+        <p>查看磁盘健康状态、温度与读写曲线（10分钟采样）</p>
       </div>
 
       {/* 顶部汇总与刷新 */}
@@ -277,9 +301,16 @@ const DiskMonitor: React.FC = () => {
                 </Descriptions>
               )}
 
-              {/* 温度曲线 */}
+              {/* 曲线切换 */}
+              <div style={{ marginBottom: 8 }}>
+                <Radio.Group value={metric} onChange={(e) => setMetric(e.target.value)}>
+                  <Radio.Button value="temperature"><FireOutlined /> 温度</Radio.Button>
+                  <Radio.Button value="read"><LineChartOutlined /> 读</Radio.Button>
+                  <Radio.Button value="write"><LineChartOutlined /> 写</Radio.Button>
+                </Radio.Group>
+              </div>
               <div className="trend-chart-container" style={{ height: 360 }}>
-                <Line data={temperatureData} options={chartOptions} />
+                <Line data={chartCtx.data as any} options={chartOptions} />
               </div>
             </>
           )}
