@@ -13,6 +13,7 @@ import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
 import java.net.InetSocketAddress;
 
@@ -21,6 +22,7 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DatagramDnsQuery query) {
+        ProxyTimeContext proxyTimeContext = new ProxyTimeContext();
         InetSocketAddress client = query.sender();
 
         // 取第一个 Question（一般就一个）
@@ -30,6 +32,8 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         }
 
         String qName = question.name();
+        // DNS 常用 UDP（无连接），同一时刻可能并发发出多条查询
+        // 服务器返回响应时会带上同一个 Transaction ID，客户端/解析器用它把“这条响应”匹配回“哪一条请求”。
         int dnsId = query.id();
         DnsRecordType qType = question.type();
 
@@ -60,9 +64,8 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
                 inboundConfig,
                 dnsCtx
         );
-
-        ProxyTimeContext proxyTimeContext = new ProxyTimeContext();
         proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
+        ProxyContextFillUtil.proxyContextInitFill(ctx.channel(), inboundConfig, proxyContext);
         tunnelRequest.setProxyContext(proxyContext);
         tunnelRequest.setProxyTimeContext(proxyTimeContext);
         ctx.fireChannelRead(tunnelRequest);

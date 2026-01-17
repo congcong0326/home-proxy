@@ -110,12 +110,13 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             foreign = GeoIPUtil.getInstance().isForeign(targetHost, null);
         } else {
             // 域名通过规则判断
+            // 无法匹配的还是应该走国内连接
             MatchResult foreignResult = DomainRuleEngine.match(DomainRuleType.GEO_FOREIGN, targetHost);
-            if (!foreignResult.isMatched()) {
-                MatchResult cnResult = DomainRuleEngine.match(DomainRuleType.GEO_CN, targetHost);
-                foreign = !cnResult.isMatched();
+            MatchResult cnResult = DomainRuleEngine.match(DomainRuleType.GEO_CN, targetHost);
+            if (cnResult.isMatched()) {
+                foreign = false;
             } else {
-                foreign = true;
+                foreign = foreignResult.isMatched();
             }
         }
         proxyTunnelRequest.setCountry(foreign ? "NOT CN" : "CN");

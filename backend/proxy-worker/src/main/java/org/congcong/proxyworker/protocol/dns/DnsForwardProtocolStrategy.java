@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.dns;
 
+import com.google.common.cache.Cache;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -11,7 +12,6 @@ import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.ConcurrentMap;
 
 @Slf4j
 public class DnsForwardProtocolStrategy extends AbstractDnsProxyProtocolStrategy {
@@ -39,17 +39,17 @@ public class DnsForwardProtocolStrategy extends AbstractDnsProxyProtocolStrategy
     @Override
     protected SimpleChannelInboundHandler<? extends DnsMessage> buildResponseHandler(
             Channel inbound,
-            AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey) {
+            AttributeKey<Cache<Integer, Pending>> pendingKey) {
         return new SimpleChannelInboundHandler<DatagramDnsResponse>() {
 
             @Override
             protected void channelRead0(ChannelHandlerContext ctx, DatagramDnsResponse resp) {
-                ConcurrentMap<Integer, Pending> pending = ctx.channel().attr(pendingKey).get();
+                Cache<Integer, Pending> pending = ctx.channel().attr(pendingKey).get();
                 if (pending == null) {
                     log.debug("DNS forward: missing pending map");
                     return;
                 }
-                Pending entry = pending.remove(resp.id());
+                Pending entry = pending.asMap().remove(resp.id());
                 if (entry == null) {
                     log.debug("DNS forward: no pending entry for id={}", resp.id());
                     return;

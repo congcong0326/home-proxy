@@ -1,5 +1,7 @@
 package org.congcong.proxyworker.protocol.dns;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
@@ -15,21 +17,23 @@ import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import java.net.InetSocketAddress;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrategy {
 
-    private final AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey;
+    private static final int MAX_PENDING = 65535;
+    private static final int PENDING_TTL_SECONDS = 20;
+
+    private final AttributeKey<Cache<Integer, Pending>> pendingKey;
     private final AttributeKey<AtomicInteger> nextIdKey;
 
     protected record Pending(int inboundId, DnsProxyContext ctx, ProxyContext proxyContext, ProxyTimeContext timeContext) {
     }
 
     protected AbstractDnsProxyProtocolStrategy(String keyPrefix) {
-        this.pendingKey = AttributeKey.valueOf(keyPrefix + "Pending");
+        this.pendingKey = AttributeKey.valueOf(keyPrefix + "PendingCache");
         this.nextIdKey = AttributeKey.valueOf(keyPrefix + "NextId");
     }
 
@@ -48,21 +52,26 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
             return;
         }
 
-        ConcurrentMap<Integer, Pending> pending = outbound.attr(pendingKey).get();
+        // 第一次请求初始化暂存请求的缓存，并且注册一个响应处理器，处理返回的内容
+        // 由于netty dns 服务器单线程特性，不需要担心此处的线程安全问题
+        Cache<Integer, Pending> pending = outbound.attr(pendingKey).get();
         if (pending == null) {
-            pending = new ConcurrentHashMap<>();
+            pending = buildPendingCache();
             outbound.attr(pendingKey).set(pending);
             outbound.pipeline().addLast(buildResponseHandler(inboundCtx.channel(), pendingKey));
         }
+
+
         AtomicInteger nextId = outbound.attr(nextIdKey).get();
         if (nextId == null) {
             nextId = new AtomicInteger();
             outbound.attr(nextIdKey).set(nextId);
         }
-
+        // 分配一个0–65535的id
         int outboundId = allocateId(pending, nextId);
         ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(inboundCtx.channel(), request);
         ProxyTimeContext timeContext = ProxyContextResolver.resolveProxyTimeContext(inboundCtx.channel(), request);
+        // 通过缓存维护关系：外部dns服务器----outboundId-----缓存----dnsCtx.id-----内部请求客户端
         pending.put(outboundId, new Pending(dnsCtx.getId(), dnsCtx, proxyContext, timeContext));
 
         sendQuery(outbound, outboundId, dnsCtx);
@@ -87,16 +96,25 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         log.warn("{} upstream connect failed: {}", getClass().getSimpleName(), cause.getMessage(), cause);
     }
 
-    protected int allocateId(ConcurrentMap<Integer, Pending> pending, AtomicInteger nextId) {
-        for (int i = 0; i < 0x10000; i++) {
+    protected int allocateId(Cache<Integer, Pending> pending, AtomicInteger nextId) {
+        // 触发Guava把已过期的条目马上驱逐
+        pending.cleanUp();
+        for (int i = 0; i < MAX_PENDING; i++) {
             int candidate = nextId.getAndIncrement() & 0xFFFF;
-            if (!pending.containsKey(candidate)) return candidate;
+            if (!pending.asMap().containsKey(candidate)) return candidate;
         }
         throw new IllegalStateException("No available DNS IDs");
+    }
+
+    private Cache<Integer, Pending> buildPendingCache() {
+        return CacheBuilder.newBuilder()
+                .maximumSize(MAX_PENDING)
+                .expireAfterWrite(PENDING_TTL_SECONDS, TimeUnit.SECONDS)
+                .build();
     }
 
     protected abstract void sendQuery(Channel outbound, int outboundId, DnsProxyContext dnsCtx);
 
     protected abstract SimpleChannelInboundHandler<? extends DnsMessage>
-    buildResponseHandler(Channel inbound, AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey);
+    buildResponseHandler(Channel inbound, AttributeKey<Cache<Integer, Pending>> pendingKey);
 }

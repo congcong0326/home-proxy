@@ -22,6 +22,7 @@ public class DnsRewritingProtocolStrategy implements ProtocolStrategy {
 
     @Override
     public void onConnectSuccess(ChannelHandlerContext inboundCtx, Channel outboundChannel, ProxyTunnelRequest request) {
+        // dns 查询请求
         DnsProxyContext dnsCtx = (DnsProxyContext) request.getProtocolAttachment();
         InetSocketAddress client = dnsCtx.getClient();
         String answerIp = request.getRouteConfig().getOutboundProxyHost(); // 仅支持 IPv4

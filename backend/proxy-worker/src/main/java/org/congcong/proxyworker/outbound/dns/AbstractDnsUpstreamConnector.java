@@ -28,8 +28,10 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
         RouteConfig routeConfig = req.getRouteConfig();
         String host = routeConfig.getOutboundProxyHost();
         int port = routeConfig.getOutboundProxyPort() != null ? routeConfig.getOutboundProxyPort() : defaultPort();
+        // 使用远端DNS服务器类型+IP+PORT组合为唯一三元组
         PoolKey key = new PoolKey(outboundType(), host, port);
-
+        // 创建了相关的客户端
+        // 使用 POOL 维护三元组到目标DNS服务器之间的映射关系，在客户端销毁后去会同步回收
         ChannelFuture pooled = POOL.computeIfAbsent(key, k -> {
             ChannelFuture cf = create(inbound, host, port, k);
             cf.addListener((ChannelFutureListener) f -> {
@@ -41,16 +43,19 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
             });
             return cf;
         });
-
+        // 客户端已经就绪，则可以直接发送请求
         if (pooled.isSuccess() && pooled.channel().isActive() && ready(pooled.channel())) {
             if (outboundType() == ProtocolType.DOT) {
+                // DOT要等待SSL握手完成，注册回调在SSL完成后发送请求
                 awaitReady(pooled, relayPromise, key);
             } else {
+                // DNS没有握手请求，只要就绪可以直接发送
                 relayPromise.trySuccess(pooled.channel());
             }
             return pooled;
         }
 
+        // 客户端也许还未就绪，则注册回调，未来发送
         pooled.addListener((ChannelFutureListener) f -> {
             if (!f.isSuccess()) {
                 relayPromise.tryFailure(f.cause());

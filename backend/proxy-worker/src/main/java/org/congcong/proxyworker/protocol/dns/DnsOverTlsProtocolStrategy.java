@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.dns;
 
+import com.google.common.cache.Cache;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -51,17 +52,17 @@ public class DnsOverTlsProtocolStrategy extends AbstractDnsProxyProtocolStrategy
     @Override
     protected SimpleChannelInboundHandler<? extends DnsMessage> buildResponseHandler(
             Channel inbound,
-            AttributeKey<ConcurrentMap<Integer, Pending>> pendingKey) {
+            AttributeKey<Cache<Integer, Pending>> pendingKey) {
 
         return new SimpleChannelInboundHandler<DnsResponse>() {
             @Override
             protected void channelRead0(ChannelHandlerContext ctx, DnsResponse resp) {
-                ConcurrentMap<Integer, Pending> pending = ctx.channel().attr(pendingKey).get();
+                Cache<Integer, Pending> pending = ctx.channel().attr(pendingKey).get();
                 if (pending == null) {
                     log.warn("DoT: pending map missing");
                     return;
                 }
-                Pending entry = pending.remove(resp.id());
+                Pending entry = pending.asMap().remove(resp.id());
                 if (entry == null) {
                     log.debug("DoT response id={} has no pending entry", resp.id());
                     return;
