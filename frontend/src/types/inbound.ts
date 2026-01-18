@@ -53,6 +53,14 @@ export interface InboundConfigUpdateRequest {
   notes?: string;
 }
 
+export interface InboundTrafficStats {
+  inboundId: number;
+  bytesIn: number;
+  bytesOut: number;
+  totalBytes: number;
+  period?: string;
+}
+
 export interface InboundQueryParams {
   page?: number;
   size?: number;

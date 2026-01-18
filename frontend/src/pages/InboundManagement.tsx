@@ -24,18 +24,18 @@ import {
   DeleteOutlined,
   EditOutlined,
   NodeIndexOutlined,
-  SearchOutlined,
   FilterOutlined,
   SettingOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding } from '../types/inbound';
+import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundTrafficStats } from '../types/inbound';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
-import { UserDTO, UserStatus, USER_STATUS_LABELS } from '../types/user';
+import { UserDTO, UserStatus } from '../types/user';
 import { RouteDTO } from '../types/route';
 import { ProxyEncAlgo, PROXY_ENC_ALGO_LABELS } from '../types/proxyEncAlgo';
+import { formatBytes } from '../utils/format';
 
-const { Title, Text } = Typography;
+const { Title } = Typography;
 
 interface PageState {
   loading: boolean;
@@ -70,22 +70,23 @@ const InboundManagement: React.FC = () => {
   const [editingItem, setEditingItem] = useState<InboundConfigDTO | null>(null);
   const [createForm] = Form.useForm<InboundConfigCreateRequest>();
   const [editForm] = Form.useForm<InboundConfigUpdateRequest>();
+  const [trafficMap, setTrafficMap] = useState<Record<number, InboundTrafficStats>>({});
 
   // 监听协议选择，便于基于协议调整表单项可见性与默认值
   const createProtocolWatch = Form.useWatch('protocol', createForm);
   const editProtocolWatch = Form.useWatch('protocol', editForm);
 
-  // 根据协议选择调整创建表单的TLS与嗅探默认值
+  // 根据协议选择调整创建表单的 TLS 默认值
   useEffect(() => {
     if (createProtocolWatch === ProtocolType.TP_PROXY) {
-      createForm.setFieldsValue({ tlsEnabled: false, sniffEnabled: true });
+      createForm.setFieldsValue({ tlsEnabled: false });
     }
   }, [createProtocolWatch]);
 
-  // 根据协议调整编辑表单的TLS与嗅探默认值
+  // 根据协议调整编辑表单的 TLS 默认值
   useEffect(() => {
     if (editProtocolWatch === ProtocolType.TP_PROXY) {
-      editForm.setFieldsValue({ tlsEnabled: false, sniffEnabled: true });
+      editForm.setFieldsValue({ tlsEnabled: false });
     }
   }, [editProtocolWatch]);
 
@@ -128,6 +129,27 @@ const InboundManagement: React.FC = () => {
     { value: ProxyEncAlgo.CHACHA20_IETF_POLY1305, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.CHACHA20_IETF_POLY1305] },
   ]), []);
 
+  const fetchInboundTraffic = useCallback(async (list: InboundConfigDTO[]) => {
+    const ids = (list || []).map(i => i.id).filter((id): id is number => typeof id === 'number');
+    if (!ids.length) return;
+    const results = await Promise.all(ids.map(async (id) => {
+      try {
+        const data = await apiService.getInboundMonthlyTraffic(id);
+        return { id, data };
+      } catch (e) {
+        console.warn('加载入站流量失败', id, e);
+        return null;
+      }
+    }));
+    setTrafficMap(prev => {
+      const next = { ...prev };
+      results.forEach(item => {
+        if (item?.data) next[item.id] = item.data;
+      });
+      return next;
+    });
+  }, []);
+
   const loadUsersAndRoutes = useCallback(async () => {
     try {
       const usersPage = await apiService.getUsers({ page: 1, pageSize: 100, status: UserStatus.ENABLED });
@@ -164,11 +186,12 @@ const InboundManagement: React.FC = () => {
         total: res.totalElements,
         loading: false,
       }));
+      await fetchInboundTraffic(res.content || []);
     } catch (error) {
       console.error('加载入站配置失败:', error);
       setState(prev => ({ ...prev, loading: false }));
     }
-  }, [state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort]);
+  }, [fetchInboundTraffic, state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort]);
 
   useEffect(() => {
     loadUsersAndRoutes();
@@ -181,7 +204,11 @@ const InboundManagement: React.FC = () => {
   const handleCreate = async () => {
     try {
       const values = await createForm.validateFields();
-      await apiService.createInbound(values);
+      const payload: InboundConfigCreateRequest = {
+        ...values,
+        sniffEnabled: true, // 默认开启嗅探以兼容后端字段
+      };
+      await apiService.createInbound(payload);
       setCreateVisible(false);
       createForm.resetFields();
       loadInbounds();
@@ -194,7 +221,11 @@ const InboundManagement: React.FC = () => {
     if (!editingItem) return;
     try {
       const values = await editForm.validateFields();
-      await apiService.updateInbound(editingItem.id, values);
+      const payload: InboundConfigUpdateRequest = {
+        ...values,
+        sniffEnabled: editingItem.sniffEnabled ?? true, // 编辑时保留原值（默认开启）
+      };
+      await apiService.updateInbound(editingItem.id, payload);
       setEditVisible(false);
       setEditingItem(null);
       loadInbounds();
@@ -223,9 +254,11 @@ const InboundManagement: React.FC = () => {
     { title: '监听IP', dataIndex: 'listenIp', key: 'listenIp' },
     { title: '端口', dataIndex: 'port', key: 'port' },
     { title: 'TLS', dataIndex: 'tlsEnabled', key: 'tlsEnabled', render: (v: boolean) => v ? <Tag color="green">启用</Tag> : <Tag color="default">关闭</Tag> },
-    { title: '嗅探', dataIndex: 'sniffEnabled', key: 'sniffEnabled', render: (v: boolean) => v ? <Tag color="green">启用</Tag> : <Tag color="default">关闭</Tag> },
-    { title: '绑定用户数', dataIndex: 'userCount', key: 'userCount' },
-    { title: '路由', dataIndex: 'routeNames', key: 'routeNames', render: (names?: string[]) => names?.map(n => <Tag key={n}>{n}</Tag>) },
+    { title: '本月流量(上/下行)', key: 'traffic', render: (_: any, record: InboundConfigDTO) => {
+      const t = record.id ? trafficMap[record.id] : undefined;
+      if (!t) return '-';
+      return `${formatBytes(t.bytesIn || 0)} / ${formatBytes(t.bytesOut || 0)}`;
+    }},
     { title: '状态', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? <Tag color="green">启用</Tag> : <Tag color="red">禁用</Tag> },
     { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt' },
     {
@@ -242,7 +275,6 @@ const InboundManagement: React.FC = () => {
               listenIp: record.listenIp,
               port: record.port,
               tlsEnabled: record.tlsEnabled,
-              sniffEnabled: record.sniffEnabled,
               ssMethod: record.ssMethod,
               inboundRouteBindings: (record.inboundRouteBindings && record.inboundRouteBindings.length > 0)
                 ? record.inboundRouteBindings
@@ -346,7 +378,7 @@ const InboundManagement: React.FC = () => {
             onOk={handleCreate}
             okText="创建"
           >
-        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, sniffEnabled: true, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
+        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="配置名称" /></Form.Item></Col>
             <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
@@ -358,9 +390,8 @@ const InboundManagement: React.FC = () => {
             <Col span={12}><Form.Item name="port" label="端口" rules={[{ required: true, type: 'number', min: 1, max: 65535 }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
-            <Col span={8}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="sniffEnabled" label="启用嗅探" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
+            <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>
@@ -431,9 +462,8 @@ const InboundManagement: React.FC = () => {
             <Col span={12}><Form.Item name="port" label="端口" rules={[{ required: true, type: 'number', min: 1, max: 65535 }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
-            <Col span={8}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="sniffEnabled" label="启用嗅探" valuePropName="checked"><Switch /></Form.Item></Col>
-            <Col span={8}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
+            <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>
