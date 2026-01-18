@@ -19,4 +19,8 @@ public interface AccessLogStore {
      * 统计区间内总流量（bytes_in + bytes_out）。
      */
     long sumBytes(java.time.LocalDateTime from, java.time.LocalDateTime to);
+    /**
+     * 统计指定入站在时间区间内的上下行流量。
+     */
+    InboundTrafficDTO getInboundTraffic(Long inboundId, java.time.LocalDateTime from, java.time.LocalDateTime toExclusive);
 }

@@ -1,0 +1,41 @@
+.log-audit-page {
+  padding: 12px;
+  background: #0b1526;
+}
+
+.log-audit-card {
+  border: 1px solid #1f2b3e;
+  border-radius: 8px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  background: #0f1c2f;
+}
+
+.log-audit-card .ant-card-head {
+  border-bottom: 1px solid #1f2b3e;
+}
+
+.log-audit-table-card .ant-card-body {
+  padding: 12px;
+}
+
+.log-audit-table .ant-table-thead > tr > th {
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.log-audit-table .ant-table-tbody > tr:hover > td {
+  background: #12243a;
+}
+
+.log-audit-drawer .ant-drawer-header {
+  border-bottom: 1px solid #1f2b3e;
+}
+
+.log-audit-drawer .ant-card {
+  border: 1px solid #1f2b3e;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+.log-audit-drawer .ant-card-head {
+  border-bottom: 1px solid #1f2b3e;
+}

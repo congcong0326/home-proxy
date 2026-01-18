@@ -12,6 +12,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -149,4 +150,22 @@ public class LogController {
         return ResponseEntity.ok(trend);
     }
 
+    /**
+     * 获取指定入站本月（或指定月份）的上下行流量
+     */
+    @GetMapping("/traffic/inbound/{inboundId}/month")
+    public ResponseEntity<InboundTrafficDTO> getInboundMonthlyTraffic(
+            @PathVariable("inboundId") Long inboundId,
+            @RequestParam(value = "month", required = false) String month) {
+        YearMonth ym = null;
+        if (month != null && !month.isBlank()) {
+            try {
+                ym = YearMonth.parse(month);
+            } catch (Exception e) {
+                log.warn("Invalid month format {}, expected yyyy-MM, fallback to current", month);
+            }
+        }
+        InboundTrafficDTO dto = logService.getInboundMonthlyTraffic(inboundId, ym);
+        return ResponseEntity.ok(dto);
+    }
 }

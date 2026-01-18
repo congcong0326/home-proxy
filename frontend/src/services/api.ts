@@ -27,7 +27,8 @@ import {
   InboundConfigDTO,
   InboundConfigCreateRequest,
   InboundConfigUpdateRequest,
-  InboundQueryParams
+  InboundQueryParams,
+  InboundTrafficStats
 } from '../types/inbound';
 import {
   AccessLogListItem,
@@ -336,6 +337,11 @@ class ApiService {
     return this.request<void>(`/inbounds/${id}`, {
       method: 'DELETE',
     });
+  }
+
+  async getInboundMonthlyTraffic(inboundId: number, month?: string): Promise<InboundTrafficStats> {
+    const query = month ? `?month=${encodeURIComponent(month)}` : '';
+    return this.request<InboundTrafficStats>(`/logs/traffic/inbound/${inboundId}/month${query}`);
   }
   
   // 根据ID查询路由详情

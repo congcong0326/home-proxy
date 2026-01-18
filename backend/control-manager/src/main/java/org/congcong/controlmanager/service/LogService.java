@@ -37,6 +37,7 @@ import org.congcong.controlmanager.logstore.AccessLogStoreFactory;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.YearMonth;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
@@ -108,5 +109,21 @@ public class LogService {
      */
     public long sumBytes(LocalDateTime from, LocalDateTime to) {
         return accessLogStoreFactory.current().sumBytes(from, to);
+    }
+
+    /**
+     * 获取指定入站在指定月份内的上下行流量（默认当月）
+     */
+    public InboundTrafficDTO getInboundMonthlyTraffic(Long inboundId, YearMonth month) {
+        YearMonth targetMonth = month == null ? YearMonth.now() : month;
+        LocalDateTime from = targetMonth.atDay(1).atStartOfDay();
+        LocalDateTime toExclusive = targetMonth.plusMonths(1).atDay(1).atStartOfDay();
+        InboundTrafficDTO dto = accessLogStoreFactory.current().getInboundTraffic(inboundId, from, toExclusive);
+        dto.setPeriod(targetMonth.toString());
+        dto.setInboundId(inboundId);
+        if (dto.getBytesIn() == null) dto.setBytesIn(0L);
+        if (dto.getBytesOut() == null) dto.setBytesOut(0L);
+        dto.setTotalBytes(dto.getBytesIn() + dto.getBytesOut());
+        return dto;
     }
 }

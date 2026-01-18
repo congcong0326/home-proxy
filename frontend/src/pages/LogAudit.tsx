@@ -194,10 +194,13 @@ const LogAudit: React.FC = () => {
             </Card>
             <Card size="small" title="源信息" style={{ marginBottom: 12 }}>
               <p><Text type="secondary">客户端IP</Text>: {detail.clientIp}</p>
+              <p><Text type="secondary">客户端端口</Text>: {detail.clientPort ?? '-'}</p>
               <p><Text type="secondary">源地理</Text>: {detail.srcGeoCountry} {detail.srcGeoCity}</p>
             </Card>
             <Card size="small" title="目标信息" style={{ marginBottom: 12 }}>
               <p><Text type="secondary">原目标</Text>: {detail.originalTargetHost} {detail.originalTargetPort ? `:${detail.originalTargetPort}` : ''}</p>
+              <p><Text type="secondary">原目标IP</Text>: {detail.originalTargetIP ?? '-'}</p>
+              <p><Text type="secondary">原目标端口</Text>: {detail.originalTargetPort ?? '-'}</p>
               <p><Text type="secondary">改写目标</Text>: {detail.rewriteTargetHost} {detail.rewriteTargetPort ? `:${detail.rewriteTargetPort}` : ''}</p>
               <p><Text type="secondary">目标地理</Text>: {detail.dstGeoCountry} {detail.dstGeoCity}</p>
             </Card>

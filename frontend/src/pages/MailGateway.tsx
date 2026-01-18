@@ -501,9 +501,6 @@ const MailGatewayPage: React.FC = () => {
       <div className="page-header">
         <div>
           <Title level={3} style={{ marginBottom: 4 }}>邮件网关</Title>
-          <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            为内部业务提供简洁的邮件发送能力：网关配置、业务目标绑定（默认 bizKey = ops.alert / ops.traffic_report），支持按 bizKey 测试发送与定时发送。
-          </Paragraph>
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={() => { loadGateways(); loadTargets(); loadLogs(logBizKeyFilter); }}>

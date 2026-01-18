@@ -5,6 +5,7 @@ import io.netty.handler.codec.dns.DnsResponseCode;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.AccessLog;
+import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
@@ -52,6 +53,9 @@ public class AccessLogUtil {
         
         if (proxyContext == null || timeContext == null) {
             return; // 如果上下文为空，直接返回
+        }
+        if (proxyContext.getRoutePolicy() == RoutePolicy.BLOCK) {
+            return;
         }
         
         // 设置请求结束时间
@@ -136,7 +140,7 @@ public class AccessLogUtil {
         accessLog.setInboundProtocolType(proxyContext.getInboundProtocolType() != null ? 
             proxyContext.getInboundProtocolType().getValue() : null);
         accessLog.setOutboundProtocolType(proxyContext.getOutboundProtocolType() != null ? 
-            proxyContext.getOutboundProtocolType().getValue() : null);
+            proxyContext.getOutboundProtocolType().getValue() : ProtocolType.NONE.getValue());
         accessLog.setRoutePolicyName(proxyContext.getRoutePolicyName());
         accessLog.setRoutePolicyId(proxyContext.getRoutePolicyId());
         

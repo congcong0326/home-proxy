@@ -7,6 +7,8 @@ import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.congcong.controlmanager.dto.*;
 import org.springframework.stereotype.Component;
 
+import java.sql.Array;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -69,6 +71,21 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         if (rows.isEmpty()) return 0L;
         Long v = toLong(rows.get(0).get("total_bytes"));
         return v == null ? 0L : v;
+    }
+
+    @Override
+    public InboundTrafficDTO getInboundTraffic(Long inboundId, LocalDateTime from, LocalDateTime toExclusive) {
+        if (inboundId == null) {
+            return InboundTrafficDTO.of(null, 0L, 0L, null);
+        }
+        String sql = "SELECT sum(bytes_in) AS bytes_in, sum(bytes_out) AS bytes_out " +
+                "FROM default.access_log WHERE inbound_id = ? AND ts >= ? AND ts < ?";
+        List<Map<String, Object>> rows = client.query(sql, inboundId, toTimestamp(from), toTimestamp(toExclusive));
+        if (rows.isEmpty()) {
+            return InboundTrafficDTO.of(inboundId, 0L, 0L, null);
+        }
+        Map<String, Object> r = rows.get(0);
+        return InboundTrafficDTO.of(inboundId, toLong(r.get("bytes_in")), toLong(r.get("bytes_out")), null);
     }
 
     @Override
@@ -310,18 +327,21 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     private Integer toInt(Object o) { return o == null ? null : ((Number)o).intValue(); }
 
     @SuppressWarnings("unchecked")
-    private List<String> toStringList(Object v) {
-        if (v == null) return Collections.emptyList();
-        if (v instanceof List<?>) {
-            List<?> raw = (List<?>) v;
-            List<String> out = new ArrayList<>(raw.size());
-            for (Object o : raw) {
-                if (o != null) {
-                    out.add(o.toString());
+    private List<String> toStringList(Object sqlArray) {
+        List<String> list = new ArrayList<>();
+        if (sqlArray != null) {
+            if (sqlArray instanceof Array array) {
+                Object[] arr = null;
+                try {
+                    arr = (Object[]) array.getArray();
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+                for (Object o : arr) {
+                    list.add(String.valueOf(o));
                 }
             }
-            return out;
         }
-        return List.of(v.toString());
+        return list;
     }
 }
