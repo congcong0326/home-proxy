@@ -56,7 +56,7 @@ public class DOTOutboundConnector extends AbstractDnsUpstreamConnector {
         ChannelFuture cf = b.connect(host, port);
         cf.addListener((ChannelFutureListener) f -> {
             if (!f.isSuccess()) {
-                log.warn("DOT connect failed: {}", f.cause().getMessage());
+                log.warn("DOT connect to {}:{} failed: {}", host, port, f.cause().getMessage());
             }
         });
         return cf;

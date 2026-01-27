@@ -82,6 +82,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
   );
   // 监听代理类型以控制加密算法下拉框的显示
   const outboundProxyTypeWatch = Form.useWatch('outboundProxyType', form);
+  const allowMultiDnsHost = outboundProxyTypeWatch === ProtocolType.DOT || outboundProxyTypeWatch === ProtocolType.DNS_SERVER;
 
   useEffect(() => {
     if (initialValues) {
@@ -447,10 +448,29 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 label="代理地址"
                 rules={[
                   { required: true, message: '请输入代理地址' },
-                  { pattern: /^[a-zA-Z0-9.-]+$/, message: '请输入有效的主机地址' },
+                  {
+                    validator: (_, value: string) => {
+                      if (!value) return Promise.resolve();
+                      const hostPattern = /^[a-zA-Z0-9.-]+$/;
+                      if (allowMultiDnsHost) {
+                        const parts = value.split(',').map((p: string) => p.trim()).filter(Boolean);
+                        if (!parts.length) {
+                          return Promise.reject(new Error('请输入至少一个地址'));
+                        }
+                        const invalid = parts.find(p => !hostPattern.test(p));
+                        return invalid
+                          ? Promise.reject(new Error('请输入有效的主机地址，多个地址请用逗号分隔'))
+                          : Promise.resolve();
+                      }
+                      return hostPattern.test(value)
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('请输入有效的主机地址'));
+                    },
+                  },
                 ]}
+                extra={allowMultiDnsHost ? '支持多个DNS上游，使用英文逗号分隔，例如：1.1.1.1,8.8.8.8' : undefined}
               >
-                <Input placeholder="请输入代理服务器地址" />
+                <Input placeholder={allowMultiDnsHost ? '多个DNS上游用逗号分隔，如 1.1.1.1,8.8.8.8' : '请输入代理服务器地址'} />
               </Form.Item>
             </Col>
           </Row>

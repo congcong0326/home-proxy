@@ -3,20 +3,31 @@ package org.congcong.proxyworker.outbound.dns;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.DefaultChannelPromise;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.Promise;
+import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
+@Slf4j
 public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConnector {
 
     private static final ConcurrentMap<PoolKey, ChannelFuture> POOL = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<PoolKey, UpstreamState> STATE = new ConcurrentHashMap<>();
+    private static final AtomicInteger ROUND_ROBIN = new AtomicInteger();
+    private static final int FAILURE_THRESHOLD = 2;
+    private static final long COOLDOWN_MILLIS = 30_000L;
 
     protected record PoolKey(ProtocolType type, String host, int port) {
     }
@@ -26,49 +37,27 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
                                  ProxyTunnelRequest req,
                                  Promise<Channel> relayPromise) {
         RouteConfig routeConfig = req.getRouteConfig();
-        String host = routeConfig.getOutboundProxyHost();
-        int port = routeConfig.getOutboundProxyPort() != null ? routeConfig.getOutboundProxyPort() : defaultPort();
-        // 使用远端DNS服务器类型+IP+PORT组合为唯一三元组
-        PoolKey key = new PoolKey(outboundType(), host, port);
-        // 创建了相关的客户端
-        // 使用 POOL 维护三元组到目标DNS服务器之间的映射关系，在客户端销毁后去会同步回收
-        ChannelFuture pooled = POOL.computeIfAbsent(key, k -> {
-            ChannelFuture cf = create(inbound, host, port, k);
-            cf.addListener((ChannelFutureListener) f -> {
-                if (f.isSuccess()) {
-                    f.channel().closeFuture().addListener(close -> POOL.remove(k, f));
-                } else {
-                    POOL.remove(k, f);
-                }
-            });
-            return cf;
-        });
-        // 客户端已经就绪，则可以直接发送请求
-        if (pooled.isSuccess() && pooled.channel().isActive() && ready(pooled.channel())) {
-            if (outboundType() == ProtocolType.DOT) {
-                // DOT要等待SSL握手完成，注册回调在SSL完成后发送请求
-                awaitReady(pooled, relayPromise, key);
-            } else {
-                // DNS没有握手请求，只要就绪可以直接发送
-                relayPromise.trySuccess(pooled.channel());
-            }
-            return pooled;
+        List<String> hosts = parseHosts(routeConfig.getOutboundProxyHost());
+        if (hosts.isEmpty()) {
+            IllegalArgumentException cause = new IllegalArgumentException("No outbound DNS host configured");
+            ChannelFuture failed = inbound.newFailedFuture(cause);
+            relayPromise.tryFailure(cause);
+            return failed;
         }
 
-        // 客户端也许还未就绪，则注册回调，未来发送
-        pooled.addListener((ChannelFutureListener) f -> {
-            if (!f.isSuccess()) {
-                relayPromise.tryFailure(f.cause());
-                POOL.remove(key, f);
-                return;
-            }
-            if (outboundType() == ProtocolType.DOT) {
-                awaitReady(f, relayPromise, key);
-            } else {
-                relayPromise.trySuccess(f.channel());
-            }
-        });
-        return pooled;
+        int port = routeConfig.getOutboundProxyPort() != null ? routeConfig.getOutboundProxyPort() : defaultPort();
+        ProtocolType type = outboundType();
+        List<String> orderedHosts = orderHosts(hosts);
+        long now = System.currentTimeMillis();
+        List<String> candidates = pickAvailableHosts(orderedHosts, port, type, now);
+        boolean allCooling = candidates.isEmpty();
+        if (allCooling) {
+            candidates = orderedHosts;
+        }
+
+        ChainedChannelFuture overall = new ChainedChannelFuture(inbound);
+        attemptConnect(0, candidates, allCooling, inbound, relayPromise, overall, port, type, null);
+        return overall;
     }
 
     protected abstract int defaultPort();           // 53 for UDP, 853 for DoT
@@ -76,12 +65,77 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
     protected abstract boolean ready(Channel ch);   // DoT 要求 TLS 握手完成
     protected abstract ChannelFuture create(Channel inbound, String host, int port, PoolKey key);
 
-    private void awaitReady(ChannelFuture connected,
-                            Promise<Channel> relayPromise,
-                            PoolKey key) {
-        Channel ch = connected.channel();
+    private void attemptConnect(int index,
+                                List<String> candidates,
+                                boolean allowCoolingFallback,
+                                Channel inbound,
+                                Promise<Channel> relayPromise,
+                                ChainedChannelFuture overallFuture,
+                                int port,
+                                ProtocolType type,
+                                Throwable lastCause) {
+        if (overallFuture.isDone()) {
+            return;
+        }
+        if (index >= candidates.size()) {
+            Throwable cause = lastCause != null ? lastCause : new IllegalStateException("No available DNS upstream");
+            relayPromise.tryFailure(cause);
+            overallFuture.tryFailure(cause);
+            return;
+        }
+
+        String host = candidates.get(index);
+        PoolKey key = new PoolKey(type, host, port);
+        UpstreamState state = STATE.computeIfAbsent(key, k -> new UpstreamState());
+        long now = System.currentTimeMillis();
+        if (!allowCoolingFallback && state.inCooldown(now)) {
+            attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, type, lastCause);
+            return;
+        }
+
+        ChannelFuture cf = POOL.computeIfAbsent(key, k -> {
+            ChannelFuture created = create(inbound, host, port, k);
+            created.addListener((ChannelFutureListener) f -> {
+                if (f.isSuccess()) {
+                    f.channel().closeFuture().addListener(close -> POOL.remove(k, f));
+                } else {
+                    POOL.remove(k, f);
+                }
+            });
+            return created;
+        });
+
+        if (cf.isDone()) {
+            handleOutcome(cf, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port);
+        } else {
+            cf.addListener((ChannelFutureListener) f ->
+                    handleOutcome(f, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port));
+        }
+    }
+
+    private void handleOutcome(ChannelFuture future,
+                               PoolKey key,
+                               UpstreamState state,
+                               int index,
+                               List<String> candidates,
+                               boolean allowCoolingFallback,
+                               Channel inbound,
+                               Promise<Channel> relayPromise,
+                               ChainedChannelFuture overallFuture,
+                               int port) {
+        if (overallFuture.isDone()) {
+            return;
+        }
+        if (!future.isSuccess() || !future.channel().isActive()) {
+            Throwable cause = future.cause() != null ? future.cause() : new IllegalStateException("connect failed");
+            onUpstreamFailure(state, key, future, cause, overallFuture);
+            attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, key.type(), cause);
+            return;
+        }
+
+        Channel ch = future.channel();
         if (ready(ch)) {
-            relayPromise.trySuccess(ch);
+            onUpstreamSuccess(state, overallFuture, relayPromise, ch);
             return;
         }
 
@@ -89,20 +143,143 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
         if (ssl != null) {
             Future<Channel> handshake = ssl.handshakeFuture();
             handshake.addListener(f -> {
+                if (overallFuture.isDone()) {
+                    return;
+                }
                 if (f.isSuccess() && ready(ch)) {
-                    relayPromise.trySuccess(ch);
+                    onUpstreamSuccess(state, overallFuture, relayPromise, ch);
                 } else {
-                    Throwable cause = f.cause() != null ? f.cause() :
-                            new IllegalStateException("TLS handshake not ready");
-                    relayPromise.tryFailure(cause);
-                    POOL.remove(key, connected);
-                    ch.close();
+                    Throwable cause = f.cause() != null ? f.cause() : new IllegalStateException("TLS handshake not ready");
+                    onUpstreamFailure(state, key, future, cause, overallFuture);
+                    attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, key.type(), cause);
                 }
             });
-        } else {
-            relayPromise.tryFailure(new IllegalStateException("Channel not ready"));
-            POOL.remove(key, connected);
+            return;
+        }
+
+        Throwable cause = new IllegalStateException("Channel not ready");
+        onUpstreamFailure(state, key, future, cause, overallFuture);
+        attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, key.type(), cause);
+    }
+
+    private void onUpstreamSuccess(UpstreamState state,
+                                   ChainedChannelFuture overallFuture,
+                                   Promise<Channel> relayPromise,
+                                   Channel ch) {
+        if (overallFuture.isDone() || relayPromise.isDone()) {
+            return;
+        }
+        state.onSuccess();
+        overallFuture.setChannel(ch);
+        relayPromise.trySuccess(ch);
+        overallFuture.trySuccess(null);
+    }
+
+    private void onUpstreamFailure(UpstreamState state,
+                                   PoolKey key,
+                                   ChannelFuture cf,
+                                   Throwable cause,
+                                   ChainedChannelFuture overallFuture) {
+        long now = System.currentTimeMillis();
+        state.onFailure(now);
+        if (state.inCooldown(now)) {
+            log.info("{}:{} enter cooldown until {}", key.host(), key.port(), state.coolDownUntilMillis());
+        }
+        log.warn("{} upstream {}:{} failed: {}", key.type(), key.host(), key.port(), cause.getMessage());
+        if (cf.channel() != null) {
+            overallFuture.setChannel(cf.channel());
+        }
+        POOL.remove(key, cf);
+        Channel ch = cf.channel();
+        if (ch != null && ch.isOpen()) {
             ch.close();
+        }
+    }
+
+    private List<String> parseHosts(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return Collections.emptyList();
+        }
+        String[] parts = raw.split("[,\\s]+");
+        List<String> hosts = new ArrayList<>(parts.length);
+        for (String part : parts) {
+            String host = part.trim();
+            if (!host.isEmpty()) {
+                hosts.add(host);
+            }
+        }
+        return hosts;
+    }
+
+    private List<String> orderHosts(List<String> hosts) {
+        if (hosts.size() <= 1) {
+            return hosts;
+        }
+        int start = Math.floorMod(ROUND_ROBIN.getAndIncrement(), hosts.size());
+        if (start == 0) {
+            return hosts;
+        }
+        List<String> ordered = new ArrayList<>(hosts.size());
+        ordered.addAll(hosts.subList(start, hosts.size()));
+        ordered.addAll(hosts.subList(0, start));
+        return ordered;
+    }
+
+    private List<String> pickAvailableHosts(List<String> orderedHosts,
+                                            int port,
+                                            ProtocolType type,
+                                            long now) {
+        List<String> available = new ArrayList<>(orderedHosts.size());
+        for (String host : orderedHosts) {
+            PoolKey key = new PoolKey(type, host, port);
+            UpstreamState state = STATE.computeIfAbsent(key, k -> new UpstreamState());
+            if (!state.inCooldown(now)) {
+                available.add(host);
+            }
+        }
+        return available;
+    }
+
+    private static final class UpstreamState {
+        private final AtomicInteger failures = new AtomicInteger();
+        private volatile long coolDownUntilMillis;
+
+        boolean inCooldown(long now) {
+            return coolDownUntilMillis > now;
+        }
+
+        void onSuccess() {
+            failures.set(0);
+            coolDownUntilMillis = 0;
+        }
+
+        void onFailure(long now) {
+            int f = failures.incrementAndGet();
+            if (f >= FAILURE_THRESHOLD) {
+                coolDownUntilMillis = now + COOLDOWN_MILLIS;
+            }
+        }
+
+        long coolDownUntilMillis() {
+            return coolDownUntilMillis;
+        }
+    }
+
+    private static final class ChainedChannelFuture extends DefaultChannelPromise {
+        private volatile Channel delegate;
+
+        ChainedChannelFuture(Channel inbound) {
+            super(inbound, inbound.eventLoop());
+            this.delegate = inbound;
+        }
+
+        void setChannel(Channel channel) {
+            this.delegate = channel;
+        }
+
+        @Override
+        public Channel channel() {
+            return delegate;
         }
     }
 }

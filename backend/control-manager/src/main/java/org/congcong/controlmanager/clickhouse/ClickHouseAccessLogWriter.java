@@ -27,7 +27,7 @@ public class ClickHouseAccessLogWriter {
     @Value("${logs.clickhouse.batchSize:3000}")
     private int batchSize;
 
-    @Value("${logs.clickhouse.maxDelayMs:60000}")
+    @Value("${logs.clickhouse.maxDelayMs:600000}")
     private long maxDelayMs;
 
     private final ConcurrentLinkedQueue<AccessLog> buffer = new ConcurrentLinkedQueue<>();
