@@ -13,6 +13,12 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
+import java.net.DatagramSocket;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.NetworkInterface;
+import java.net.SocketAddress;
+import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -85,15 +91,15 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
         }
 
         String host = candidates.get(index);
+        String outboundIp = probeOutboundIp(host, port);
         PoolKey key = new PoolKey(type, host, port);
-        UpstreamState state = STATE.computeIfAbsent(key, k -> new UpstreamState());
-        long now = System.currentTimeMillis();
-        if (!allowCoolingFallback && state.inCooldown(now)) {
-            attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, type, lastCause);
-            return;
-        }
-
-        ChannelFuture cf = POOL.computeIfAbsent(key, k -> {
+        ChannelFuture cf = POOL.compute(key, (k, existing) -> {
+            if (!isChannelStale(existing, outboundIp)) {
+                return existing;
+            }
+            if (existing != null) {
+                closeChannelQuietly(existing.channel());
+            }
             ChannelFuture created = create(inbound, host, port, k);
             created.addListener((ChannelFutureListener) f -> {
                 if (f.isSuccess()) {
@@ -104,12 +110,18 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
             });
             return created;
         });
+        UpstreamState state = STATE.computeIfAbsent(key, k -> new UpstreamState());
+        long now = System.currentTimeMillis();
+        if (!allowCoolingFallback && state.inCooldown(now)) {
+            attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, type, lastCause);
+            return;
+        }
 
         if (cf.isDone()) {
-            handleOutcome(cf, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port);
+            handleOutcome(cf, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, outboundIp);
         } else {
             cf.addListener((ChannelFutureListener) f ->
-                    handleOutcome(f, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port));
+                    handleOutcome(f, key, state, index, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, outboundIp));
         }
     }
 
@@ -122,12 +134,20 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
                                Channel inbound,
                                Promise<Channel> relayPromise,
                                ChainedChannelFuture overallFuture,
-                               int port) {
+                               int port,
+                               String outboundIp) {
         if (overallFuture.isDone()) {
             return;
         }
         if (!future.isSuccess() || !future.channel().isActive()) {
             Throwable cause = future.cause() != null ? future.cause() : new IllegalStateException("connect failed");
+            onUpstreamFailure(state, key, future, cause, overallFuture);
+            attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, key.type(), cause);
+            return;
+        }
+
+        if (isChannelStale(future, outboundIp)) {
+            Throwable cause = new IllegalStateException("upstream bound to stale local address");
             onUpstreamFailure(state, key, future, cause, overallFuture);
             attemptConnect(index + 1, candidates, allowCoolingFallback, inbound, relayPromise, overallFuture, port, key.type(), cause);
             return;
@@ -238,6 +258,67 @@ public abstract class AbstractDnsUpstreamConnector extends AbstractOutboundConne
             }
         }
         return available;
+    }
+
+    private String probeOutboundIp(String host, int port) {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            socket.connect(new InetSocketAddress(host, port));
+            InetAddress local = socket.getLocalAddress();
+            if (local != null && !local.isAnyLocalAddress()) {
+                return local.getHostAddress();
+            }
+        } catch (Exception e) {
+            log.debug("Failed to probe outbound IP for {}:{}: {}", host, port, e.getMessage());
+        }
+        return null;
+    }
+
+    private boolean isChannelStale(ChannelFuture cf, String expectedOutboundIp) {
+        if (cf == null) {
+            return true;
+        }
+        if (!cf.isDone()) {
+            return false;
+        }
+        if (!cf.isSuccess()) {
+            return true;
+        }
+        Channel ch = cf.channel();
+        if (ch == null || !ch.isActive()) {
+            return true;
+        }
+        SocketAddress local = ch.localAddress();
+        if (!(local instanceof InetSocketAddress)) {
+            return false;
+        }
+        InetAddress address = ((InetSocketAddress) local).getAddress();
+        if (expectedOutboundIp != null
+                && address != null
+                && !address.isAnyLocalAddress()
+                && !address.isLoopbackAddress()
+                && !expectedOutboundIp.equals(address.getHostAddress())) {
+            return true;
+        }
+        return !isAddressUsable(address);
+    }
+
+    private boolean isAddressUsable(InetAddress address) {
+        if (address == null || address.isAnyLocalAddress() || address.isLoopbackAddress()) {
+            return true;
+        }
+        try {
+            NetworkInterface nif = NetworkInterface.getByInetAddress(address);
+            return nif != null && nif.isUp();
+        } catch (SocketException e) {
+            log.warn("Failed to inspect local address {}: {}", address, e.getMessage());
+            return true;
+        }
+    }
+
+    private void closeChannelQuietly(Channel channel) {
+        if (channel != null && channel.isOpen()) {
+            channel.close();
+        }
     }
 
     private static final class UpstreamState {
