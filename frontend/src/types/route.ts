@@ -2,7 +2,8 @@
 export enum RouteConditionType {
   DOMAIN = 'DOMAIN',
   GEO = 'GEO',
-  AD_BLOCK = 'AD_BLOCK'
+  AD_BLOCK = 'AD_BLOCK',
+  RULE_SET = 'RULE_SET'
 }
 
 // 路由匹配操作（与后端保持一致）

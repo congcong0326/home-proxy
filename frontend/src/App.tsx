@@ -12,6 +12,8 @@ import ChangePassword from './pages/ChangePassword';
 import ProxyConfig from './pages/ProxyConfig';
 import UserManagement from './pages/UserManagement';
 import RouteManagement from './pages/RouteManagement';
+import RuleSetManagement from './pages/RuleSetManagement';
+import RuleSetGuide from './pages/RuleSetGuide';
 import './App.css';
 import RateLimitManagement from './pages/RateLimitManagement';
 import InboundManagement from './pages/InboundManagement';
@@ -82,6 +84,8 @@ const AppContent: React.FC = () => {
           <Route path="users" element={<UserManagement />} />
           {/* 路由管理子页面 */}
           <Route path="routing" element={<RouteManagement />} />
+          <Route path="rule-sets" element={<RuleSetManagement />} />
+          <Route path="rule-sets/guide" element={<RuleSetGuide />} />
           {/* 其他配置子页面占位符 */}
           <Route path="inbound" element={<InboundManagement />} />
           <Route path="ratelimit" element={<RateLimitManagement />} />
@@ -99,6 +103,8 @@ const AppContent: React.FC = () => {
           {/* 已有配置子页面 */}
           <Route path="users" element={<UserManagement />} />
           <Route path="routing" element={<RouteManagement />} />
+          <Route path="rule-sets" element={<RuleSetManagement />} />
+          <Route path="rule-sets/guide" element={<RuleSetGuide />} />
           <Route path="inbound" element={<InboundManagement />} />
           <Route path="ratelimit" element={<RateLimitManagement />} />
           {/* 访问概览嵌套路由 */}

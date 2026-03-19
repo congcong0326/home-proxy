@@ -1,15 +1,23 @@
 package org.congcong.controlmanager.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.common.dto.InboundConfigDTO;
 import org.congcong.common.dto.RouteDTO;
+import org.congcong.common.dto.RuleSetItemDTO;
 import org.congcong.common.dto.RateLimitDTO;
 import org.congcong.common.dto.UserDTO;
 import org.congcong.common.dto.RouteRule;
+import org.congcong.common.enums.RuleSetCategory;
+import org.congcong.common.enums.RuleSetItemType;
+import org.congcong.common.enums.RuleSetMatchTarget;
+import org.congcong.common.enums.RuleSetSourceType;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RateLimitScopeType;
 import org.congcong.common.enums.RoutePolicy;
+import org.congcong.common.enums.RouteConditionType;
+import org.congcong.common.enums.MatchOp;
 import org.congcong.controlmanager.dto.LoginRequest;
 import org.congcong.controlmanager.dto.LoginResponse;
 import org.congcong.controlmanager.entity.*;
@@ -18,6 +26,8 @@ import org.congcong.controlmanager.dto.InboundConfigUpdateRequest;
 import org.congcong.controlmanager.dto.RateLimitCreateRequest;
 import org.congcong.controlmanager.dto.RateLimitUpdateRequest;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
+import org.congcong.controlmanager.dto.ruleset.CreateRuleSetRequest;
+import org.congcong.controlmanager.dto.ruleset.RuleSetBatchSyncRequest;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.repository.AdminUserRepository;
 import org.congcong.controlmanager.service.InboundConfigService;
@@ -26,11 +36,15 @@ import org.congcong.controlmanager.service.RateLimitService;
 import org.congcong.controlmanager.service.UserService;
 import org.congcong.controlmanager.service.AdminAuthService;
 import org.congcong.controlmanager.service.AggregateConfigCacheService;
+import org.congcong.controlmanager.service.RuleSetService;
+import org.congcong.controlmanager.scheduler.RuleSetSyncScheduledTaskHandler;
+import org.congcong.controlmanager.entity.scheduler.ScheduledTask;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -38,8 +52,11 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -84,6 +101,12 @@ class AggregateConfigControllerIntegrationTest {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private RuleSetService ruleSetService;
+
+    @Autowired
+    private RuleSetSyncScheduledTaskHandler ruleSetSyncScheduledTaskHandler;
 
     @Autowired
     private AdminUserRepository adminUserRepository;
@@ -188,6 +211,20 @@ class AggregateConfigControllerIntegrationTest {
         inboundCreateRequest.setStatus(1);
         InboundConfigDTO createdInbound = inboundConfigService.createInboundConfig(inboundCreateRequest);
         testInboundId = createdInbound.getId();
+
+        CreateRuleSetRequest createRuleSetRequest = new CreateRuleSetRequest();
+        createRuleSetRequest.setRuleKey("ai-common");
+        createRuleSetRequest.setName("AI Common");
+        createRuleSetRequest.setCategory(RuleSetCategory.AI);
+        createRuleSetRequest.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        createRuleSetRequest.setSourceType(RuleSetSourceType.MANUAL);
+        createRuleSetRequest.setEnabled(true);
+        createRuleSetRequest.setPublished(true);
+        RuleSetItemDTO itemDTO = new RuleSetItemDTO();
+        itemDTO.setType(RuleSetItemType.DOMAIN_SUFFIX);
+        itemDTO.setValue("openai.com");
+        createRuleSetRequest.setItems(List.of(itemDTO));
+        //Long testRuleSetId = ruleSetService.createRuleSet(createRuleSetRequest).getId();
     }
 
     /**
@@ -218,6 +255,9 @@ class AggregateConfigControllerIntegrationTest {
                 .andExpect(jsonPath("$.users").isArray())
                 .andExpect(jsonPath("$.users", hasSize(1)))
                 .andExpect(jsonPath("$.users[0].username").value("testuser"))
+                .andExpect(jsonPath("$.ruleSets").isArray())
+                .andExpect(jsonPath("$.ruleSets", hasSize(1)))
+                .andExpect(jsonPath("$.ruleSets[0].ruleKey").value("ai-common"))
                 .andReturn();
 
         // 验证响应内容
@@ -230,6 +270,286 @@ class AggregateConfigControllerIntegrationTest {
         assertEquals(1, response.getRoutes().size());
         assertEquals(1, response.getRateLimits().size());
         assertEquals(1, response.getUsers().size());
+        assertEquals(1, response.getRuleSets().size());
+    }
+
+    @Test
+    void testCreateRuleSetEndpointSuccess() throws Exception {
+        CreateRuleSetRequest request = new CreateRuleSetRequest();
+        request.setRuleKey("ai-claude");
+        request.setName("AI Claude");
+        request.setCategory(RuleSetCategory.AI);
+        request.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        request.setSourceType(RuleSetSourceType.MANUAL);
+        request.setEnabled(true);
+        request.setPublished(true);
+        RuleSetItemDTO itemDTO = new RuleSetItemDTO();
+        itemDTO.setType(RuleSetItemType.DOMAIN_SUFFIX);
+        itemDTO.setValue("claude.ai");
+        request.setItems(List.of(itemDTO));
+
+        mockMvc.perform(post("/api/rule-sets")
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ruleKey").value("ai-claude"))
+                .andExpect(jsonPath("$.published").value(true));
+
+        mockMvc.perform(get("/api/rule-sets/published")
+                        .header("Authorization", "Bearer " + jwtToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].ruleKey", hasItem("ai-claude")));
+    }
+
+    @Test
+    void testCreateExternalRuleSetWithoutItemsSuccess() throws Exception {
+        CreateRuleSetRequest request = new CreateRuleSetRequest();
+        request.setRuleKey("ai-openai-remote");
+        request.setName("AI OpenAI Remote");
+        request.setCategory(RuleSetCategory.AI);
+        request.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        request.setSourceType(RuleSetSourceType.HTTP_FILE);
+        request.setSourceConfig("""
+                {"url":"https://example.com/openai.txt","format":"DOMAIN_LIST_COMMUNITY"}
+                """);
+        request.setEnabled(true);
+        request.setPublished(false);
+        request.setItems(List.of());
+
+        mockMvc.perform(post("/api/rule-sets")
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.ruleKey").value("ai-openai-remote"))
+                .andExpect(jsonPath("$.items", hasSize(0)))
+                .andExpect(jsonPath("$.sourceType").value("HTTP_FILE"));
+    }
+
+    @Test
+    void testGetRuleSetPageReturnsSummaryWithoutItemsPayload() throws Exception {
+        CreateRuleSetRequest request = new CreateRuleSetRequest();
+        request.setRuleKey("geo-not-cn");
+        request.setName("Geo Not CN");
+        request.setCategory(RuleSetCategory.GEO);
+        request.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        request.setSourceType(RuleSetSourceType.MANUAL);
+        request.setEnabled(true);
+        request.setPublished(true);
+
+        RuleSetItemDTO itemOne = new RuleSetItemDTO();
+        itemOne.setType(RuleSetItemType.DOMAIN_SUFFIX);
+        itemOne.setValue("openai.com");
+        RuleSetItemDTO itemTwo = new RuleSetItemDTO();
+        itemTwo.setType(RuleSetItemType.DOMAIN);
+        itemTwo.setValue("chat.openai.com");
+        request.setItems(List.of(itemOne, itemTwo));
+
+        mockMvc.perform(post("/api/rule-sets")
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/rule-sets")
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .param("name", "geo")
+                        .param("category", "GEO")
+                        .param("enabled", "true")
+                        .param("published", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[*].ruleKey", hasItem("geo-not-cn")))
+                .andExpect(jsonPath("$.items[?(@.ruleKey=='geo-not-cn')].itemCount", hasItem(2)))
+                .andExpect(jsonPath("$.items[?(@.ruleKey=='geo-not-cn')].items").doesNotExist());
+    }
+
+    @Test
+    void testSyncExternalRuleSetFromDomainListCommunitySuccess() throws Exception {
+        HttpServer server = startRuleSourceServer("/dlc/openai", """
+                # comment
+                domain:openai.com
+                full:chat.openai.com
+                keyword:gpt
+                include:anthropic
+                regexp:^.*$
+                """, "text/plain");
+
+        try {
+            Long ruleSetId = createExternalRuleSet("dlc-openai", """
+                    {"url":"http://127.0.0.1:%d/dlc/openai","format":"DOMAIN_LIST_COMMUNITY"}
+                    """.formatted(server.getAddress().getPort()));
+
+            mockMvc.perform(post("/api/rule-sets/" + ruleSetId + "/sync")
+                            .header("Authorization", "Bearer " + jwtToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.versionNo").value(2))
+                    .andExpect(jsonPath("$.items", hasSize(3)))
+                    .andExpect(jsonPath("$.items[*].type", contains("DOMAIN", "DOMAIN_KEYWORD", "DOMAIN_SUFFIX")))
+                    .andExpect(jsonPath("$.items[*].value", contains("chat.openai.com", "gpt", "openai.com")));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testSyncExternalRuleSetFromClashSuccess() throws Exception {
+        HttpServer server = startRuleSourceServer("/clash/openai.yaml", """
+                payload:
+                  - DOMAIN-SUFFIX,openai.com
+                  - DOMAIN,chat.openai.com
+                  - DOMAIN-KEYWORD,gpt
+                """, "application/yaml");
+
+        try {
+            Long ruleSetId = createExternalRuleSet("clash-openai", """
+                    {"url":"http://127.0.0.1:%d/clash/openai.yaml","format":"CLASH_CLASSICAL"}
+                    """.formatted(server.getAddress().getPort()));
+
+            mockMvc.perform(post("/api/rule-sets/" + ruleSetId + "/sync")
+                            .header("Authorization", "Bearer " + jwtToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.versionNo").value(2))
+                    .andExpect(jsonPath("$.items", hasSize(3)))
+                    .andExpect(jsonPath("$.items[*].type", contains("DOMAIN", "DOMAIN_KEYWORD", "DOMAIN_SUFFIX")))
+                    .andExpect(jsonPath("$.items[*].value", contains("chat.openai.com", "gpt", "openai.com")));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testBatchSyncExternalRuleSetsEnabledOnlySuccess() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/batch/openai", exchange -> writeResponse(exchange, """
+                domain:openai.com
+                full:chat.openai.com
+                """, "text/plain"));
+        server.createContext("/batch/claude", exchange -> writeResponse(exchange, """
+                domain:claude.ai
+                full:api.anthropic.com
+                """, "text/plain"));
+        server.start();
+
+        try {
+            createExternalRuleSet("batch-openai", """
+                    {"url":"http://127.0.0.1:%d/batch/openai","format":"DOMAIN_LIST_COMMUNITY"}
+                    """.formatted(server.getAddress().getPort()), true);
+            createExternalRuleSet("batch-claude", """
+                    {"url":"http://127.0.0.1:%d/batch/claude","format":"DOMAIN_LIST_COMMUNITY"}
+                    """.formatted(server.getAddress().getPort()), false);
+
+            RuleSetBatchSyncRequest request = new RuleSetBatchSyncRequest();
+            request.setEnabledOnly(true);
+            request.setPublishedOnly(false);
+
+            mockMvc.perform(post("/api/rule-sets/sync-all")
+                            .header("Authorization", "Bearer " + jwtToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$", hasSize(1)))
+                    .andExpect(jsonPath("$[0].ruleKey").value("batch-openai"))
+                    .andExpect(jsonPath("$[0].status").value("UPDATED"))
+                    .andExpect(jsonPath("$[0].itemCount").value(2));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testRuleSetSyncScheduledTaskHandlerRunSuccess() throws Exception {
+        HttpServer server = startRuleSourceServer("/scheduled/openai", """
+                domain:openai.com
+                keyword:gpt
+                """, "text/plain");
+
+        try {
+            Long ruleSetId = createExternalRuleSet("scheduled-openai", """
+                    {"url":"http://127.0.0.1:%d/scheduled/openai","format":"DOMAIN_LIST_COMMUNITY"}
+                    """.formatted(server.getAddress().getPort()));
+
+            ScheduledTask task = new ScheduledTask();
+            task.setTaskKey("sync-ai-rules");
+            task.setTaskType(RuleSetSyncScheduledTaskHandler.TASK_TYPE);
+            task.setConfigJson("""
+                    {"ruleSetIds":[%d],"enabledOnly":false,"publishedOnly":false}
+                    """.formatted(ruleSetId));
+
+            ruleSetSyncScheduledTaskHandler.buildTask(task).run();
+
+            mockMvc.perform(get("/api/rule-sets/" + ruleSetId)
+                            .header("Authorization", "Bearer " + jwtToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.versionNo").value(2))
+                    .andExpect(jsonPath("$.items", hasSize(2)))
+                    .andExpect(jsonPath("$.items[*].type", contains("DOMAIN_KEYWORD", "DOMAIN_SUFFIX")))
+                    .andExpect(jsonPath("$.items[*].value", contains("gpt", "openai.com")));
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void testCreateEnabledRouteWithMissingRuleSetShouldFail() {
+        CreateRouteRequest createRouteRequest = new CreateRouteRequest();
+        createRouteRequest.setName("Missing Rule Set Route");
+        RouteRule routeRule = new RouteRule();
+        routeRule.setConditionType(RouteConditionType.RULE_SET);
+        routeRule.setOp(MatchOp.IN);
+        routeRule.setValue("missing-rule-set");
+        createRouteRequest.setRules(List.of(routeRule));
+        createRouteRequest.setPolicy(RoutePolicy.DIRECT);
+        createRouteRequest.setStatus(1);
+
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
+                () -> routeService.createRoute(createRouteRequest));
+
+        assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
+        assertTrue(exception.getReason().contains("规则集不存在"));
+    }
+
+    private Long createExternalRuleSet(String ruleKey, String sourceConfig) throws Exception {
+        return createExternalRuleSet(ruleKey, sourceConfig, true);
+    }
+
+    private Long createExternalRuleSet(String ruleKey, String sourceConfig, boolean enabled) throws Exception {
+        CreateRuleSetRequest request = new CreateRuleSetRequest();
+        request.setRuleKey(ruleKey);
+        request.setName(ruleKey);
+        request.setCategory(RuleSetCategory.AI);
+        request.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        request.setSourceType(RuleSetSourceType.HTTP_FILE);
+        request.setSourceConfig(sourceConfig);
+        request.setEnabled(enabled);
+        request.setPublished(false);
+        request.setItems(List.of());
+
+        String response = mockMvc.perform(post("/api/rule-sets")
+                        .header("Authorization", "Bearer " + jwtToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        return objectMapper.readTree(response).get("id").asLong();
+    }
+
+    private HttpServer startRuleSourceServer(String path, String body, String contentType) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext(path, exchange -> writeResponse(exchange, body, contentType));
+        server.start();
+        return server;
+    }
+
+    private void writeResponse(com.sun.net.httpserver.HttpExchange exchange, String body, String contentType) throws java.io.IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", contentType);
+        exchange.sendResponseHeaders(200, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
     }
 
     /**

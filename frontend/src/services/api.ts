@@ -16,6 +16,16 @@ import {
   RouteQueryParams
 } from '../types/route';
 import {
+  CreateRuleSetRequest,
+  RuleSetBatchSyncRequest,
+  RuleSetDTO,
+  RuleSetPageResponse,
+  RuleSetQueryParams,
+  RuleSetSummaryDTO,
+  RuleSetSyncResult,
+  UpdateRuleSetRequest,
+} from '../types/ruleset';
+import {
   RateLimitDTO,
   RateLimitCreateRequest,
   RateLimitUpdateRequest,
@@ -369,6 +379,84 @@ class ApiService {
   async deleteRoute(id: number): Promise<void> {
     return this.request<void>(`/routes/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ========== 规则集管理接口 ==========
+  async getRuleSets(params: RuleSetQueryParams = {}): Promise<RuleSetPageResponse<RuleSetSummaryDTO>> {
+    const searchParams = new URLSearchParams();
+
+    if (params.page !== undefined) searchParams.append('page', params.page.toString());
+    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+    if (params.sort) searchParams.append('sort', params.sort);
+    if (params.direction) searchParams.append('direction', params.direction);
+    if (params.name) searchParams.append('name', params.name);
+    if (params.category) searchParams.append('category', params.category);
+    if (params.enabled !== undefined) searchParams.append('enabled', String(params.enabled));
+    if (params.published !== undefined) searchParams.append('published', String(params.published));
+
+    const endpoint = searchParams.toString() ? `/rule-sets?${searchParams.toString()}` : '/rule-sets';
+    const raw: any = await this.request<any>(endpoint);
+
+    if (raw && Array.isArray(raw.items)) {
+      return {
+        items: raw.items,
+        total: typeof raw.total === 'number' ? raw.total : raw.items.length,
+        page: typeof raw.page === 'number' ? raw.page : 1,
+        pageSize: typeof raw.pageSize === 'number' ? raw.pageSize : (typeof raw.size === 'number' ? raw.size : raw.items.length),
+      };
+    }
+
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: (raw.number ?? 0) + 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+
+    return { items: [], total: 0, page: 1, pageSize: params.size ?? 10 };
+  }
+
+  async getRuleSetById(id: number): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>(`/rule-sets/${id}`);
+  }
+
+  async createRuleSet(data: CreateRuleSetRequest): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>('/rule-sets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRuleSet(id: number, data: UpdateRuleSetRequest): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>(`/rule-sets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRuleSet(id: number): Promise<void> {
+    return this.request<void>(`/rule-sets/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getPublishedRuleSets(): Promise<RuleSetDTO[]> {
+    return this.request<RuleSetDTO[]>('/rule-sets/published');
+  }
+
+  async syncRuleSet(id: number): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>(`/rule-sets/${id}/sync`, {
+      method: 'POST',
+    });
+  }
+
+  async syncRuleSets(data?: RuleSetBatchSyncRequest): Promise<RuleSetSyncResult[]> {
+    return this.request<RuleSetSyncResult[]>('/rule-sets/sync-all', {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
     });
   }
 

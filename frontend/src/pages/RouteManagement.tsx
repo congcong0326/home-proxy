@@ -49,6 +49,7 @@ import {
   ProtocolType,
   PROTOCOL_TYPE_LABELS,
 } from '../types/route';
+import { RuleSetDTO } from '../types/ruleset';
 import { apiService } from '../services/api';
 import RouteForm from '../components/RouteForm';
 import './RouteManagement.css';
@@ -88,6 +89,7 @@ const RouteManagement: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<RouteDTO | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetDTO[]>([]);
 
   // 初始模拟路由数据
   const initialMockRoutes: RouteDTO[] = useMemo(() => [
@@ -209,6 +211,19 @@ const RouteManagement: React.FC = () => {
   useEffect(() => {
     loadRoutes();
   }, [loadRoutes]);
+
+  useEffect(() => {
+    const loadPublishedRuleSets = async () => {
+      try {
+        const data = await apiService.getPublishedRuleSets();
+        setPublishedRuleSets(data);
+      } catch (error) {
+        console.error('Failed to load published rule sets:', error);
+      }
+    };
+
+    loadPublishedRuleSets();
+  }, []);
 
   // 处理搜索
   const handleSearch = useCallback((value: string) => {
@@ -448,7 +463,13 @@ const RouteManagement: React.FC = () => {
   <ul>
             {route.rules.map((rule, index) => (
               <li key={index}>
-                {rule.conditionType === RouteConditionType.DOMAIN ? '域名' : '地理位置'}{' '}
+                {rule.conditionType === RouteConditionType.DOMAIN
+                  ? '域名'
+                  : rule.conditionType === RouteConditionType.GEO
+                    ? '地理位置'
+                    : rule.conditionType === RouteConditionType.AD_BLOCK
+                      ? '广告过滤'
+                      : '规则集'}{' '}
                 {rule.op === MatchOp.IN ? '属于' : '不属于'}{' '}
                 {rule.value}
               </li>
@@ -837,6 +858,7 @@ const RouteManagement: React.FC = () => {
             setFormLoading(false);
           }}
           loading={formLoading}
+          ruleSetOptions={publishedRuleSets}
         />
       </Modal>
 
@@ -864,6 +886,7 @@ const RouteManagement: React.FC = () => {
               setFormLoading(false);
             }}
             loading={formLoading}
+            ruleSetOptions={publishedRuleSets}
           />
         )}
       </Modal>

@@ -10,18 +10,17 @@ import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 路由服务层
@@ -31,6 +30,7 @@ import java.util.Optional;
 public class RouteService {
 
     private final RouteRepository routeRepository;
+    private final RuleSetRepository ruleSetRepository;
 
     /**
      * 分页查询路由列表
@@ -71,6 +71,7 @@ public class RouteService {
         if (routeRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
+        validateRuleSetReferences(request.getRules(), request.getStatus() != null ? request.getStatus() : 1);
 
         Route route = new Route();
         route.setName(request.getName());
@@ -106,6 +107,10 @@ public class RouteService {
             }
             route.setName(request.getName());
         }
+
+        List<RouteRule> targetRules = request.getRules() != null ? request.getRules() : route.getRules();
+        Integer targetStatus = request.getStatus() != null ? request.getStatus() : route.getStatus();
+        validateRuleSetReferences(targetRules, targetStatus);
 
         // 更新其他字段
         if (request.getRules() != null) {
@@ -216,6 +221,28 @@ public class RouteService {
             route.setCreatedAt(null);
             route.setUpdatedAt(null);
             routeRepository.save(route);
+        }
+    }
+
+    private void validateRuleSetReferences(List<RouteRule> rules, Integer routeStatus) {
+        if (rules == null) {
+            return;
+        }
+        boolean routeEnabled = routeStatus == null || routeStatus == 1;
+        for (RouteRule rule : rules) {
+            if (rule == null || rule.getConditionType() != RouteConditionType.RULE_SET) {
+                continue;
+            }
+            String ruleSetKey = rule.getValue() == null ? null : rule.getValue().trim();
+            if (ruleSetKey == null || ruleSetKey.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RULE_SET 路由规则必须指定规则集 key");
+            }
+            if (!ruleSetRepository.existsByRuleKey(ruleSetKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "引用的规则集不存在: " + ruleSetKey);
+            }
+            if (routeEnabled && !ruleSetRepository.existsByRuleKeyAndEnabledTrueAndPublishedTrue(ruleSetKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "启用中的路由只能引用已启用且已发布的规则集: " + ruleSetKey);
+            }
         }
     }
 }

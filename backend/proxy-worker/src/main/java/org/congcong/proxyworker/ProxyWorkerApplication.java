@@ -10,6 +10,7 @@ import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.service.AggregateConfigService;
 
@@ -66,6 +67,7 @@ public class ProxyWorkerApplication {
             log.info("  路由配置数量: {}", newConfig.getRoutes() != null ? newConfig.getRoutes().size() : 0);
             log.info("  限流配置数量: {}", newConfig.getRateLimits() != null ? newConfig.getRateLimits().size() : 0);
             log.info("  用户配置数量: {}", newConfig.getUsers() != null ? newConfig.getUsers().size() : 0);
+            log.info("  规则集数量: {}", newConfig.getRuleSets() != null ? newConfig.getRuleSets().size() : 0);
             log.info("  配置哈希: {}", newConfig.getConfigHash());
             log.info("  配置数据: {}", newConfig.toString());
             ObjectMapper mapper = new ObjectMapper();
@@ -141,6 +143,7 @@ public class ProxyWorkerApplication {
                     inboundConfigs.add(inboundConfig);
                 }
             }
+            RuleSetRegistry.refresh(newConfig.getRuleSets());
             log.info("已构建入站配置数量: {}", inboundConfigs.size());
             // 刷新代理服务
             PROXY_CONTEXT.refresh(inboundConfigs);

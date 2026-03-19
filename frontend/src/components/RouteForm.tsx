@@ -38,6 +38,7 @@ import {
   PROTOCOL_TYPE_LABELS,
   OutboundProxyEncAlgo,
 } from '../types/route';
+import { RuleSetDTO } from '../types/ruleset';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
 const { TextArea } = Input;
@@ -49,6 +50,7 @@ interface RouteFormProps {
   onCancel: () => void;
   loading?: boolean;
   mode: 'create' | 'edit';
+  ruleSetOptions?: RuleSetDTO[];
 }
 
 interface FormValues {
@@ -72,6 +74,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
   onCancel,
   loading = false,
   mode,
+  ruleSetOptions = [],
 }) => {
   const [form] = Form.useForm<FormValues>();
   const [policy, setPolicy] = useState<RoutePolicy>(initialValues?.policy || RoutePolicy.DIRECT);
@@ -152,7 +155,8 @@ const RouteForm: React.FC<RouteFormProps> = ({
     const newRules = [...rules];
     const defaults =
       value === RouteConditionType.GEO ? 'CN' :
-      value === RouteConditionType.AD_BLOCK ? '是' : '';
+      value === RouteConditionType.AD_BLOCK ? '是' :
+      value === RouteConditionType.RULE_SET ? (ruleSetOptions[0]?.ruleKey || '') : '';
     newRules[index] = { ...newRules[index], conditionType: value, value: defaults };
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
@@ -288,6 +292,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
             <li>支持域名匹配，如：example.com</li>
             <li>支持通配符匹配，如：*.example.com</li>
             <li>支持子域名匹配，如：sub.example.com</li>
+            <li>支持引用已发布规则集，如：ai-openai、ai-common</li>
             <li>至少需要配置一个有效规则</li>
           </ul>
         }
@@ -312,6 +317,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                   { value: RouteConditionType.DOMAIN, label: '域名' },
                   { value: RouteConditionType.GEO, label: '地理位置' },
                   { value: RouteConditionType.AD_BLOCK, label: '去除广告' },
+                  { value: RouteConditionType.RULE_SET, label: '规则集' },
                 ]}
               />
               </Col>
@@ -340,6 +346,17 @@ const RouteForm: React.FC<RouteFormProps> = ({
                     onChange={(val) => handleRuleValueChange(index, val as string)}
                     style={{ width: '100%' }}
                     options={[{ value: '是', label: '是' }]}
+                  />
+                ) : rule.conditionType === RouteConditionType.RULE_SET ? (
+                  <Select
+                    value={rule.value || undefined}
+                    onChange={(val) => handleRuleValueChange(index, val as string)}
+                    style={{ width: '100%' }}
+                    placeholder="请选择已发布规则集"
+                    options={ruleSetOptions.map((item) => ({
+                      value: item.ruleKey,
+                      label: `${item.name} (${item.ruleKey})`,
+                    }))}
                   />
                 ) : (
                   <Input
