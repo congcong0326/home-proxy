@@ -9,7 +9,9 @@ public enum ProxyEncAlgo {
     aes_256_gcm("aes_256_gcm", null),
     aes_128_gcm("aes_128_gcm", null),
     chacha20_ietf_poly1305("chacha20_ietf_poly1305", null),
-    blake3_2022_aes_128_gcm("2022-blake3-aes-128-gcm", 16);
+    blake3_2022_aes_128_gcm("2022-blake3-aes-128-gcm", 16),
+    blake3_2022_aes_256_gcm("2022-blake3-aes-256-gcm", 32),
+    blake3_2022_chacha20_poly1305("2022-blake3-chacha20-poly1305", 32);
 
     private final String value;
     private final Integer pskLength;

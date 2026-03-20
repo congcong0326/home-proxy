@@ -20,6 +20,8 @@ public class CryptoProcessorFactory {
             case aes_128_gcm -> new AES128GCMProcessor();
             case chacha20_ietf_poly1305 -> new ChaCha20Poly1305Processor();
             case blake3_2022_aes_128_gcm -> new AES128GCMProcessor();
+            case blake3_2022_aes_256_gcm -> new AESGCMProcessor();
+            case blake3_2022_chacha20_poly1305 -> new ChaCha20Poly1305Processor();
             default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         };
         if (algorithm.isShadowSocks2022()) {

@@ -38,7 +38,11 @@ import {
   PROTOCOL_TYPE_LABELS,
   OutboundProxyEncAlgo,
 } from '../types/route';
-import { PROXY_ENC_ALGO_OPTIONS, ProxyEncAlgo } from '../types/proxyEncAlgo';
+import {
+  PROXY_ENC_ALGO_OPTIONS,
+  SHADOWSOCKS_2022_PSK_LENGTH,
+  isShadowsocks2022Algo,
+} from '../types/proxyEncAlgo';
 import { RuleSetDTO } from '../types/ruleset';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
@@ -88,6 +92,9 @@ const RouteForm: React.FC<RouteFormProps> = ({
   const outboundProxyTypeWatch = Form.useWatch('outboundProxyType', form);
   const outboundProxyEncAlgoWatch = Form.useWatch('outboundProxyEncAlgo', form);
   const allowMultiDnsHost = outboundProxyTypeWatch === ProtocolType.DOT || outboundProxyTypeWatch === ProtocolType.DNS_SERVER;
+  const shadowsocks2022PskLength = outboundProxyEncAlgoWatch
+    ? SHADOWSOCKS_2022_PSK_LENGTH[outboundProxyEncAlgoWatch]
+    : undefined;
 
   useEffect(() => {
     if (initialValues) {
@@ -522,8 +529,8 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 label="密码（可选）"
                 extra={
                   outboundProxyTypeWatch === ProtocolType.SHADOW_SOCKS &&
-                  outboundProxyEncAlgoWatch === ProxyEncAlgo.BLAKE3_2022_AES_128_GCM
-                    ? '支持单个 Base64 uPSK，或 iPSK:uPSK 形式；每段都必须是 16 字节 Base64'
+                  isShadowsocks2022Algo(outboundProxyEncAlgoWatch)
+                    ? `支持单个 Base64 uPSK，或 iPSK:uPSK 形式；每段都必须是 ${shadowsocks2022PskLength} 字节 Base64`
                     : undefined
                 }
               >
