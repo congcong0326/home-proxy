@@ -19,6 +19,7 @@ public final class ChannelAttributes {
     public static final AttributeKey<ProxyTimeContext> PROXY_TIME_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_TIME_ATTRIBUTE_KEY");
 
     public static final AttributeKey<ProxyTunnelRequest> ProxyTunnelRequest = AttributeKey.valueOf("ProxyTunnelRequest");
+    public static final AttributeKey<byte[]> SHADOWSOCKS_2022_REQUEST_SALT = AttributeKey.valueOf("SHADOWSOCKS_2022_REQUEST_SALT");
 
     public static ProxyTunnelRequest getProxyTunnelRequest(Channel channel) {
         return channel.attr(ChannelAttributes.ProxyTunnelRequest).get();
@@ -31,6 +32,14 @@ public final class ChannelAttributes {
 
     public static void removeProxyTunnelRequest(Channel channel) {
         channel.attr(ChannelAttributes.ProxyTunnelRequest).set(null);
+    }
+
+    public static byte[] getShadowSocks2022RequestSalt(Channel channel) {
+        return channel.attr(SHADOWSOCKS_2022_REQUEST_SALT).get();
+    }
+
+    public static void setShadowSocks2022RequestSalt(Channel channel, byte[] requestSalt) {
+        channel.attr(SHADOWSOCKS_2022_REQUEST_SALT).set(requestSalt);
     }
 
 

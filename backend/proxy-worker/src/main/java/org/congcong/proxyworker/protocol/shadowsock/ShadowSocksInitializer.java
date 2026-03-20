@@ -27,6 +27,16 @@ public class ShadowSocksInitializer extends AbstractChannelInitializer {
         ProxyEncAlgo ssMethod = inboundConfig.getSsMethod();
         String credential = userConfig.getCredential();
         ChannelAttributes.setAuthenticatedUser(socketChannel, userConfig);
+        if (ShadowSocks2022Support.isEnabled(ssMethod)) {
+            socketChannel.pipeline().addLast(
+                    new ShadowSocks2022ServerDecoder(
+                            CryptoProcessorFactory.createProcessor(ssMethod, credential),
+                            credential
+                    ),
+                    new ShadowSocks2022ServerEncoder(CryptoProcessorFactory.createProcessor(ssMethod, credential))
+            );
+            return;
+        }
         socketChannel.pipeline().addLast(
                 // 解密数据
                 new DecryptedSocksHandler(CryptoProcessorFactory.createProcessor(ssMethod, credential)),

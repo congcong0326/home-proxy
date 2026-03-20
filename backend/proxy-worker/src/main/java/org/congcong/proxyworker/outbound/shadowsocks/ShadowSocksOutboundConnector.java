@@ -4,8 +4,6 @@ import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.socksx.v5.Socks5AddressType;
-import io.netty.util.NetUtil;
 import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProxyEncAlgo;
@@ -13,6 +11,12 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
 import org.congcong.proxyworker.protocol.shadowsock.EncryptedSocksHandler;
 import org.congcong.proxyworker.protocol.shadowsock.DecryptedSocksHandler;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022ClientChunkEncoder;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022ClientHandshakeHandler;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022ClientResponseDecoder;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022ClientSession;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022Support;
+import org.congcong.proxyworker.protocol.shadowsock.ShadowSocksAddressCodec;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.encryption.CryptoProcessorFactory;
 
@@ -39,6 +43,28 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
+                        if (ShadowSocks2022Support.isEnabled(outboundProxyEncAlgo)) {
+                            ShadowSocks2022ClientSession session = new ShadowSocks2022ClientSession();
+                            var requestCryptoProcessor = CryptoProcessorFactory.createProcessor(outboundProxyEncAlgo, outboundProxyPassword);
+                            var responseCryptoProcessor = CryptoProcessorFactory.createProcessor(outboundProxyEncAlgo, outboundProxyPassword);
+                            socketChannel.pipeline().addLast(
+                                    new ShadowSocks2022ClientResponseDecoder(
+                                            responseCryptoProcessor,
+                                            session
+                                    ),
+                                    new ShadowSocks2022ClientHandshakeHandler(
+                                            request,
+                                            relayPromise,
+                                            requestCryptoProcessor,
+                                            session,
+                                            outboundProxyPassword
+                                    ),
+                                    new ShadowSocks2022ClientChunkEncoder(
+                                            requestCryptoProcessor
+                                    )
+                            );
+                            return;
+                        }
                         socketChannel.pipeline().addLast(
                                 // 加密出站数据
                                 new EncryptedSocksHandler(CryptoProcessorFactory.createProcessor(outboundProxyEncAlgo, outboundProxyPassword)),
@@ -75,36 +101,7 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
             int targetPort = proxyTunnelRequest.getTargetPort();
 
             ByteBuf requestBuf = ctx.alloc().buffer();
-            
-            // 确定地址类型并写入
-            if (NetUtil.isValidIpV4Address(targetHost)) {
-                requestBuf.writeByte(Socks5AddressType.IPv4.byteValue());
-                String[] parts = targetHost.split("\\.");
-                for (String part : parts) {
-                    requestBuf.writeByte(Integer.parseInt(part));
-                }
-            } else if (NetUtil.isValidIpV6Address(targetHost)) {
-                requestBuf.writeByte(Socks5AddressType.IPv6.byteValue());
-                // IPv6地址处理
-                String[] parts = targetHost.split(":");
-                for (String part : parts) {
-                    if (part.isEmpty()) {
-                        requestBuf.writeShort(0);
-                    } else {
-                        requestBuf.writeShort(Integer.parseInt(part, 16));
-                    }
-                }
-            } else {
-                // 域名
-                requestBuf.writeByte(Socks5AddressType.DOMAIN.byteValue());
-                byte[] hostBytes = targetHost.getBytes();
-                requestBuf.writeByte(hostBytes.length);
-                requestBuf.writeBytes(hostBytes);
-            }
-            
-            // 写入端口
-            requestBuf.writeShort(targetPort);
-            
+            ShadowSocksAddressCodec.writeAddress(requestBuf, targetHost, targetPort);
 
 
             ctx.writeAndFlush(requestBuf).addListener(future -> {

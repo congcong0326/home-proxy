@@ -1,3 +1,5 @@
+import { ProxyEncAlgo } from './proxyEncAlgo';
+
 // 路由条件类型（与后端保持一致）
 export enum RouteConditionType {
   DOMAIN = 'DOMAIN',
@@ -45,7 +47,7 @@ export const PROTOCOL_TYPE_LABELS = {
 };
 
 // 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）
-export type OutboundProxyEncAlgo = 'aes_256_gcm' | 'aes_128_gcm' | 'chacha20_ietf_poly1305';
+export type OutboundProxyEncAlgo = ProxyEncAlgo;
 
 // 路由策略枚举
 export enum RoutePolicy {

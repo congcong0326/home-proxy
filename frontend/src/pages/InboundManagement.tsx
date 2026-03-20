@@ -32,7 +32,7 @@ import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateReques
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO, UserStatus } from '../types/user';
 import { RouteDTO } from '../types/route';
-import { ProxyEncAlgo, PROXY_ENC_ALGO_LABELS } from '../types/proxyEncAlgo';
+import { PROXY_ENC_ALGO_OPTIONS } from '../types/proxyEncAlgo';
 import { formatBytes } from '../utils/format';
 
 const { Title } = Typography;
@@ -123,11 +123,7 @@ const InboundManagement: React.FC = () => {
   ), [routeOptions]);
 
   // Shadowsocks 加密算法选项
-  const ssMethodSelectOptions = useMemo(() => ([
-    { value: ProxyEncAlgo.AES_256_GCM, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.AES_256_GCM] },
-    { value: ProxyEncAlgo.AES_128_GCM, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.AES_128_GCM] },
-    { value: ProxyEncAlgo.CHACHA20_IETF_POLY1305, label: PROXY_ENC_ALGO_LABELS[ProxyEncAlgo.CHACHA20_IETF_POLY1305] },
-  ]), []);
+  const ssMethodSelectOptions = useMemo(() => PROXY_ENC_ALGO_OPTIONS, []);
 
   const fetchInboundTraffic = useCallback(async (list: InboundConfigDTO[]) => {
     const ids = (list || []).map(i => i.id).filter((id): id is number => typeof id === 'number');

@@ -19,9 +19,14 @@ public class CryptoProcessorFactory {
             case aes_256_gcm -> new AESGCMProcessor();
             case aes_128_gcm -> new AES128GCMProcessor();
             case chacha20_ietf_poly1305 -> new ChaCha20Poly1305Processor();
+            case blake3_2022_aes_128_gcm -> new AES128GCMProcessor();
             default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         };
-        cryptoProcessor.setKey(HKDF.kdf(key, cryptoProcessor.getKeySize()));
+        if (algorithm.isShadowSocks2022()) {
+            cryptoProcessor.setKey(ShadowSocks2022Key.decodeUserKey(key, cryptoProcessor.getKeySize()));
+        } else {
+            cryptoProcessor.setKey(HKDF.kdf(key, cryptoProcessor.getKeySize()));
+        }
         return cryptoProcessor;
     }
 
