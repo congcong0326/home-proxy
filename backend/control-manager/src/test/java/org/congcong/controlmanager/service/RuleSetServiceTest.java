@@ -13,6 +13,8 @@ import org.congcong.controlmanager.dto.ruleset.RuleSetSourceConfig;
 import org.congcong.controlmanager.dto.ruleset.RuleSetSyncResultDTO;
 import org.congcong.controlmanager.dto.ruleset.RuleSetSyncStatus;
 import org.congcong.controlmanager.entity.RuleSetEntity;
+import org.congcong.controlmanager.entity.RuleSetPayloadEntity;
+import org.congcong.controlmanager.repository.RuleSetPayloadRepository;
 import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.service.ruleset.RuleSetSourceSyncService;
 import org.junit.jupiter.api.DisplayName;
@@ -24,6 +26,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -48,6 +51,9 @@ class RuleSetServiceTest {
     private RuleSetRepository ruleSetRepository;
 
     @Mock
+    private RuleSetPayloadRepository ruleSetPayloadRepository;
+
+    @Mock
     private RuleSetSourceSyncService ruleSetSourceSyncService;
 
     @InjectMocks
@@ -56,24 +62,21 @@ class RuleSetServiceTest {
     @Test
     @DisplayName("分页查询规则集摘要时不返回完整规则项")
     void testGetRuleSetsReturnsSummaries() {
-        RuleSetSummaryDTO summary = new RuleSetSummaryDTO(
-                1L,
-                "geo-not-cn",
-                "Geo Not CN",
-                RuleSetCategory.GEO,
-                RuleSetMatchTarget.DOMAIN,
-                RuleSetSourceType.GIT_RAW_FILE,
-                "{\"url\":\"https://example.com/geo.txt\"}",
-                true,
-                true,
-                3L,
-                "geo summary",
-                2048,
-                null,
-                null
-        );
+        RuleSetEntity summary = new RuleSetEntity();
+        summary.setId(1L);
+        summary.setRuleKey("geo-not-cn");
+        summary.setName("Geo Not CN");
+        summary.setCategory(RuleSetCategory.GEO);
+        summary.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+        summary.setSourceType(RuleSetSourceType.GIT_RAW_FILE);
+        summary.setSourceConfig("{\"url\":\"https://example.com/geo.txt\"}");
+        summary.setEnabled(true);
+        summary.setPublished(true);
+        summary.setVersionNo(3L);
+        summary.setDescription("geo summary");
+        summary.setItemCount(2048);
 
-        when(ruleSetRepository.findPageSummaries(eq("geo"), eq(RuleSetCategory.GEO), eq(true), eq(true), any()))
+        when(ruleSetRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(summary), PageRequest.of(0, 10), 1));
 
         var result = ruleSetService.getRuleSets(PageRequest.of(0, 10), "geo", RuleSetCategory.GEO, true, true);
@@ -84,9 +87,62 @@ class RuleSetServiceTest {
         assertEquals(1, result.getPage());
         assertEquals(10, result.getSize());
         assertEquals(1, result.getTotal());
-        verify(ruleSetRepository).findPageSummaries("geo", RuleSetCategory.GEO, true, true, PageRequest.of(0, 10));
+        verify(ruleSetRepository).findAll(any(Specification.class), any(PageRequest.class));
         verify(ruleSetRepository, never()).findById(any());
         assertFalse(result.getItems().isEmpty());
+    }
+
+    @Test
+    @DisplayName("查询规则集配置详情时不加载规则项")
+    void testGetRuleSetByIdReturnsSummaryWithoutItems() {
+        RuleSetEntity entity = externalEntity(1L, "geo-not-cn", List.of(item(RuleSetItemType.DOMAIN_SUFFIX, "example.com")), true);
+        entity.setDescription("geo detail");
+
+        when(ruleSetRepository.findById(1L)).thenReturn(Optional.of(entity));
+
+        RuleSetSummaryDTO result = ruleSetService.getRuleSetById(1L);
+
+        assertEquals("geo-not-cn", result.getRuleKey());
+        assertEquals(1, result.getItemCount());
+        verify(ruleSetRepository).findById(1L);
+        verify(ruleSetPayloadRepository, never()).findByRuleSetIdIn(any());
+    }
+
+    @Test
+    @DisplayName("分页查询规则项")
+    void testGetRuleSetItemsReturnsPagedItems() {
+        RuleSetEntity entity = externalEntity(1L, "ai-openai", List.of(), true);
+        List<RuleSetItemDTO> items = List.of(
+                item(RuleSetItemType.DOMAIN, "chat.openai.com"),
+                item(RuleSetItemType.DOMAIN_SUFFIX, "openai.com"),
+                item(RuleSetItemType.DOMAIN_KEYWORD, "gpt")
+        );
+
+        when(ruleSetRepository.findById(1L)).thenReturn(Optional.of(entity));
+        when(ruleSetPayloadRepository.findByRuleSetIdIn(List.of(1L)))
+                .thenReturn(List.of(payload(1L, items)));
+
+        var result = ruleSetService.getRuleSetItems(1L, PageRequest.of(1, 2));
+
+        assertEquals(2, result.getPage());
+        assertEquals(2, result.getSize());
+        assertEquals(3, result.getTotal());
+        assertEquals(List.of(items.get(2)), result.getItems());
+    }
+
+    @Test
+    @DisplayName("查询已发布规则集摘要时不加载规则项")
+    void testGetPublishedRuleSetsReturnsSummariesWithoutItems() {
+        RuleSetEntity entity = externalEntity(1L, "ai-openai", List.of(item(RuleSetItemType.DOMAIN_SUFFIX, "openai.com")), true);
+        entity.setPublished(true);
+
+        when(ruleSetRepository.findByEnabledTrueAndPublishedTrueOrderByRuleKeyAsc()).thenReturn(List.of(entity));
+
+        List<RuleSetSummaryDTO> result = ruleSetService.getPublishedRuleSets();
+
+        assertEquals(1, result.size());
+        assertEquals("ai-openai", result.get(0).getRuleKey());
+        verify(ruleSetPayloadRepository, never()).findByRuleSetIdIn(any());
     }
 
     @Test
@@ -109,6 +165,7 @@ class RuleSetServiceTest {
         when(ruleSetSourceSyncService.parseSourceConfig(eq(request.getSourceConfig()), eq(RuleSetSourceType.HTTP_FILE)))
                 .thenReturn(new RuleSetSourceConfig());
         when(ruleSetRepository.save(any(RuleSetEntity.class))).thenReturn(saved);
+        when(ruleSetPayloadRepository.save(any(RuleSetPayloadEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         RuleSetDTO result = ruleSetService.createRuleSet(request);
 
@@ -125,11 +182,15 @@ class RuleSetServiceTest {
         RuleSetEntity manual = manualEntity(2L, "ai-manual");
 
         when(ruleSetRepository.findByIdInOrderByIdAsc(List.of(1L, 2L))).thenReturn(List.of(external, manual));
+        when(ruleSetPayloadRepository.findByRuleSetIdIn(List.of(1L, 2L)))
+                .thenReturn(List.of(payload(1L, List.of(item(RuleSetItemType.DOMAIN_SUFFIX, "old.com"))),
+                        payload(2L, List.of(item(RuleSetItemType.DOMAIN_SUFFIX, "manual.example")))));
         when(ruleSetSourceSyncService.sync(external)).thenReturn(List.of(
                 item(RuleSetItemType.DOMAIN_SUFFIX, "openai.com"),
                 item(RuleSetItemType.DOMAIN, "chat.openai.com")
         ));
         when(ruleSetRepository.save(any(RuleSetEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(ruleSetPayloadRepository.save(any(RuleSetPayloadEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         RuleSetBatchSyncRequest request = new RuleSetBatchSyncRequest();
         request.setRuleSetIds(List.of(1L, 2L));
@@ -178,6 +239,11 @@ class RuleSetServiceTest {
         entity.setVersionNo(3L);
 
         when(ruleSetRepository.findById(1L)).thenReturn(Optional.of(entity));
+        when(ruleSetPayloadRepository.findByRuleSetIdIn(List.of(1L)))
+                .thenReturn(List.of(payload(1L, List.of(
+                        item(RuleSetItemType.DOMAIN, "chat.openai.com"),
+                        item(RuleSetItemType.DOMAIN_SUFFIX, "openai.com")
+                ))));
         when(ruleSetSourceSyncService.sync(entity)).thenReturn(List.of(
                 item(RuleSetItemType.DOMAIN_SUFFIX, "openai.com"),
                 item(RuleSetItemType.DOMAIN, "chat.openai.com")
@@ -203,6 +269,7 @@ class RuleSetServiceTest {
         entity.setPublished(false);
         entity.setVersionNo(1L);
         entity.setItems(items);
+        entity.setItemCount(items.size());
         return entity;
     }
 
@@ -218,7 +285,15 @@ class RuleSetServiceTest {
         entity.setPublished(true);
         entity.setVersionNo(1L);
         entity.setItems(List.of(item(RuleSetItemType.DOMAIN_SUFFIX, "manual.example")));
+        entity.setItemCount(1);
         return entity;
+    }
+
+    private RuleSetPayloadEntity payload(Long ruleSetId, List<RuleSetItemDTO> items) {
+        RuleSetPayloadEntity payload = new RuleSetPayloadEntity();
+        payload.setRuleSetId(ruleSetId);
+        payload.setItems(items);
+        return payload;
     }
 
     private RuleSetItemDTO item(RuleSetItemType type, String value) {

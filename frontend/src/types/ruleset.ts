@@ -58,6 +58,7 @@ export interface RuleSetDTO {
   versionNo: number;
   description?: string;
   items: RuleSetItem[];
+  itemCount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,6 +115,11 @@ export interface RuleSetQueryParams {
   category?: RuleSetCategory;
   enabled?: boolean;
   published?: boolean;
+}
+
+export interface RuleSetItemQueryParams {
+  page?: number;
+  size?: number;
 }
 
 export interface RuleSetPageResponse<T> {

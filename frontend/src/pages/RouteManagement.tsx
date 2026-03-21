@@ -49,7 +49,7 @@ import {
   ProtocolType,
   PROTOCOL_TYPE_LABELS,
 } from '../types/route';
-import { RuleSetDTO } from '../types/ruleset';
+import { RuleSetSummaryDTO } from '../types/ruleset';
 import { apiService } from '../services/api';
 import RouteForm from '../components/RouteForm';
 import './RouteManagement.css';
@@ -89,7 +89,7 @@ const RouteManagement: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<RouteDTO | null>(null);
   const [formLoading, setFormLoading] = useState(false);
-  const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetDTO[]>([]);
+  const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetSummaryDTO[]>([]);
 
   // 初始模拟路由数据
   const initialMockRoutes: RouteDTO[] = useMemo(() => [

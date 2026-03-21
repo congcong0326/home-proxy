@@ -6,9 +6,6 @@ import org.congcong.common.dto.RuleSetItemDTO;
 import org.congcong.common.enums.RuleSetCategory;
 import org.congcong.common.enums.RuleSetMatchTarget;
 import org.congcong.common.enums.RuleSetSourceType;
-import org.hibernate.annotations.Formula;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -55,11 +52,10 @@ public class RuleSetEntity {
     @Column(length = 255)
     private String description;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "items_json", nullable = false, columnDefinition = "JSON")
+    @Transient
     private List<RuleSetItemDTO> items;
 
-    @Formula("coalesce(json_length(items_json), 0)")
+    @Column(name = "item_count", nullable = false)
     private Integer itemCount;
 
     @Column(name = "created_at", nullable = false)
@@ -81,6 +77,9 @@ public class RuleSetEntity {
         }
         if (published == null) {
             published = false;
+        }
+        if (itemCount == null) {
+            itemCount = 0;
         }
     }
 

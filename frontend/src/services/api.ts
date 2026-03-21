@@ -19,6 +19,8 @@ import {
   CreateRuleSetRequest,
   RuleSetBatchSyncRequest,
   RuleSetDTO,
+  RuleSetItem,
+  RuleSetItemQueryParams,
   RuleSetPageResponse,
   RuleSetQueryParams,
   RuleSetSummaryDTO,
@@ -274,8 +276,11 @@ class ApiService {
     const raw: any = await this.request<any>(endpoint);
     if (raw && Array.isArray(raw.items)) {
       const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
-      const size = typeof raw.pageSize === 'number' ? raw.pageSize : raw.items.length;
-      const number = typeof raw.page === 'number' ? raw.page : 0;
+      const size = typeof raw.pageSize === 'number'
+        ? raw.pageSize
+        : (typeof raw.size === 'number' ? raw.size : raw.items.length);
+      const page = typeof raw.page === 'number' ? raw.page : 1;
+      const number = Math.max(page - 1, 0);
       const totalPages = size > 0 ? Math.ceil(total / size) : 1;
       const normalized: PageResponse<RouteDTO> = {
         content: raw.items,
@@ -308,8 +313,11 @@ class ApiService {
     const raw: any = await this.request<any>(endpoint);
     if (raw && Array.isArray(raw.items)) {
       const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
-      const size = typeof raw.pageSize === 'number' ? raw.pageSize : raw.items.length;
-      const number = typeof raw.page === 'number' ? raw.page : 0;
+      const size = typeof raw.pageSize === 'number'
+        ? raw.pageSize
+        : (typeof raw.size === 'number' ? raw.size : raw.items.length);
+      const page = typeof raw.page === 'number' ? raw.page : 1;
+      const number = Math.max(page - 1, 0);
       const totalPages = size > 0 ? Math.ceil(total / size) : 1;
       const normalized: PageResponse<InboundConfigDTO> = {
         content: raw.items,
@@ -419,8 +427,40 @@ class ApiService {
     return { items: [], total: 0, page: 1, pageSize: params.size ?? 10 };
   }
 
-  async getRuleSetById(id: number): Promise<RuleSetDTO> {
-    return this.request<RuleSetDTO>(`/rule-sets/${id}`);
+  async getRuleSetById(id: number): Promise<RuleSetSummaryDTO> {
+    return this.request<RuleSetSummaryDTO>(`/rule-sets/${id}`);
+  }
+
+  async getRuleSetItems(id: number, params: RuleSetItemQueryParams = {}): Promise<RuleSetPageResponse<RuleSetItem>> {
+    const searchParams = new URLSearchParams();
+
+    if (params.page !== undefined) searchParams.append('page', params.page.toString());
+    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+
+    const endpoint = searchParams.toString()
+      ? `/rule-sets/${id}/items?${searchParams.toString()}`
+      : `/rule-sets/${id}/items`;
+    const raw: any = await this.request<any>(endpoint);
+
+    if (raw && Array.isArray(raw.items)) {
+      return {
+        items: raw.items,
+        total: typeof raw.total === 'number' ? raw.total : raw.items.length,
+        page: typeof raw.page === 'number' ? raw.page : 1,
+        pageSize: typeof raw.pageSize === 'number' ? raw.pageSize : (typeof raw.size === 'number' ? raw.size : raw.items.length),
+      };
+    }
+
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: (raw.number ?? 0) + 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+
+    return { items: [], total: 0, page: params.page ?? 1, pageSize: params.size ?? 50 };
   }
 
   async createRuleSet(data: CreateRuleSetRequest): Promise<RuleSetDTO> {
@@ -443,8 +483,8 @@ class ApiService {
     });
   }
 
-  async getPublishedRuleSets(): Promise<RuleSetDTO[]> {
-    return this.request<RuleSetDTO[]>('/rule-sets/published');
+  async getPublishedRuleSets(): Promise<RuleSetSummaryDTO[]> {
+    return this.request<RuleSetSummaryDTO[]>('/rule-sets/published');
   }
 
   async syncRuleSet(id: number): Promise<RuleSetDTO> {

@@ -95,7 +95,7 @@ public class AggregateConfigService {
     }
 
     private List<RuleSetDTO> getPublishedRuleSets() {
-        return ruleSetService.getPublishedRuleSets();
+        return ruleSetService.getPublishedRuleSetsWithItems();
     }
 
     /**

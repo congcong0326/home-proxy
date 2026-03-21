@@ -43,7 +43,7 @@ import {
   SHADOWSOCKS_2022_PSK_LENGTH,
   isShadowsocks2022Algo,
 } from '../types/proxyEncAlgo';
-import { RuleSetDTO } from '../types/ruleset';
+import { RuleSetSummaryDTO } from '../types/ruleset';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
 const { TextArea } = Input;
@@ -55,7 +55,7 @@ interface RouteFormProps {
   onCancel: () => void;
   loading?: boolean;
   mode: 'create' | 'edit';
-  ruleSetOptions?: RuleSetDTO[];
+  ruleSetOptions?: RuleSetSummaryDTO[];
 }
 
 interface FormValues {

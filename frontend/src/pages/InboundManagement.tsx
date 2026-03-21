@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   Col,
-  Divider,
   Form,
   Input,
   InputNumber,
@@ -30,10 +29,11 @@ import {
 import { apiService } from '../services/api';
 import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundTrafficStats } from '../types/inbound';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
-import { UserDTO, UserStatus } from '../types/user';
+import { UserDTO } from '../types/user';
 import { RouteDTO } from '../types/route';
 import { PROXY_ENC_ALGO_OPTIONS } from '../types/proxyEncAlgo';
 import { formatBytes } from '../utils/format';
+import RouteOrderEditor from '../components/RouteOrderEditor';
 
 const { Title } = Typography;
 
@@ -51,6 +51,39 @@ interface PageState {
   searchPort?: number;
   selectedRowKeys: React.Key[];
 }
+
+const normalizeInboundConfig = (inbound: InboundConfigDTO): InboundConfigDTO => {
+  const normalizedBindings = (inbound.inboundRouteBindings ?? [])
+    .filter((binding): binding is InboundRouteBinding => Boolean(binding))
+    .map((binding) => ({
+      userIds: (binding.userIds ?? []).filter((id): id is number => typeof id === 'number'),
+      routeIds: (binding.routeIds ?? []).filter((id): id is number => typeof id === 'number'),
+    }))
+    .filter((binding) => binding.userIds.length > 0 || binding.routeIds.length > 0);
+
+  return {
+    ...inbound,
+    inboundRouteBindings: normalizedBindings.length > 0
+      ? normalizedBindings
+      : [{ userIds: [], routeIds: [] }],
+  };
+};
+
+const routeOrderRules = [
+  {
+    validator: async (_: unknown, value?: number[]) => {
+      const routeIdList = (value ?? []).filter((id): id is number => typeof id === 'number');
+
+      if (!routeIdList.length) {
+        throw new Error('请至少添加一个路由');
+      }
+
+      if (new Set(routeIdList).size !== routeIdList.length) {
+        throw new Error('同一绑定组内不能重复选择路由');
+      }
+    },
+  },
+];
 
 const InboundManagement: React.FC = () => {
   const [state, setState] = useState<PageState>({
@@ -81,14 +114,14 @@ const InboundManagement: React.FC = () => {
     if (createProtocolWatch === ProtocolType.TP_PROXY) {
       createForm.setFieldsValue({ tlsEnabled: false });
     }
-  }, [createProtocolWatch]);
+  }, [createForm, createProtocolWatch]);
 
   // 根据协议调整编辑表单的 TLS 默认值
   useEffect(() => {
     if (editProtocolWatch === ProtocolType.TP_PROXY) {
       editForm.setFieldsValue({ tlsEnabled: false });
     }
-  }, [editProtocolWatch]);
+  }, [editForm, editProtocolWatch]);
 
   // 下拉数据
   const [userOptions, setUserOptions] = useState<UserDTO[]>([]);
@@ -115,11 +148,19 @@ const InboundManagement: React.FC = () => {
   ]), []);
 
   const userSelectOptions = useMemo(() => (
-    userOptions.map(u => ({ value: u.id, label: u.username }))
+    userOptions.map(u => ({
+      value: u.id,
+      label: u.status === 1 ? u.username : `${u.username}（已禁用）`,
+      disabled: u.status !== 1,
+    }))
   ), [userOptions]);
 
   const routeSelectOptions = useMemo(() => (
-    routeOptions.map(r => ({ value: r.id, label: r.name }))
+    routeOptions.map(r => ({
+      value: r.id,
+      label: r.status === 1 ? r.name : `${r.name}（已禁用）`,
+      disabled: r.status !== 1,
+    }))
   ), [routeOptions]);
 
   // Shadowsocks 加密算法选项
@@ -148,20 +189,105 @@ const InboundManagement: React.FC = () => {
 
   const loadUsersAndRoutes = useCallback(async () => {
     try {
-      const usersPage = await apiService.getUsers({ page: 1, pageSize: 100, status: UserStatus.ENABLED });
+      const usersPage = await apiService.getUsers({ page: 1, pageSize: 200, sortBy: 'updatedAt', sortDir: 'desc' });
       setUserOptions(usersPage.items || []);
     } catch (e) {
       console.warn('加载用户失败，可能后端未启动，使用空列表');
       setUserOptions([]);
     }
     try {
-      const enabledRoutes = await apiService.getEnabledRoutes();
-      setRouteOptions(enabledRoutes);
+      const routesPage = await apiService.getRoutes({ page: 1, size: 1000, sort: 'updatedAt', direction: 'desc' });
+      setRouteOptions(routesPage.content || []);
     } catch (e) {
-      console.warn('加载启用路由失败，使用空列表');
+      console.warn('加载路由失败，使用空列表');
       setRouteOptions([]);
     }
   }, []);
+
+  const ensureBindingOptionsLoaded = useCallback(async (bindings: InboundRouteBinding[]) => {
+    const normalizedBindings = bindings.map((binding) => ({
+      userIds: (binding.userIds ?? []).filter((id): id is number => typeof id === 'number'),
+      routeIds: (binding.routeIds ?? []).filter((id): id is number => typeof id === 'number'),
+    }));
+
+    const requiredUserIds = Array.from(new Set(normalizedBindings.flatMap((binding) => binding.userIds)));
+    const requiredRouteIds = Array.from(new Set(normalizedBindings.flatMap((binding) => binding.routeIds)));
+
+    const existingUserIds = new Set(userOptions.map((user) => user.id));
+    const existingRouteIds = new Set(routeOptions.map((route) => route.id));
+
+    const missingUserIds = requiredUserIds.filter((id) => !existingUserIds.has(id));
+    const missingRouteIds = requiredRouteIds.filter((id) => !existingRouteIds.has(id));
+
+    if (!missingUserIds.length && !missingRouteIds.length) {
+      return;
+    }
+
+    const [missingUsers, missingRoutes] = await Promise.all([
+      Promise.all(
+        missingUserIds.map(async (id) => {
+          try {
+            return await apiService.getUserById(id);
+          } catch (error) {
+            console.warn('加载绑定用户失败', id, error);
+            return null;
+          }
+        })
+      ),
+      Promise.all(
+        missingRouteIds.map(async (id) => {
+          try {
+            return await apiService.getRouteById(id);
+          } catch (error) {
+            console.warn('加载绑定路由失败', id, error);
+            return null;
+          }
+        })
+      ),
+    ]);
+
+    if (missingUsers.some(Boolean)) {
+      setUserOptions((prev) => {
+        const merged = new Map(prev.map((user) => [user.id, user] as const));
+        missingUsers.forEach((user) => {
+          if (user) {
+            merged.set(user.id, user);
+          }
+        });
+        return Array.from(merged.values());
+      });
+    }
+
+    if (missingRoutes.some(Boolean)) {
+      setRouteOptions((prev) => {
+        const merged = new Map(prev.map((route) => [route.id, route] as const));
+        missingRoutes.forEach((route) => {
+          if (route) {
+            merged.set(route.id, route);
+          }
+        });
+        return Array.from(merged.values());
+      });
+    }
+  }, [routeOptions, userOptions]);
+
+  const openEditModal = useCallback(async (record: InboundConfigDTO) => {
+    const normalizedRecord = normalizeInboundConfig(record);
+    await ensureBindingOptionsLoaded(normalizedRecord.inboundRouteBindings ?? []);
+    editForm.setFieldsValue({
+      name: normalizedRecord.name,
+      protocol: normalizedRecord.protocol,
+      listenIp: normalizedRecord.listenIp,
+      port: normalizedRecord.port,
+      tlsEnabled: normalizedRecord.tlsEnabled,
+      ssMethod: normalizedRecord.ssMethod,
+      inboundRouteBindings: normalizedRecord.inboundRouteBindings,
+      status: normalizedRecord.status,
+      notes: normalizedRecord.notes,
+    });
+    setEditingItem(normalizedRecord);
+    setEditVisible(true);
+  }, [editForm, ensureBindingOptionsLoaded]);
 
   const loadInbounds = useCallback(async () => {
     setState(prev => ({ ...prev, loading: true }));
@@ -176,13 +302,14 @@ const InboundManagement: React.FC = () => {
         tlsEnabled: state.tlsFilter,
         port: state.searchPort,
       });
+      const normalizedInbounds = (res.content || []).map(normalizeInboundConfig);
       setState(prev => ({
         ...prev,
-        inbounds: res.content,
+        inbounds: normalizedInbounds,
         total: res.totalElements,
         loading: false,
       }));
-      await fetchInboundTraffic(res.content || []);
+      await fetchInboundTraffic(normalizedInbounds);
     } catch (error) {
       console.error('加载入站配置失败:', error);
       setState(prev => ({ ...prev, loading: false }));
@@ -262,23 +389,7 @@ const InboundManagement: React.FC = () => {
       key: 'actions',
       render: (_: any, record: InboundConfigDTO) => (
         <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => {
-            setEditingItem(record);
-            setEditVisible(true);
-            editForm.setFieldsValue({
-              name: record.name,
-              protocol: record.protocol,
-              listenIp: record.listenIp,
-              port: record.port,
-              tlsEnabled: record.tlsEnabled,
-              ssMethod: record.ssMethod,
-              inboundRouteBindings: (record.inboundRouteBindings && record.inboundRouteBindings.length > 0)
-                ? record.inboundRouteBindings
-                : [{ userIds: record.allowedUserIds || [], routeIds: record.routeIds || [] }],
-              status: record.status,
-              notes: record.notes,
-            });
-          }}>编辑</Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => { void openEditModal(record); }}>编辑</Button>
           <Popconfirm title={`确定删除入站配置「${record.name}」？`} onConfirm={() => handleDelete(record.id)}>
             <Button size="small" danger icon={<DeleteOutlined />}>删除</Button>
           </Popconfirm>
@@ -405,9 +516,11 @@ const InboundManagement: React.FC = () => {
                       <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
                         <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                       </Form.Item></Col>
-                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
-                        <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
-                      </Form.Item></Col>
+                      <Col span={12}>
+                        <Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
+                          <RouteOrderEditor routeOptions={routeSelectOptions} />
+                        </Form.Item>
+                      </Col>
                     </Row>
                   </Card>
                 </>
@@ -421,9 +534,11 @@ const InboundManagement: React.FC = () => {
                             <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
                               <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
                             </Form.Item></Col>
-                            <Col span={12}><Form.Item name={[name, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
-                              <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
-                            </Form.Item></Col>
+                            <Col span={12}>
+                              <Form.Item name={[name, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
+                                <RouteOrderEditor routeOptions={routeSelectOptions} />
+                              </Form.Item>
+                            </Col>
                           </Row>
                         </Card>
                       ))}
@@ -442,6 +557,7 @@ const InboundManagement: React.FC = () => {
       <Modal
         title={`编辑入站配置：${editingItem?.name || ''}`}
         open={editVisible}
+        forceRender
         onCancel={() => { setEditVisible(false); setEditingItem(null); }}
         onOk={handleUpdate}
         okText="保存"
@@ -478,9 +594,11 @@ const InboundManagement: React.FC = () => {
                       <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
                         <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                       </Form.Item></Col>
-                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
-                        <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
-                      </Form.Item></Col>
+                      <Col span={12}>
+                        <Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
+                          <RouteOrderEditor routeOptions={routeSelectOptions} />
+                        </Form.Item>
+                      </Col>
                     </Row>
                   </Card>
                 </>
@@ -494,9 +612,11 @@ const InboundManagement: React.FC = () => {
                             <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
                               <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
                             </Form.Item></Col>
-                            <Col span={12}><Form.Item name={[name, 'routeIds']} label="路由顺序" rules={[{ required: true }]}> 
-                              <Select mode="multiple" placeholder="按顺序选择路由" options={routeSelectOptions} />
-                            </Form.Item></Col>
+                            <Col span={12}>
+                              <Form.Item name={[name, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
+                                <RouteOrderEditor routeOptions={routeSelectOptions} />
+                              </Form.Item>
+                            </Col>
                           </Row>
                         </Card>
                       ))}

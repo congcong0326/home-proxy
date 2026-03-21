@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -40,7 +41,6 @@ import { apiService } from '../services/api';
 import {
   CreateRuleSetRequest,
   RuleSetCategory,
-  RuleSetDTO,
   RuleSetItem,
   RuleSetItemType,
   RuleSetMatchTarget,
@@ -63,6 +63,7 @@ import './RuleSetManagement.css';
 
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
+const DETAIL_DEFAULT_PAGE_SIZE = 50;
 
 interface RuleSetFormValues {
   ruleKey: string;
@@ -131,15 +132,26 @@ const RuleSetManagement: React.FC = () => {
   const [publishedFilter, setPublishedFilter] = useState<boolean | undefined>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingRuleSet, setEditingRuleSet] = useState<RuleSetDTO | null>(null);
+  const [editingRuleSet, setEditingRuleSet] = useState<RuleSetSummaryDTO | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [detailRuleSet, setDetailRuleSet] = useState<RuleSetDTO | null>(null);
+  const [detailItemsLoading, setDetailItemsLoading] = useState(false);
+  const [detailRuleSet, setDetailRuleSet] = useState<RuleSetSummaryDTO | null>(null);
+  const [detailItems, setDetailItems] = useState<RuleSetItem[]>([]);
+  const [detailItemsTotal, setDetailItemsTotal] = useState(0);
+  const [detailItemsPage, setDetailItemsPage] = useState(1);
+  const [detailItemsPageSize, setDetailItemsPageSize] = useState(DETAIL_DEFAULT_PAGE_SIZE);
   const [fetchingDetailId, setFetchingDetailId] = useState<number | null>(null);
   const [latestBatchResults, setLatestBatchResults] = useState<RuleSetSyncResult[]>([]);
 
   const currentSourceType = Form.useWatch('sourceType', form) ?? RuleSetSourceType.MANUAL;
   const isManual = currentSourceType === RuleSetSourceType.MANUAL;
+  const preserveExistingManualItems = Boolean(
+    editingRuleSet &&
+    editingRuleSet.sourceType === RuleSetSourceType.MANUAL &&
+    currentSourceType === RuleSetSourceType.MANUAL
+  );
+  const showManualItemEditor = isManual && !preserveExistingManualItems;
 
   const loadRuleSets = useCallback(async () => {
     setLoading(true);
@@ -213,7 +225,7 @@ const RuleSetManagement: React.FC = () => {
         enabled: ruleSet.enabled,
         published: ruleSet.published,
         description: ruleSet.description,
-        items: ruleSet.items?.length ? ruleSet.items : [emptyRuleItem()],
+        items: [emptyRuleItem()],
       });
       setModalOpen(true);
     } catch (error) {
@@ -234,6 +246,9 @@ const RuleSetManagement: React.FC = () => {
   const handleSubmit = async (values: RuleSetFormValues) => {
     setFormLoading(true);
     try {
+      const manualItems = (values.items || [])
+        .filter((item) => item?.value?.trim())
+        .map((item) => ({ type: item.type, value: item.value.trim() }));
       const payload: CreateRuleSetRequest | UpdateRuleSetRequest = {
         ruleKey: values.ruleKey?.trim(),
         name: values.name?.trim(),
@@ -244,12 +259,17 @@ const RuleSetManagement: React.FC = () => {
         enabled: values.enabled,
         published: values.published,
         description: values.description?.trim(),
-        items: isManual
-          ? (values.items || [])
-              .filter((item) => item?.value?.trim())
-              .map((item) => ({ type: item.type, value: item.value.trim() }))
-          : [],
       };
+
+      if (!editingRuleSet) {
+        payload.items = values.sourceType === RuleSetSourceType.MANUAL ? manualItems : [];
+      } else if (editingRuleSet.sourceType === RuleSetSourceType.MANUAL) {
+        if (values.sourceType !== RuleSetSourceType.MANUAL) {
+          payload.items = [];
+        }
+      } else if (values.sourceType === RuleSetSourceType.MANUAL) {
+        payload.items = manualItems;
+      }
 
       if (editingRuleSet) {
         await apiService.updateRuleSet(editingRuleSet.id, payload as UpdateRuleSetRequest);
@@ -295,14 +315,38 @@ const RuleSetManagement: React.FC = () => {
     }
   };
 
+  const loadDetailItems = useCallback(async (ruleSetId: number, targetPage: number, targetPageSize: number) => {
+    setDetailItemsLoading(true);
+    try {
+      const response = await apiService.getRuleSetItems(ruleSetId, {
+        page: targetPage,
+        size: targetPageSize,
+      });
+      setDetailItems(response.items);
+      setDetailItemsTotal(response.total);
+      setDetailItemsPage(response.page);
+      setDetailItemsPageSize(response.pageSize);
+    } catch (error) {
+      console.error('Failed to load rule set items:', error);
+      message.error('加载规则项失败');
+    } finally {
+      setDetailItemsLoading(false);
+    }
+  }, []);
+
   const handleViewDetail = async (ruleSetId: number) => {
     setDetailLoading(true);
     setFetchingDetailId(ruleSetId);
     setDetailRuleSet(null);
+    setDetailItems([]);
+    setDetailItemsTotal(0);
+    setDetailItemsPage(1);
+    setDetailItemsPageSize(DETAIL_DEFAULT_PAGE_SIZE);
     setDetailOpen(true);
     try {
       const detail = await apiService.getRuleSetById(ruleSetId);
       setDetailRuleSet(detail);
+      await loadDetailItems(ruleSetId, 1, DETAIL_DEFAULT_PAGE_SIZE);
     } catch (error) {
       console.error('Failed to load rule set detail:', error);
       message.error('加载规则集详情失败');
@@ -711,7 +755,17 @@ const RuleSetManagement: React.FC = () => {
             <TextArea rows={3} placeholder="说明这个规则集的用途、来源和分流策略" />
           </Form.Item>
 
-          {isManual && (
+          {preserveExistingManualItems && (
+            <Alert
+              type="info"
+              showIcon
+              message="当前编辑页不加载规则项"
+              description={`该手工规则集现有 ${editingRuleSet?.itemCount ?? 0} 条规则项，保存时会保留现有数据；如需查看明细，请打开详情页。`}
+              style={{ marginBottom: 16 }}
+            />
+          )}
+
+          {showManualItemEditor && (
             <>
               <Divider orientation="left">规则项</Divider>
               <Form.List name="items">
@@ -781,6 +835,10 @@ const RuleSetManagement: React.FC = () => {
         onClose={() => {
           setDetailOpen(false);
           setDetailRuleSet(null);
+          setDetailItems([]);
+          setDetailItemsTotal(0);
+          setDetailItemsPage(1);
+          setDetailItemsPageSize(DETAIL_DEFAULT_PAGE_SIZE);
         }}
         destroyOnClose
       >
@@ -792,7 +850,7 @@ const RuleSetManagement: React.FC = () => {
               <Descriptions.Item label="分类">{RULE_SET_CATEGORY_LABELS[detailRuleSet.category]}</Descriptions.Item>
               <Descriptions.Item label="匹配目标">{RULE_SET_MATCH_TARGET_LABELS[detailRuleSet.matchTarget]}</Descriptions.Item>
               <Descriptions.Item label="来源类型">{RULE_SET_SOURCE_LABELS[detailRuleSet.sourceType]}</Descriptions.Item>
-              <Descriptions.Item label="规则数量">{detailRuleSet.items?.length ?? 0}</Descriptions.Item>
+              <Descriptions.Item label="规则数量">{detailRuleSet.itemCount ?? 0}</Descriptions.Item>
               <Descriptions.Item label="启用状态">
                 <Tag color={detailRuleSet.enabled ? 'green' : 'default'}>{detailRuleSet.enabled ? '启用' : '禁用'}</Tag>
               </Descriptions.Item>
@@ -813,14 +871,19 @@ const RuleSetManagement: React.FC = () => {
 
             <Divider orientation="left">规则项数据</Divider>
             <Table
-              rowKey={(_, index) => `${detailRuleSet.ruleKey}-${index ?? 0}`}
-              loading={detailLoading}
+              rowKey={(_, index) => `${detailRuleSet.ruleKey}-${detailItemsPage}-${index ?? 0}`}
+              loading={detailLoading || detailItemsLoading}
               size="small"
-              dataSource={detailRuleSet.items || []}
+              dataSource={detailItems}
               pagination={{
-                pageSize: 20,
+                current: detailItemsPage,
+                pageSize: detailItemsPageSize,
+                total: detailItemsTotal,
                 showSizeChanger: true,
                 showTotal: (value, range) => `第 ${range[0]}-${range[1]} 条，共 ${value} 条`,
+                onChange: (nextPage, nextPageSize) => {
+                  void loadDetailItems(detailRuleSet.id, nextPage, nextPageSize);
+                },
               }}
               scroll={{ y: 420, x: 720 }}
               columns={[
@@ -828,7 +891,7 @@ const RuleSetManagement: React.FC = () => {
                   title: '序号',
                   key: 'index',
                   width: 80,
-                  render: (_value, _record, index) => index + 1,
+                  render: (_value, _record, index) => (detailItemsPage - 1) * detailItemsPageSize + index + 1,
                 },
                 {
                   title: '类型',

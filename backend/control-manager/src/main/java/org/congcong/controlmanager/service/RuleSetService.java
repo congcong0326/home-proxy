@@ -13,11 +13,15 @@ import org.congcong.controlmanager.dto.ruleset.RuleSetSyncResultDTO;
 import org.congcong.controlmanager.dto.ruleset.RuleSetSyncStatus;
 import org.congcong.controlmanager.dto.ruleset.UpdateRuleSetRequest;
 import org.congcong.controlmanager.entity.RuleSetEntity;
+import org.congcong.controlmanager.entity.RuleSetPayloadEntity;
+import org.congcong.controlmanager.repository.RuleSetPayloadRepository;
 import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.service.ruleset.RuleSetSourceSyncService;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,34 +30,59 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class RuleSetService {
 
     private final RuleSetRepository ruleSetRepository;
+    private final RuleSetPayloadRepository ruleSetPayloadRepository;
     private final RuleSetSourceSyncService ruleSetSourceSyncService;
 
     public PageResponse<RuleSetSummaryDTO> getRuleSets(Pageable pageable, String name, RuleSetCategory category,
                                                        Boolean enabled, Boolean published) {
-        Page<RuleSetSummaryDTO> page = ruleSetRepository.findPageSummaries(name, category, enabled, published, pageable);
-        List<RuleSetSummaryDTO> items = page.getContent();
+        Page<RuleSetEntity> page = ruleSetRepository.findAll(buildSummarySpecification(name, category, enabled, published),
+                sanitizePageable(pageable));
+        List<RuleSetSummaryDTO> items = page.getContent().stream()
+                .map(this::convertToSummaryDTO)
+                .toList();
         return new PageResponse<>(items, page.getNumber() + 1, page.getSize(), page.getTotalElements());
     }
 
-    public RuleSetDTO getRuleSetById(Long id) {
+    public RuleSetSummaryDTO getRuleSetById(Long id) {
         RuleSetEntity entity = ruleSetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则集不存在"));
-        return convertToDTO(entity);
+        return convertToSummaryDTO(entity);
     }
 
+    public PageResponse<RuleSetItemDTO> getRuleSetItems(Long id, Pageable pageable) {
+        RuleSetEntity entity = ruleSetRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则集不存在"));
+        Pageable sanitizedPageable = sanitizeItemsPageable(pageable);
+        List<RuleSetItemDTO> items = loadItemsForIds(List.of(id)).getOrDefault(entity.getId(), List.of());
+        int fromIndex = Math.min((int) sanitizedPageable.getOffset(), items.size());
+        int toIndex = Math.min(fromIndex + sanitizedPageable.getPageSize(), items.size());
+        return new PageResponse<>(
+                items.subList(fromIndex, toIndex),
+                sanitizedPageable.getPageNumber() + 1,
+                sanitizedPageable.getPageSize(),
+                items.size()
+        );
+    }
+
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RuleSetDTO createRuleSet(CreateRuleSetRequest request) {
         if (ruleSetRepository.existsByRuleKey(request.getRuleKey())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "规则集 key 已存在");
         }
         validateRuleSetRequest(request.getSourceType(), request.getSourceConfig(), request.getItems());
+        List<RuleSetItemDTO> normalizedItems = normalizeItems(request.getItems());
         RuleSetEntity entity = new RuleSetEntity();
         entity.setRuleKey(request.getRuleKey());
         entity.setName(request.getName());
@@ -64,15 +93,19 @@ public class RuleSetService {
         entity.setEnabled(request.getEnabled() == null ? Boolean.TRUE : request.getEnabled());
         entity.setPublished(request.getPublished() == null ? Boolean.FALSE : request.getPublished());
         entity.setDescription(request.getDescription());
-        entity.setItems(normalizeItems(request.getItems()));
+        applyItems(entity, normalizedItems);
         entity.setVersionNo(1L);
-        return convertToDTO(ruleSetRepository.save(entity));
+        entity = ruleSetRepository.save(entity);
+        saveItems(entity);
+        return convertToDTO(entity);
     }
 
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RuleSetDTO updateRuleSet(Long id, UpdateRuleSetRequest request) {
         RuleSetEntity entity = ruleSetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则集不存在"));
+        loadItems(entity);
 
         boolean contentChanged = false;
         RuleSetSourceType targetSourceType = request.getSourceType() == null ? entity.getSourceType() : request.getSourceType();
@@ -112,19 +145,23 @@ public class RuleSetService {
             entity.setDescription(request.getDescription());
         }
         if (request.getItems() != null) {
-            entity.setItems(normalizeItems(request.getItems()));
+            applyItems(entity, normalizeItems(request.getItems()));
             contentChanged = true;
         }
         if (contentChanged) {
             entity.setVersionNo(entity.getVersionNo() == null ? 1L : entity.getVersionNo() + 1);
         }
-        return convertToDTO(ruleSetRepository.save(entity));
+        entity = ruleSetRepository.save(entity);
+        saveItems(entity);
+        return convertToDTO(entity);
     }
 
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public RuleSetDTO syncRuleSet(Long id) {
         RuleSetEntity entity = ruleSetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则集不存在"));
+        loadItems(entity);
         return convertToDTO(syncRuleSetEntity(entity).entity());
     }
 
@@ -144,11 +181,42 @@ public class RuleSetService {
         ruleSetRepository.delete(entity);
     }
 
-    public List<RuleSetDTO> getPublishedRuleSets() {
-        return ruleSetRepository.findByEnabledTrueAndPublishedTrueOrderByRuleKeyAsc()
+
+    public List<RuleSetSummaryDTO> getPublishedRuleSets() {
+        List<RuleSetEntity> entities = ruleSetRepository.findByEnabledTrueAndPublishedTrueOrderByRuleKeyAsc();
+        return entities
+                .stream()
+                .map(this::convertToSummaryDTO)
+                .toList();
+    }
+
+
+    public List<RuleSetDTO> getPublishedRuleSetsWithItems() {
+        List<RuleSetEntity> entities = ruleSetRepository.findByEnabledTrueAndPublishedTrueOrderByRuleKeyAsc();
+        loadItems(entities);
+        return entities
                 .stream()
                 .map(this::convertToDTO)
                 .toList();
+    }
+
+    private RuleSetSummaryDTO convertToSummaryDTO(RuleSetEntity entity) {
+        return new RuleSetSummaryDTO(
+                entity.getId(),
+                entity.getRuleKey(),
+                entity.getName(),
+                entity.getCategory(),
+                entity.getMatchTarget(),
+                entity.getSourceType(),
+                entity.getSourceConfig(),
+                entity.getEnabled(),
+                entity.getPublished(),
+                entity.getVersionNo(),
+                entity.getDescription(),
+                entity.getItemCount(),
+                entity.getCreatedAt(),
+                entity.getUpdatedAt()
+        );
     }
 
     private RuleSetDTO convertToDTO(RuleSetEntity entity) {
@@ -168,6 +236,46 @@ public class RuleSetService {
         dto.setCreatedAt(entity.getCreatedAt());
         dto.setUpdatedAt(entity.getUpdatedAt());
         return dto;
+    }
+
+    private void applyItems(RuleSetEntity entity, List<RuleSetItemDTO> items) {
+        List<RuleSetItemDTO> copiedItems = copyItems(items);
+        entity.setItems(copiedItems);
+        entity.setItemCount(copiedItems.size());
+    }
+
+    private void loadItems(RuleSetEntity entity) {
+        if (entity == null) {
+            return;
+        }
+        applyItems(entity, loadItemsForIds(List.of(entity.getId())).getOrDefault(entity.getId(), List.of()));
+    }
+
+    private void loadItems(List<RuleSetEntity> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return;
+        }
+        Map<Long, List<RuleSetItemDTO>> payloadMap = loadItemsForIds(entities.stream()
+                .map(RuleSetEntity::getId)
+                .filter(Objects::nonNull)
+                .toList());
+        entities.forEach(entity -> applyItems(entity, payloadMap.getOrDefault(entity.getId(), List.of())));
+    }
+
+    private Map<Long, List<RuleSetItemDTO>> loadItemsForIds(List<Long> ruleSetIds) {
+        if (ruleSetIds == null || ruleSetIds.isEmpty()) {
+            return Map.of();
+        }
+        return ruleSetPayloadRepository.findByRuleSetIdIn(ruleSetIds).stream()
+                .collect(Collectors.toMap(RuleSetPayloadEntity::getRuleSetId,
+                        payload -> copyItems(payload.getItems())));
+    }
+
+    private void saveItems(RuleSetEntity entity) {
+        RuleSetPayloadEntity payload = new RuleSetPayloadEntity();
+        payload.setRuleSetId(entity.getId());
+        payload.setItems(copyItems(entity.getItems()));
+        ruleSetPayloadRepository.save(payload);
     }
 
     private List<RuleSetItemDTO> copyItems(List<RuleSetItemDTO> items) {
@@ -226,6 +334,56 @@ public class RuleSetService {
         return value == null ? "" : value;
     }
 
+    private Specification<RuleSetEntity> buildSummarySpecification(String name, RuleSetCategory category,
+                                                                   Boolean enabled, Boolean published) {
+        return (root, query, cb) -> {
+            List<jakarta.persistence.criteria.Predicate> predicates = new ArrayList<>();
+            if (name != null && !name.isBlank()) {
+                String pattern = "%" + name.trim().toLowerCase(Locale.ROOT) + "%";
+                predicates.add(cb.or(
+                        cb.like(cb.lower(root.get("name")), pattern),
+                        cb.like(cb.lower(root.get("ruleKey")), pattern)
+                ));
+            }
+            if (category != null) {
+                predicates.add(cb.equal(root.get("category"), category));
+            }
+            if (enabled != null) {
+                predicates.add(cb.equal(root.get("enabled"), enabled));
+            }
+            if (published != null) {
+                predicates.add(cb.equal(root.get("published"), published));
+            }
+            return cb.and(predicates.toArray(jakarta.persistence.criteria.Predicate[]::new));
+        };
+    }
+
+    private Pageable sanitizePageable(Pageable pageable) {
+        Sort sort = pageable.getSort().isSorted() ? pageable.getSort() : Sort.by(Sort.Direction.DESC, "updatedAt");
+        List<Sort.Order> supportedOrders = sort.stream()
+                .map(this::sanitizeSortOrder)
+                .toList();
+        if (supportedOrders.isEmpty()) {
+            supportedOrders = List.of(new Sort.Order(Sort.Direction.DESC, "updatedAt"));
+        }
+        return org.springframework.data.domain.PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(supportedOrders));
+    }
+
+    private Pageable sanitizeItemsPageable(Pageable pageable) {
+        int pageNumber = Math.max(pageable.getPageNumber(), 0);
+        int pageSize = pageable.getPageSize() <= 0 ? 50 : Math.min(pageable.getPageSize(), 500);
+        return org.springframework.data.domain.PageRequest.of(pageNumber, pageSize);
+    }
+
+    private Sort.Order sanitizeSortOrder(Sort.Order order) {
+        String property = switch (order.getProperty()) {
+            case "id", "ruleKey", "name", "category", "matchTarget", "sourceType",
+                    "enabled", "published", "versionNo", "itemCount", "createdAt", "updatedAt" -> order.getProperty();
+            default -> "updatedAt";
+        };
+        return new Sort.Order(order.getDirection(), property);
+    }
+
     private List<RuleSetEntity> resolveSyncTargets(RuleSetBatchSyncRequest request) {
         List<Long> ids = request == null ? null : request.getRuleSetIds();
         boolean enabledOnly = request == null || request.getEnabledOnly() == null || request.getEnabledOnly();
@@ -241,16 +399,23 @@ public class RuleSetService {
             if (!missingIds.isEmpty()) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "部分规则集不存在: " + missingIds);
             }
+            loadItems(entities);
             return entities;
         }
 
         if (publishedOnly) {
-            return ruleSetRepository.findBySourceTypeNotAndEnabledTrueAndPublishedTrueOrderByIdAsc(RuleSetSourceType.MANUAL);
+            List<RuleSetEntity> entities = ruleSetRepository.findBySourceTypeNotAndEnabledTrueAndPublishedTrueOrderByIdAsc(RuleSetSourceType.MANUAL);
+            loadItems(entities);
+            return entities;
         }
         if (enabledOnly) {
-            return ruleSetRepository.findBySourceTypeNotAndEnabledTrueOrderByIdAsc(RuleSetSourceType.MANUAL);
+            List<RuleSetEntity> entities = ruleSetRepository.findBySourceTypeNotAndEnabledTrueOrderByIdAsc(RuleSetSourceType.MANUAL);
+            loadItems(entities);
+            return entities;
         }
-        return ruleSetRepository.findBySourceTypeNotOrderByIdAsc(RuleSetSourceType.MANUAL);
+        List<RuleSetEntity> entities = ruleSetRepository.findBySourceTypeNotOrderByIdAsc(RuleSetSourceType.MANUAL);
+        loadItems(entities);
+        return entities;
     }
 
     private RuleSetSyncResultDTO syncRuleSetSafely(RuleSetEntity entity) {
@@ -272,9 +437,10 @@ public class RuleSetService {
         List<RuleSetItemDTO> normalizedItems = normalizeItems(syncedItems);
         boolean changed = !normalizedItems.equals(normalizeItems(entity.getItems()));
         if (changed) {
-            entity.setItems(normalizedItems);
+            applyItems(entity, normalizedItems);
             entity.setVersionNo(entity.getVersionNo() == null ? 1L : entity.getVersionNo() + 1);
             entity = ruleSetRepository.save(entity);
+            saveItems(entity);
         }
         return new SyncOutcome(entity, changed);
     }
@@ -286,7 +452,7 @@ public class RuleSetService {
         dto.setName(entity.getName());
         dto.setStatus(status);
         dto.setVersionNo(entity.getVersionNo());
-        dto.setItemCount(entity.getItems() == null ? 0 : entity.getItems().size());
+        dto.setItemCount(entity.getItemCount() == null ? 0 : entity.getItemCount());
         dto.setMessage(message);
         return dto;
     }

@@ -3,6 +3,7 @@ package org.congcong.controlmanager.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.RuleSetDTO;
+import org.congcong.common.dto.RuleSetItemDTO;
 import org.congcong.common.dto.RuleSetSummaryDTO;
 import org.congcong.common.enums.RuleSetCategory;
 import org.congcong.controlmanager.dto.PageResponse;
@@ -43,8 +44,16 @@ public class RuleSetController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RuleSetDTO> getRuleSet(@PathVariable Long id) {
+    public ResponseEntity<RuleSetSummaryDTO> getRuleSet(@PathVariable Long id) {
         return ResponseEntity.ok(ruleSetService.getRuleSetById(id));
+    }
+
+    @GetMapping("/{id}/items")
+    public ResponseEntity<PageResponse<RuleSetItemDTO>> getRuleSetItems(@PathVariable Long id,
+                                                                        @RequestParam(defaultValue = "1") int page,
+                                                                        @RequestParam(defaultValue = "50") int size) {
+        Pageable pageable = PageRequest.of(page - 1, size);
+        return ResponseEntity.ok(ruleSetService.getRuleSetItems(id, pageable));
     }
 
     @PostMapping
@@ -75,7 +84,7 @@ public class RuleSetController {
     }
 
     @GetMapping("/published")
-    public ResponseEntity<List<RuleSetDTO>> getPublishedRuleSets() {
+    public ResponseEntity<List<RuleSetSummaryDTO>> getPublishedRuleSets() {
         return ResponseEntity.ok(ruleSetService.getPublishedRuleSets());
     }
 }
