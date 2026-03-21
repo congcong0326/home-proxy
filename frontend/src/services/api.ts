@@ -84,12 +84,49 @@ class ApiService {
     this.baseURL = baseURL;
   }
 
-  // 通用请求方法
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
+  private async readResponseBody<T>(response: Response): Promise<T> {
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const text = await response.text();
+    return text ? JSON.parse(text) as T : undefined as T;
+  }
+
+  private async getErrorMessage(response: Response): Promise<string> {
+    const text = await response.text().catch(() => '');
+    if (!text) {
+      return `HTTP error! status: ${response.status}`;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      return parsed.message || `HTTP error! status: ${response.status}`;
+    } catch {
+      return text;
+    }
+  }
+
+  private handleUnauthorized(status: number, endpoint: string): void {
+    if (status !== 401 || endpoint === '/admin/login' || typeof window === 'undefined') {
+      return;
+    }
+
+    localStorage.removeItem('token');
+
+    if (window.location.pathname === '/login') {
+      return;
+    }
+
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const redirectQuery = currentPath && currentPath !== '/login'
+      ? `?redirect=${encodeURIComponent(currentPath)}`
+      : '';
+
+    window.location.replace(`/login${redirectQuery}`);
+  }
+
+  private async executeRequest<T>(url: string, endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
 
     const config: RequestInit = {
@@ -103,17 +140,27 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        const errorMessage = await this.getErrorMessage(response);
+        this.handleUnauthorized(response.status, endpoint);
+        throw new Error(errorMessage);
       }
 
-      return await response.json();
+      return await this.readResponseBody<T>(response);
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
     }
+  }
+
+  // 通用请求方法
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    return this.executeRequest<T>(url, endpoint, options);
   }
 
   // 管理员接口专用请求方法（不带/api前缀）
@@ -122,30 +169,7 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     const url = endpoint; // 直接使用endpoint，不添加baseURL前缀
-    const token = localStorage.getItem('token');
-
-    const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    try {
-      const response = await fetch(url, config);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
-    }
+    return this.executeRequest<T>(url, endpoint, options);
   }
 
   // 登录

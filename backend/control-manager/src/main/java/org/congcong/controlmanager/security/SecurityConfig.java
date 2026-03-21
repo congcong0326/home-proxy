@@ -24,7 +24,7 @@ public class SecurityConfig {
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepo, blacklistRepo);
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
+                .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/admin/login").permitAll()
                     .requestMatchers("/api/config/aggregate").permitAll()
                     .requestMatchers("/api/config/hash").permitAll()
@@ -35,7 +35,7 @@ public class SecurityConfig {
                     .requestMatchers("/", "/static/**", "/favicon.ico", "/manifest.json", "/robots.txt").permitAll()
                     .requestMatchers("/*.js", "/*.css", "/*.png", "/*.jpg", "/*.jpeg", "/*.gif", "/*.svg", "/*.ico").permitAll()
                     // 允许访问前端路由页面
-                    .requestMatchers("/login", "/dashboard", "/users", "/routes", "/inbound", "/ratelimit", "/logs", "/analysis", "/config", "/change-password").permitAll()
+                    .requestMatchers("/login", "/dashboard", "/users", "/routes", "/inbound", "/ratelimit", "/logs", "/analysis", "/config", "/config/**", "/change-password").permitAll()
                     .anyRequest().authenticated()
             )
             .exceptionHandling(ex -> ex

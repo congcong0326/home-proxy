@@ -118,6 +118,21 @@ class JwtAuthenticationFilterTest {
         assertTrue(auth.getAuthorities().stream()
             .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN")));
     }
+
+    @Test
+    @DisplayName("前端嵌套路由跳过JWT校验")
+    void testFilterSkipsNestedFrontendRoute() throws ServletException, IOException {
+        // Given
+        when(request.getRequestURI()).thenReturn("/config/dashboard");
+
+        // When
+        filter.doFilterInternal(request, response, filterChain);
+
+        // Then
+        verify(filterChain).doFilter(request, response);
+        verify(response, never()).setStatus(anyInt());
+        verifyNoInteractions(jwtService, userRepo, blacklistRepo);
+    }
     
     @Test
     @DisplayName("无效token被拒绝")

@@ -224,6 +224,14 @@ public class AdminControllerTest {
     }
 
     @Test
+    void testSpaNestedRouteRefreshReturnsFrontendIndex() throws Exception {
+        mockMvc.perform(get("/config/dashboard").accept(MediaType.TEXT_HTML))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+                .andExpect(content().string(containsString("<div id=\"root\"></div>")));
+    }
+
+    @Test
     void testLoginEndpointRecordClientInfo() throws Exception {
         LoginRequest request = new LoginRequest();
         request.setUsername("testuser");

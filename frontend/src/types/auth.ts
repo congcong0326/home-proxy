@@ -39,5 +39,6 @@ export interface AuthState {
   user: UserResponse | null;
   token: string | null;
   loading: boolean;
+  initialized: boolean;
   error: string | null;
 }
