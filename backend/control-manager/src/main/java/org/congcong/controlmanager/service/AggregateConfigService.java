@@ -134,6 +134,7 @@ public class AggregateConfigService {
                         .append(route.getOutboundProxyPort())
                         .append(route.getOutboundProxyUsername())
                         .append(route.getOutboundProxyPassword())
+                        .append(route.getOutboundProxyConfig())
                         .append(route.getStatus())
                         .append(route.getUpdatedAt());
             });

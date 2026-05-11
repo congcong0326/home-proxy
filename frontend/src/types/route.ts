@@ -26,6 +26,7 @@ export enum ProtocolType {
   NONE = 'NONE',
   SHADOW_SOCKS = 'SHADOW_SOCKS',
   SS = 'SHADOW_SOCKS',
+  VLESS_REALITY = 'VLESS_REALITY',
   TP_PROXY = 'TP_PROXY',
   DOT = 'DOT',
   DNS_SERVER = 'DNS_SERVER',
@@ -38,6 +39,7 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.SOCKS5_HTTPS]: 'SOCKS5+HTTPS混合协议',
   [ProtocolType.NONE]: '直接转发',
   [ProtocolType.SHADOW_SOCKS]: 'Shadowsocks协议',
+  [ProtocolType.VLESS_REALITY]: 'VLESS REALITY Vision协议',
   [ProtocolType.TP_PROXY]: '透明代理',
   [ProtocolType.DOT]: 'dns over tls 服务器',
   [ProtocolType.DNS_SERVER]: 'dns服务器'
@@ -104,6 +106,7 @@ export interface RouteDTO {
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
   outboundProxyEncAlgo?: OutboundProxyEncAlgo;
+  outboundProxyConfig?: Record<string, unknown>;
   status: number;
   notes?: string;
   createdAt: string;
@@ -122,6 +125,7 @@ export interface CreateRouteRequest {
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
   outboundProxyEncAlgo?: OutboundProxyEncAlgo;
+  outboundProxyConfig?: Record<string, unknown>;
   status?: number;
   notes?: string;
 }
@@ -138,6 +142,7 @@ export interface UpdateRouteRequest {
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
   outboundProxyEncAlgo?: OutboundProxyEncAlgo;
+  outboundProxyConfig?: Record<string, unknown>;
   status?: number;
   notes?: string;
 }

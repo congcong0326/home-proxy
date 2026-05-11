@@ -9,6 +9,7 @@ import org.congcong.proxyworker.outbound.dns.DNSConnector;
 import org.congcong.proxyworker.outbound.dns.DOTOutboundConnector;
 import org.congcong.proxyworker.outbound.dns.DnsRewriteOutboundConnector;
 import org.congcong.proxyworker.outbound.http.HttpProxyOutboundConnector;
+import org.congcong.proxyworker.outbound.reality.VlessRealityOutboundConnector;
 import org.congcong.proxyworker.outbound.shadowsocks.ShadowSocksOutboundConnector;
 import org.congcong.proxyworker.outbound.socks.Socks5OutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
@@ -41,6 +42,7 @@ public final class OutboundConnectorFactory {
         if (outboundType == ProtocolType.HTTPS_CONNECT) return new HttpProxyOutboundConnector();
         if (outboundType == ProtocolType.SOCKS5) return new Socks5OutboundConnector();
         if (outboundType == ProtocolType.SHADOW_SOCKS) return new ShadowSocksOutboundConnector();
+        if (outboundType == ProtocolType.VLESS_REALITY) return new VlessRealityOutboundConnector();
         if (outboundType == ProtocolType.DOT)  return new DOTOutboundConnector();
         if (outboundType == ProtocolType.DNS_SERVER) return new DNSConnector();
         // 默认回退为直连，避免中断

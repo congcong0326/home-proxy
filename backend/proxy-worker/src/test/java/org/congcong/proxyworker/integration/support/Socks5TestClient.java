@@ -8,6 +8,10 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 
 public final class Socks5TestClient {
     private Socks5TestClient() {
@@ -34,6 +38,38 @@ public final class Socks5TestClient {
             return readAll(in);
         } catch (IOException e) {
             throw new IllegalStateException("SOCKS5 HTTP GET failed", e);
+        }
+    }
+
+    public static String httpsGet(int proxyPort,
+                                  String username,
+                                  String password,
+                                  String targetHost,
+                                  int targetPort,
+                                  String path) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", proxyPort), (int) Duration.ofSeconds(5).toMillis());
+            socket.setSoTimeout((int) Duration.ofSeconds(10).toMillis());
+            InputStream in = socket.getInputStream();
+            OutputStream out = socket.getOutputStream();
+            negotiate(in, out, username, password);
+            connect(in, out, targetHost, targetPort);
+
+            try (SSLSocket tlsSocket = (SSLSocket) trustAllContext()
+                    .getSocketFactory()
+                    .createSocket(socket, targetHost, targetPort, true)) {
+                tlsSocket.setSoTimeout((int) Duration.ofSeconds(10).toMillis());
+                tlsSocket.startHandshake();
+                OutputStream tlsOut = tlsSocket.getOutputStream();
+                tlsOut.write(("GET " + path + " HTTP/1.1\r\n"
+                        + "Host: " + targetHost + "\r\n"
+                        + "Connection: close\r\n"
+                        + "\r\n").getBytes(StandardCharsets.US_ASCII));
+                tlsOut.flush();
+                return readHttpResponse(tlsSocket.getInputStream());
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("SOCKS5 HTTPS GET failed", e);
         }
     }
 
@@ -165,5 +201,62 @@ public final class Socks5TestClient {
 
     private static String readAll(InputStream in) throws IOException {
         return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    private static String readHttpResponse(InputStream in) throws IOException {
+        ByteArrayOutputStream headerBytes = new ByteArrayOutputStream();
+        int matched = 0;
+        byte[] marker = new byte[] {'\r', '\n', '\r', '\n'};
+        while (matched < marker.length) {
+            int value = in.read();
+            if (value < 0) {
+                throw new IOException("Unexpected EOF while reading HTTP response headers");
+            }
+            headerBytes.write(value);
+            matched = value == (marker[matched] & 0xff) ? matched + 1 : (value == '\r' ? 1 : 0);
+            if (headerBytes.size() > 64 * 1024) {
+                throw new IOException("HTTP response headers exceeded 64 KiB");
+            }
+        }
+
+        String headers = headerBytes.toString(StandardCharsets.ISO_8859_1);
+        int contentLength = contentLength(headers);
+        if (contentLength < 0) {
+            return headers + readAll(in);
+        }
+        byte[] body = readN(in, contentLength);
+        return headers + new String(body, StandardCharsets.UTF_8);
+    }
+
+    private static int contentLength(String headers) {
+        for (String line : headers.split("\\r\\n")) {
+            int separator = line.indexOf(':');
+            if (separator > 0 && "content-length".equalsIgnoreCase(line.substring(0, separator))) {
+                return Integer.parseInt(line.substring(separator + 1).trim());
+            }
+        }
+        return -1;
+    }
+
+    private static SSLContext trustAllContext() throws Exception {
+        TrustManager[] trustManagers = new TrustManager[] {
+                new X509TrustManager() {
+                    @Override
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) {
+                    }
+
+                    @Override
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return new java.security.cert.X509Certificate[0];
+                    }
+                }
+        };
+        SSLContext context = SSLContext.getInstance("TLS");
+        context.init(null, trustManagers, null);
+        return context;
     }
 }

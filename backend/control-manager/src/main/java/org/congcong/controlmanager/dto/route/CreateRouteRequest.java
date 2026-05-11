@@ -11,6 +11,7 @@ import org.congcong.common.enums.RoutePolicy;
 import org.congcong.common.dto.RouteRule;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 创建路由请求
@@ -45,6 +46,8 @@ public class CreateRouteRequest {
     private String outboundProxyPassword;
 
     private ProxyEncAlgo outboundProxyEncAlgo;
+
+    private Map<String, Object> outboundProxyConfig;
     
     private Integer status;
     

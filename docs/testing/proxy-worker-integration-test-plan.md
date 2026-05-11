@@ -104,6 +104,18 @@
 
   xray 在这里充当上游代理服务端，用于验证 worker 的出站协议实现能和真实代理 peer 互通。
 
+- VLESS REALITY Vision 出站：
+
+  ```text
+  Socks5TestClient
+    -> worker SOCKS5 入站
+    -> worker VLESS + REALITY + xtls-rprx-vision 出站
+    -> xray VLESS REALITY Vision 入站
+    -> HttpsEchoServer
+  ```
+
+  xray 在这里充当受控 REALITY Vision 服务端；目标服务使用本地 HTTPS echo，默认协商 TLS 1.3，覆盖 Vision padding/direct 切换、VLESS 响应头剥离和真实 HTTPS 请求返回。
+
 - xray 客户端兼容：
 
   ```text
@@ -143,13 +155,14 @@
 | SOCKS5 出站代理 | worker 通过 OUTBOUND_PROXY/SOCKS5 连接 xray SOCKS5 入站 | `Socks5TestClient -> worker SOCKS5 -> worker SOCKS5 outbound -> xray SOCKS5 inbound -> HttpEchoServer` | 响应包含 echo 路径，目标服务收到 1 次请求 | `WorkerOutboundProxyIT.socks5InboundCanUseXraySocksOutbound` |
 | HTTP CONNECT 出站代理 | worker 通过 OUTBOUND_PROXY/HTTPS_CONNECT 连接 xray HTTP 入站 | `Socks5TestClient -> worker SOCKS5 -> worker HTTP CONNECT outbound -> xray HTTP inbound -> HttpEchoServer` | 响应包含 echo 路径，目标服务收到 1 次请求 | `WorkerOutboundProxyIT.socks5InboundCanUseXrayHttpConnectOutbound` |
 | Shadowsocks 出站代理 | worker 通过 OUTBOUND_PROXY/SHADOW_SOCKS 连接 xray Shadowsocks 入站 | `Socks5TestClient -> worker SOCKS5 -> worker Shadowsocks outbound -> xray Shadowsocks inbound -> HttpEchoServer` | 响应包含 echo 路径，目标服务收到 1 次请求 | `WorkerOutboundProxyIT.socks5InboundCanUseXrayShadowsocksOutbound` |
+| VLESS REALITY Vision 出站代理 | worker 通过 OUTBOUND_PROXY/VLESS_REALITY 连接 xray VLESS REALITY Vision 入站 | `Socks5TestClient -> worker SOCKS5 -> worker VLESS REALITY outbound -> xray VLESS REALITY inbound -> HttpsEchoServer` | HTTPS 响应包含 echo 路径，目标服务收到 1 次请求 | `WorkerVlessRealityVisionIT.socks5InboundCanUseXrayVlessRealityVisionOutboundForHttpsTarget` |
 | DOMAIN 路由命中 | 域名规则命中后选择 OUTBOUND_PROXY，未命中流量走 fallback BLOCK | `Socks5TestClient -> worker SOCKS5 -> DOMAIN route -> xray SOCKS5 inbound -> HttpEchoServer` | `localhost` 请求成功，IP 请求连接失败，目标服务只收到 1 次请求 | `WorkerRoutingIT.domainRuleCanSelectOutboundProxyWhileFallbackBlocks` |
 | BLOCK 路由 | 默认 BLOCK 策略拒绝连接且不触达目标服务 | `Socks5TestClient -> worker SOCKS5 -> BLOCK` | SOCKS5 CONNECT 失败，目标服务收到 0 次请求 | `WorkerRoutingIT.blockRouteRejectsConnectWithoutReachingTarget` |
 | DNS_REWRITING 路由 | DNS_SERVER 入站使用 DNS_REWRITING 直接返回配置 IP | `DnsTestClient -> worker DNS_SERVER -> DNS_REWRITING` | A 记录返回配置值 `9.8.7.6` | `WorkerRoutingIT.dnsRewriteRouteReturnsConfiguredARecord` |
 | xray 客户端接入 worker SOCKS5 | xray 作为下游客户端 peer，经 SOCKS 出站接入 worker SOCKS5 入站 | `Socks5TestClient -> xray local SOCKS -> xray SOCKS outbound -> worker SOCKS5 -> DIRECT -> HttpEchoServer` | 响应包含 echo 路径，目标服务收到 1 次请求 | `XrayClientCompatibilityIT.xraySocksClientCanUseWorkerSocksInbound` |
 | xray 客户端接入 worker HTTP CONNECT | xray 作为下游客户端 peer，经 HTTP 出站接入 worker HTTP CONNECT 入站 | `Socks5TestClient -> xray local SOCKS -> xray HTTP outbound -> worker HTTP CONNECT -> DIRECT -> HttpEchoServer` | 响应包含 echo 路径，目标服务收到 1 次请求 | `XrayClientCompatibilityIT.xraySocksClientCanUseWorkerHttpConnectInbound` |
 
-这些场景合计 11 个 `*IT.java` 用例，覆盖用户态环境下的入站协议、出站代理协议、路由策略、DNS 转发/重写和 xray 互通性。它们不覆盖需要系统权限或真实部署网络栈的场景，例如 TProxy/iptables、SOCKS5 over TLS、DoT 上游、TLS 入站和入站 Shadowsocks。
+这些场景合计 12 个 `*IT.java` 用例，覆盖用户态环境下的入站协议、出站代理协议、VLESS REALITY Vision、路由策略、DNS 转发/重写和 xray 互通性。它们不覆盖需要系统权限或真实部署网络栈的场景，例如 TProxy/iptables、SOCKS5 over TLS、DoT 上游、TLS 入站和入站 Shadowsocks。
 
 ## Test Plan
 
@@ -161,6 +174,7 @@
   - SOCKS5 入站 -> OUTBOUND_PROXY/SOCKS5 -> xray SOCKS5 inbound -> HTTP echo。
   - SOCKS5 入站 -> OUTBOUND_PROXY/HTTPS_CONNECT -> xray HTTP inbound -> HTTP echo。
   - SOCKS5 入站 -> OUTBOUND_PROXY/SHADOW_SOCKS -> xray Shadowsocks inbound -> HTTP echo。
+  - SOCKS5 入站 -> OUTBOUND_PROXY/VLESS_REALITY -> xray VLESS REALITY Vision inbound -> HTTPS echo。
 - 路由策略：
   - DOMAIN 规则命中 OUTBOUND_PROXY，未命中走默认 DIRECT。
   - BLOCK 策略应让客户端连接失败，echo 服务不收到请求。

@@ -350,6 +350,7 @@ const RouteManagement: React.FC = () => {
           outboundProxyUsername: values.outboundProxyUsername,
           outboundProxyPassword: values.outboundProxyPassword,
           outboundProxyEncAlgo: values.outboundProxyEncAlgo,
+          outboundProxyConfig: values.outboundProxyConfig,
           status: values.status ?? RouteStatus.ENABLED,
           notes: values.notes,
           createdAt: new Date().toISOString(),
@@ -397,6 +398,7 @@ const RouteManagement: React.FC = () => {
                 outboundProxyPort: values.outboundProxyPort ?? route.outboundProxyPort,
                 outboundProxyUsername: values.outboundProxyUsername ?? route.outboundProxyUsername,
                 outboundProxyPassword: values.outboundProxyPassword ?? route.outboundProxyPassword,
+                outboundProxyConfig: values.outboundProxyConfig ?? route.outboundProxyConfig,
                 status: values.status ?? route.status,
                 notes: values.notes ?? route.notes,
                 updatedAt: new Date().toISOString(),
@@ -462,6 +464,13 @@ const RouteManagement: React.FC = () => {
                   <p><strong>代理类型：</strong>{route.outboundProxyType ? PROTOCOL_TYPE_LABELS[route.outboundProxyType as ProtocolType] : '未设置'}</p>
                   {route.outboundProxyType === 'SHADOW_SOCKS' && (
                     <p><strong>加密算法：</strong>{route.outboundProxyEncAlgo || '未设置'}</p>
+                  )}
+                  {route.outboundProxyType === ProtocolType.VLESS_REALITY && (
+                    <>
+                      <p><strong>Server Name：</strong>{String(route.outboundProxyConfig?.serverName || '未设置')}</p>
+                      <p><strong>Flow：</strong>{String(route.outboundProxyConfig?.flow || 'xtls-rprx-vision')}</p>
+                      <p><strong>Short ID：</strong>{String(route.outboundProxyConfig?.shortId || '未设置')}</p>
+                    </>
                   )}
                 </>
               )}

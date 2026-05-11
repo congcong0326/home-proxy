@@ -8,6 +8,7 @@ import org.congcong.common.enums.RoutePolicy;
 import org.congcong.common.dto.RouteRule;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 更新路由请求
@@ -39,6 +40,8 @@ public class UpdateRouteRequest {
     private String outboundProxyPassword;
 
     private ProxyEncAlgo outboundProxyEncAlgo;
+
+    private Map<String, Object> outboundProxyConfig;
     
     private Integer status;
     

@@ -23,6 +23,7 @@
 | 入站协议 | SOCKS5 入站、HTTP CONNECT 入站转发到本地 HTTP echo | `WorkerDirectAndDnsIT` |
 | DNS 入站/出站 | DNS_SERVER 入站经 DNS_SERVER 出站转发到 fake UDP DNS upstream | `WorkerDirectAndDnsIT` |
 | 出站代理 | SOCKS5、HTTP CONNECT、Shadowsocks 出站连接到 xray 入站桩 | `WorkerOutboundProxyIT` |
+| VLESS REALITY 出站 | SOCKS5 入站经 VLESS + REALITY + `xtls-rprx-vision` 出站连接到本地 xray REALITY 服务端，并访问本地 HTTPS echo | `WorkerVlessRealityVisionIT` |
 | 路由策略 | DOMAIN 命中、默认 DIRECT、BLOCK 失败、DNS_REWRITING | `WorkerRoutingIT` |
 | xray 客户端兼容 | xray SOCKS 入站作为客户端 peer，分别通过 worker SOCKS5 和 HTTP CONNECT 入站 | `XrayClientCompatibilityIT` |
 
@@ -52,6 +53,7 @@
 - 修改 TLS 初始化时，保留 handler 顺序的单元测试覆盖；如果握手行为变化，补充轻量集成测试。
 - 新增入站协议时，至少添加一个规范化测试，验证其生成的 `ProxyTunnelRequest` 包含用户、目标以及首包行为。
 - 保持单元测试确定性：不依赖真实上游 DNS、真实代理端口或 iptables/TProxy。
+- 修改 VLESS REALITY / Vision 出站时，保留 `WorkerVlessRealityVisionIT`，确保默认 TLS 1.3 HTTPS 目标能经过本地 xray REALITY Vision 服务端完成请求。
 
 ## 集成测试待办
 

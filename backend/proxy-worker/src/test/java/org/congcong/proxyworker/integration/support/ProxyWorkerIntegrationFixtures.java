@@ -91,6 +91,23 @@ public final class ProxyWorkerIntegrationFixtures {
         return route;
     }
 
+    public static RouteConfig vlessRealityOutboundRoute(String host,
+                                                        int port,
+                                                        String serverName,
+                                                        String publicKey,
+                                                        String shortId,
+                                                        String uuid) {
+        RouteConfig route = outboundRoute(ProtocolType.VLESS_REALITY, host, port);
+        route.setOutboundProxyConfig(Map.of(
+                "serverName", serverName,
+                "publicKey", publicKey,
+                "shortId", shortId,
+                "uuid", uuid,
+                "flow", "xtls-rprx-vision",
+                "connectTimeoutMillis", 10000));
+        return route;
+    }
+
     public static RouteConfig dnsForwardRoute(String host, int port) {
         return outboundRoute(ProtocolType.DNS_SERVER, host, port);
     }

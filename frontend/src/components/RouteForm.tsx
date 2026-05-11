@@ -9,7 +9,6 @@ import {
   Row,
   Col,
   InputNumber,
-  Switch,
   Divider,
   Alert,
   Typography,
@@ -62,6 +61,12 @@ interface FormValues {
   outboundProxyUsername?: string;
   outboundProxyPassword?: string;
   outboundProxyEncAlgo?: OutboundProxyEncAlgo;
+  realityServerName?: string;
+  realityPublicKey?: string;
+  realityShortId?: string;
+  realityUuid?: string;
+  realityFlow?: string;
+  realityConnectTimeoutMillis?: number;
   status: RouteStatus;
   notes?: string;
 }
@@ -85,6 +90,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
 
   useEffect(() => {
     if (initialValues) {
+      const outboundProxyConfig = (initialValues.outboundProxyConfig || {}) as Record<string, unknown>;
       form.setFieldsValue({
         name: initialValues.name,
         policy: initialValues.policy,
@@ -96,6 +102,12 @@ const RouteForm: React.FC<RouteFormProps> = ({
         outboundProxyUsername: initialValues.outboundProxyUsername,
         outboundProxyPassword: initialValues.outboundProxyPassword,
         outboundProxyEncAlgo: initialValues.outboundProxyEncAlgo,
+        realityServerName: outboundProxyConfig.serverName as string | undefined,
+        realityPublicKey: outboundProxyConfig.publicKey as string | undefined,
+        realityShortId: outboundProxyConfig.shortId as string | undefined,
+        realityUuid: outboundProxyConfig.uuid as string | undefined,
+        realityFlow: (outboundProxyConfig.flow as string | undefined) || 'xtls-rprx-vision',
+        realityConnectTimeoutMillis: (outboundProxyConfig.connectTimeoutMillis as number | undefined) || 10000,
         status: initialValues.status,
         notes: initialValues.notes,
       });
@@ -123,6 +135,12 @@ const RouteForm: React.FC<RouteFormProps> = ({
         outboundProxyUsername: undefined,
         outboundProxyPassword: undefined,
         outboundProxyEncAlgo: undefined,
+        realityServerName: undefined,
+        realityPublicKey: undefined,
+        realityShortId: undefined,
+        realityUuid: undefined,
+        realityFlow: undefined,
+        realityConnectTimeoutMillis: undefined,
       });
     }
   };
@@ -179,9 +197,19 @@ const RouteForm: React.FC<RouteFormProps> = ({
           outboundProxyType: values.outboundProxyType,
           outboundProxyHost: values.outboundProxyHost,
           outboundProxyPort: values.outboundProxyPort,
-          outboundProxyUsername: values.outboundProxyUsername,
-          outboundProxyPassword: values.outboundProxyPassword,
-          outboundProxyEncAlgo: values.outboundProxyEncAlgo,
+          outboundProxyUsername: values.outboundProxyType === ProtocolType.VLESS_REALITY ? undefined : values.outboundProxyUsername,
+          outboundProxyPassword: values.outboundProxyType === ProtocolType.VLESS_REALITY ? undefined : values.outboundProxyPassword,
+          outboundProxyEncAlgo: values.outboundProxyType === ProtocolType.SHADOW_SOCKS ? values.outboundProxyEncAlgo : undefined,
+          outboundProxyConfig: values.outboundProxyType === ProtocolType.VLESS_REALITY
+            ? {
+                serverName: values.realityServerName?.trim(),
+                publicKey: values.realityPublicKey?.trim(),
+                shortId: values.realityShortId?.trim(),
+                uuid: values.realityUuid?.trim(),
+                flow: values.realityFlow || 'xtls-rprx-vision',
+                connectTimeoutMillis: values.realityConnectTimeoutMillis || 10000,
+              }
+            : {},
         }),
         ...(values.policy === RoutePolicy.DESTINATION_OVERRIDE && {
           outboundTag: values.outboundTag,
@@ -216,6 +244,8 @@ const RouteForm: React.FC<RouteFormProps> = ({
       initialValues={{
         policy: RoutePolicy.DIRECT,
         status: RouteStatus.ENABLED,
+        realityFlow: 'xtls-rprx-vision',
+        realityConnectTimeoutMillis: 10000,
         rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }],
       }}
     >
@@ -397,6 +427,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                     { value: ProtocolType.DOT, label: PROTOCOL_TYPE_LABELS[ProtocolType.DOT] },
                     { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
                     { value: ProtocolType.SHADOW_SOCKS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SHADOW_SOCKS] },
+                    { value: ProtocolType.VLESS_REALITY, label: PROTOCOL_TYPE_LABELS[ProtocolType.VLESS_REALITY] },
                   ]}
                 />
               </Form.Item>
@@ -456,7 +487,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
           </Row>
 
           <Row gutter={16}>
-            <Col span={8}>
+            <Col span={outboundProxyTypeWatch === ProtocolType.VLESS_REALITY ? 12 : 8}>
               <Form.Item
                 name="outboundProxyPort"
                 label="代理端口"
@@ -473,23 +504,104 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
-              <Form.Item
-                name="outboundProxyUsername"
-                label="用户名（可选）"
-              >
-                <Input placeholder="代理认证用户名" />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item
-                name="outboundProxyPassword"
-                label="密码（可选）"
-              >
-                <Input.Password placeholder="代理认证密码" />
-              </Form.Item>
-            </Col>
+            {outboundProxyTypeWatch !== ProtocolType.VLESS_REALITY && (
+              <>
+                <Col span={8}>
+                  <Form.Item
+                    name="outboundProxyUsername"
+                    label="用户名（可选）"
+                  >
+                    <Input placeholder="代理认证用户名" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    name="outboundProxyPassword"
+                    label="密码（可选）"
+                  >
+                    <Input.Password placeholder="代理认证密码" />
+                  </Form.Item>
+                </Col>
+              </>
+            )}
           </Row>
+
+          {outboundProxyTypeWatch === ProtocolType.VLESS_REALITY && (
+            <>
+              <Divider orientation="left">REALITY 配置</Divider>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityServerName"
+                    label="Server Name"
+                    rules={[{ required: true, message: '请输入 REALITY serverName' }]}
+                  >
+                    <Input placeholder="例如：www.example.com" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityPublicKey"
+                    label="Public Key"
+                    rules={[{ required: true, message: '请输入 REALITY publicKey' }]}
+                  >
+                    <Input placeholder="请输入 Xray REALITY publicKey" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityShortId"
+                    label="Short ID"
+                    rules={[
+                      { required: true, message: '请输入 REALITY shortId' },
+                      { pattern: /^[0-9a-fA-F]{0,16}$/, message: 'shortId 必须是 0-16 位十六进制字符' },
+                    ]}
+                  >
+                    <Input placeholder="例如：6ba85179e30d4fc2" />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityUuid"
+                    label="UUID"
+                    rules={[{ required: true, message: '请输入 VLESS UUID' }]}
+                  >
+                    <Input.Password placeholder="请输入 VLESS UUID" />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityFlow"
+                    label="Flow"
+                    rules={[{ required: true, message: '请选择 VLESS flow' }]}
+                  >
+                    <Select
+                      options={[
+                        { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
+                      ]}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={12}>
+                  <Form.Item
+                    name="realityConnectTimeoutMillis"
+                    label="连接超时（毫秒）"
+                    rules={[{ type: 'number', min: 1, message: '连接超时必须大于0' }]}
+                  >
+                    <InputNumber
+                      placeholder="10000"
+                      style={{ width: '100%' }}
+                      min={1}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </>
+          )}
         </>
       )}
 

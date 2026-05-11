@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
+import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
@@ -21,7 +22,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 路由服务层
@@ -71,6 +74,12 @@ public class RouteService {
         if (routeRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
+        validateOutboundProxy(
+                request.getPolicy(),
+                request.getOutboundProxyType(),
+                request.getOutboundProxyHost(),
+                request.getOutboundProxyPort(),
+                request.getOutboundProxyConfig());
 
         Route route = new Route();
         route.setName(request.getName());
@@ -83,6 +92,7 @@ public class RouteService {
         route.setOutboundProxyUsername(request.getOutboundProxyUsername());
         route.setOutboundProxyPassword(request.getOutboundProxyPassword());
         route.setOutboundProxyEncAlgo(request.getOutboundProxyEncAlgo());
+        route.setOutboundProxyConfig(request.getOutboundProxyConfig());
         route.setStatus(request.getStatus() != null ? request.getStatus() : 1);
         route.setNotes(request.getNotes());
 
@@ -132,12 +142,21 @@ public class RouteService {
         if (request.getOutboundProxyPassword() != null) {
             route.setOutboundProxyPassword(request.getOutboundProxyPassword());
         }
+        if (request.getOutboundProxyConfig() != null) {
+            route.setOutboundProxyConfig(request.getOutboundProxyConfig());
+        }
         if (request.getStatus() != null) {
             route.setStatus(request.getStatus());
         }
         if (request.getNotes() != null) {
             route.setNotes(request.getNotes());
         }
+        validateOutboundProxy(
+                route.getPolicy(),
+                route.getOutboundProxyType(),
+                route.getOutboundProxyHost(),
+                route.getOutboundProxyPort(),
+                route.getOutboundProxyConfig());
 
         Route savedRoute = routeRepository.save(route);
 
@@ -186,11 +205,53 @@ public class RouteService {
         dto.setOutboundProxyUsername(route.getOutboundProxyUsername());
         dto.setOutboundProxyPassword(route.getOutboundProxyPassword());
         dto.setOutboundProxyEncAlgo(route.getOutboundProxyEncAlgo());
+        dto.setOutboundProxyConfig(route.getOutboundProxyConfig());
         dto.setStatus(route.getStatus());
         dto.setNotes(route.getNotes());
         dto.setCreatedAt(route.getCreatedAt());
         dto.setUpdatedAt(route.getUpdatedAt());
         return dto;
+    }
+
+    private void validateOutboundProxy(RoutePolicy policy,
+                                       ProtocolType outboundProxyType,
+                                       String outboundProxyHost,
+                                       Integer outboundProxyPort,
+                                       Map<String, Object> outboundProxyConfig) {
+        if (policy != RoutePolicy.OUTBOUND_PROXY || outboundProxyType != ProtocolType.VLESS_REALITY) {
+            return;
+        }
+        requireText(outboundProxyHost, "VLESS REALITY outboundProxyHost is required");
+        if (outboundProxyPort == null || outboundProxyPort < 1 || outboundProxyPort > 65535) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VLESS REALITY outboundProxyPort must be between 1 and 65535");
+        }
+        if (outboundProxyConfig == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VLESS REALITY outboundProxyConfig is required");
+        }
+        requireConfigText(outboundProxyConfig, "serverName", "VLESS REALITY serverName is required");
+        requireConfigText(outboundProxyConfig, "publicKey", "VLESS REALITY publicKey is required");
+        String shortId = requireConfigText(outboundProxyConfig, "shortId", "VLESS REALITY shortId is required");
+        if (!shortId.matches("^[0-9a-fA-F]{0,16}$") || shortId.length() % 2 != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid REALITY shortId hex: " + shortId);
+        }
+        String uuid = requireConfigText(outboundProxyConfig, "uuid", "VLESS REALITY uuid is required");
+        try {
+            UUID.fromString(uuid);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid VLESS uuid: " + uuid, e);
+        }
+    }
+
+    private String requireConfigText(Map<String, Object> config, String key, String message) {
+        Object value = config.get(key);
+        return requireText(value == null ? null : String.valueOf(value), message);
+    }
+
+    private String requireText(String value, String message) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+        }
+        return value.trim();
     }
 
 
@@ -213,6 +274,7 @@ public class RouteService {
             route.setOutboundProxyUsername(null);
             route.setOutboundProxyPassword(null);
             route.setOutboundProxyEncAlgo(null);
+            route.setOutboundProxyConfig(null);
             route.setCreatedAt(null);
             route.setUpdatedAt(null);
             routeRepository.save(route);

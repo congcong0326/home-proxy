@@ -85,10 +85,6 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                     ch.close();
                 }
             }
-            RequestAppendHandler appendHandler = channelHandlerContext.pipeline().get(RequestAppendHandler.class);
-            if (appendHandler != null) {
-                appendHandler.onConnectComplete(channelHandlerContext);
-            }
         });
         //
         channelHandlerContext.channel().closeFuture().addListener(f -> {
@@ -111,43 +107,50 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
     protected Promise<Channel> getRelayPromise(ChannelHandlerContext ctx, ProxyTunnelRequest proxyTunnelRequest) {
         Promise<Channel> promise = ctx.executor().newPromise();
         promise.addListener(future -> {
-            Channel outboundChannel = (Channel) future.getNow();
-            ProtocolStrategy strategy = ProtocolStrategyRegistry.get(proxyTunnelRequest);
-            // 需要注意 SOCKS5 在建立连接成功后根据协议会写回成功 DefaultSocks5CommandResponse，失败的时候也有响应返回
-            // HTTPS_CONNECT 协议会写回 "HTTP/1.1 200 Connection Established\r\n" +
-            //                "Proxy-agent: https://github.com/cong/cong\r\n" +
-            //                "\r\n";
-            // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
-            if (future.isSuccess()) {
-                // 连接成功设置中继服务器
-                if (strategy.needRelay()) {
-                    setRelay(ctx.channel(), outboundChannel);
-                    log.debug("设置中继服务器成功");
-                }
-                // 写回成功
-                strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
-                log.debug("执行成功回调");
-                if (proxyTunnelRequest.getInitialPayload() != null) {
-                    log.debug("写入首次负载");
-                    ByteBuf initialPayload = proxyTunnelRequest.getInitialPayload();
-                    outboundChannel.writeAndFlush(initialPayload).addListener(f -> {
-                        if (!f.isSuccess()) {
-                            // 写失败也释放
-                            if (initialPayload.refCnt() > 0) {
-                                initialPayload.release();
-                                proxyTunnelRequest.setInitialPayload(null);
+            try {
+                Channel outboundChannel = (Channel) future.getNow();
+                ProtocolStrategy strategy = ProtocolStrategyRegistry.get(proxyTunnelRequest);
+                // 需要注意 SOCKS5 在建立连接成功后根据协议会写回成功 DefaultSocks5CommandResponse，失败的时候也有响应返回
+                // HTTPS_CONNECT 协议会写回 "HTTP/1.1 200 Connection Established\r\n" +
+                //                "Proxy-agent: https://github.com/cong/cong\r\n" +
+                //                "\r\n";
+                // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
+                if (future.isSuccess()) {
+                    // 连接成功设置中继服务器
+                    if (strategy.needRelay()) {
+                        setRelay(ctx.channel(), outboundChannel);
+                        log.debug("设置中继服务器成功");
+                    }
+                    // 写回成功
+                    strategy.onConnectSuccess(ctx, outboundChannel, proxyTunnelRequest);
+                    log.debug("执行成功回调");
+                    if (proxyTunnelRequest.getInitialPayload() != null) {
+                        log.debug("写入首次负载");
+                        ByteBuf initialPayload = proxyTunnelRequest.getInitialPayload();
+                        outboundChannel.writeAndFlush(initialPayload).addListener(f -> {
+                            if (!f.isSuccess()) {
+                                // 写失败也释放
+                                if (initialPayload.refCnt() > 0) {
+                                    initialPayload.release();
+                                    proxyTunnelRequest.setInitialPayload(null);
+                                }
+                            } else {
+                                proxyTunnelRequest.setInitialPayload(null); // 已被下游消费
                             }
-                        } else {
-                            proxyTunnelRequest.setInitialPayload(null); // 已被下游消费
-                        }
-                    });
+                        });
+                    }
                 }
-            }
-            // 连接失败
-            else {
-                Throwable cause = future.cause();
-                strategy.onConnectFailure(ctx, outboundChannel, proxyTunnelRequest, cause);
-                log.debug("因为{}执行失败回调", cause.getMessage());
+                // 连接失败
+                else {
+                    Throwable cause = future.cause();
+                    strategy.onConnectFailure(ctx, outboundChannel, proxyTunnelRequest, cause);
+                    log.debug("因为{}执行失败回调", cause.getMessage());
+                }
+            } finally {
+                RequestAppendHandler appendHandler = ctx.pipeline().get(RequestAppendHandler.class);
+                if (appendHandler != null) {
+                    appendHandler.onConnectComplete(ctx);
+                }
             }
         });
         return promise;

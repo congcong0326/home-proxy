@@ -11,6 +11,7 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Entity
@@ -53,6 +54,10 @@ public class Route {
     @Enumerated(EnumType.STRING)
     @Column(name = "outbound_proxy_enc_algo", nullable = false)
     private ProxyEncAlgo outboundProxyEncAlgo;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "outbound_proxy_config_json", columnDefinition = "JSON")
+    private Map<String, Object> outboundProxyConfig;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

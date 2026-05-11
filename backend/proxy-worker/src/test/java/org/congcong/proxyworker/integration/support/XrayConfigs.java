@@ -53,6 +53,43 @@ public final class XrayConfigs {
                 """.formatted(port, method, password);
     }
 
+    public static String vlessRealityVisionInbound(int port,
+                                                   String uuid,
+                                                   String privateKey,
+                                                   String shortId,
+                                                   String serverName,
+                                                   String dest) {
+        return """
+                {
+                  "log": { "loglevel": "warning" },
+                  "inbounds": [{
+                    "listen": "127.0.0.1",
+                    "port": %d,
+                    "protocol": "vless",
+                    "settings": {
+                      "clients": [{
+                        "id": "%s",
+                        "flow": "xtls-rprx-vision"
+                      }],
+                      "decryption": "none"
+                    },
+                    "streamSettings": {
+                      "network": "tcp",
+                      "security": "reality",
+                      "realitySettings": {
+                        "show": false,
+                        "dest": "%s",
+                        "serverNames": ["%s"],
+                        "privateKey": "%s",
+                        "shortIds": ["%s"]
+                      }
+                    }
+                  }],
+                  "outbounds": [{ "protocol": "freedom" }]
+                }
+                """.formatted(port, uuid, dest, serverName, privateKey, shortId);
+    }
+
     public static String socksClientToWorkerSocks(int localSocksPort, int workerSocksPort, String user, String pass) {
         return """
                 {

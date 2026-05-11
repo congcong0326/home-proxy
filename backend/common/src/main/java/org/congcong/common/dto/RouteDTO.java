@@ -7,6 +7,7 @@ import org.congcong.common.enums.RoutePolicy;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 路由DTO
@@ -35,6 +36,8 @@ public class RouteDTO {
     private String outboundProxyPassword;
 
     private ProxyEncAlgo outboundProxyEncAlgo;
+
+    private Map<String, Object> outboundProxyConfig;
 
     private Integer status;
     
