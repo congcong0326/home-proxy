@@ -6,7 +6,6 @@ import {
   Select,
   Space,
   Modal,
-  Form,
   message,
   Popconfirm,
   Tag,
@@ -43,7 +42,6 @@ import {
   ROUTE_STATUS_COLORS,
   ROUTE_POLICY_LABELS,
   ROUTE_POLICY_COLORS,
-  PageResponse,
   RouteConditionType,
   MatchOp,
   ProtocolType,
@@ -136,9 +134,9 @@ const RouteManagement: React.FC = () => {
     try {
       const params: RouteQueryParams = {
         page: state.currentPage,
-        size: state.pageSize,
-        sort: state.sortBy,
-        direction: state.sortDir,
+        pageSize: state.pageSize,
+        sortBy: state.sortBy,
+        sortDir: state.sortDir,
         name: state.searchKeyword || undefined,
         policy: state.policyFilter,
         status: state.statusFilter,
@@ -148,8 +146,8 @@ const RouteManagement: React.FC = () => {
       
       setState(prev => ({
         ...prev,
-        routes: response.content,
-        total: response.totalElements,
+        routes: response.items,
+        total: response.total,
         loading: false,
       }));
     } catch (error) {

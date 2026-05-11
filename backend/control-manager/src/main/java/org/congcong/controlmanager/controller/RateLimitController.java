@@ -38,14 +38,15 @@ public class RateLimitController {
     @GetMapping
     public ResponseEntity<PageResponse<RateLimitDTO>> getRateLimits(
             @RequestParam(defaultValue = "1") @Min(1) int page,
-            @RequestParam(defaultValue = "10") @Min(1) int size,
+            @RequestParam(defaultValue = "10") @Min(1) int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) RateLimitScopeType scopeType,
             @RequestParam(required = false) Boolean enabled) {
 
+        pageSize = Math.min(pageSize, 200);
         Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(direction, sortBy));
+        Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(direction, sortBy));
 
         PageResponse<RateLimitDTO> response = rateLimitService.getRateLimits(pageable, scopeType, enabled);
         return ResponseEntity.ok(response);

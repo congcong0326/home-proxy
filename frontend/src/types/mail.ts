@@ -67,12 +67,12 @@ export interface MailSendLogQuery {
   status?: MailSendStatus;
   timeRange?: string;
   page?: number;
-  size?: number;
+  pageSize?: number;
 }
 
 export interface MailSendLogPage {
   items: MailSendLog[];
-  page: number;
-  size: number;
   total: number;
+  page: number;
+  pageSize: number;
 }

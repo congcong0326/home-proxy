@@ -81,7 +81,7 @@ export interface AccessLogQueryParams {
   rewriteTargetHost?: string;
   q?: string;
   page?: number;
-  size?: number;
+  pageSize?: number;
   sort?: string;
 }
 
@@ -103,18 +103,7 @@ export interface DistributionBucket {
   count: number; // 数量
 }
 
-// 通用分页响应（与后端 PageResponse 对齐或兼容 ApiPageResponse）
 export interface PageResponse<T> {
-  content: T[];
-  totalElements: number;
-  totalPages: number;
-  size: number;
-  number: number;
-  first: boolean;
-  last: boolean;
-}
-
-export interface ApiPageResponse<T> {
   items: T[];
   total: number;
   page: number;

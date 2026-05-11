@@ -42,15 +42,7 @@ public class InboundConfig {
     private ProxyEncAlgo ssMethod;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "allowed_user_ids", columnDefinition = "JSON")
-    private List<Long> allowedUserIds;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "route_ids", columnDefinition = "JSON")
-    private List<Long> routeIds;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "inbound_route_bindings", columnDefinition = "JSON")
+    @Column(name = "inbound_route_bindings", nullable = false, columnDefinition = "JSON")
     private List<InboundRouteBinding>  inboundRouteBindings;
 
     @Column(nullable = false)

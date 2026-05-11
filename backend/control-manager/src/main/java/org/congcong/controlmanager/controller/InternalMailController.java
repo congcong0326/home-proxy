@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/internal/mail")
+@RequestMapping("/api/mail")
 @Validated
 @RequiredArgsConstructor
 public class InternalMailController {

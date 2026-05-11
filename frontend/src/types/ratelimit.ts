@@ -52,14 +52,13 @@ export interface RateLimitUpdateRequest {
 // 限流查询参数
 export interface RateLimitQueryParams {
   page?: number;
-  size?: number;
+  pageSize?: number;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   scopeType?: RateLimitScopeType;
   enabled?: boolean;
 }
 
-// 分页响应类型（与后端一致）
 export interface PageResponse<T> {
   items: T[];
   total: number;

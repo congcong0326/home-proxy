@@ -25,12 +25,6 @@ public class InboundConfigDTO {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    // todo 将 allowedUserIds 与 routeIds 一对一绑定迁移为 inboundRouteBindingDTOs 的绑定关系，使得一个入站配置可以支持不同用户适配不同路由策略的效果
-    @Deprecated
-    private List<Long> allowedUserIds;
-    @Deprecated
-    private List<Long> routeIds;
-
     private List<InboundRouteBinding> inboundRouteBindings;
 
     // 扩展字段，用于列表展示

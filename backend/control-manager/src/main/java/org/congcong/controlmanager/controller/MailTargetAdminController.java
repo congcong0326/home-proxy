@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/targets")
+@RequestMapping("/api/mail/targets")
 @Validated
 @RequiredArgsConstructor
 public class MailTargetAdminController {

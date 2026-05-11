@@ -18,6 +18,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 入站配置服务层
@@ -140,8 +142,8 @@ public class InboundConfigService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                         "Shadowsocks协议必须指定加密方法");
             }
-            
-            if (inboundConfig.getAllowedUserIds() == null || inboundConfig.getAllowedUserIds().size() != 1) {
+
+            if (countBoundUsers(inboundConfig) != 1) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 
                         "Shadowsocks协议必须且仅能绑定一个用户");
             }
@@ -177,8 +179,6 @@ public class InboundConfigService {
         inboundConfig.setTlsEnabled(request.getTlsEnabled());
         inboundConfig.setSniffEnabled(request.getSniffEnabled());
         inboundConfig.setSsMethod(request.getSsMethod());
-        inboundConfig.setAllowedUserIds(request.getAllowedUserIds());
-        inboundConfig.setRouteIds(request.getRouteIds());
         inboundConfig.setStatus(request.getStatus());
         inboundConfig.setNotes(request.getNotes());
         inboundConfig.setInboundRouteBindings(request.getInboundRouteBindings());
@@ -192,13 +192,21 @@ public class InboundConfigService {
         BeanUtils.copyProperties(inboundConfig, dto);
         
         // 设置扩展字段
-        if (inboundConfig.getAllowedUserIds() != null) {
-            dto.setUserCount(inboundConfig.getAllowedUserIds().size());
-        } else {
-            dto.setUserCount(0);
-        }
+        dto.setUserCount(countBoundUsers(inboundConfig));
         
         return dto;
+    }
+
+    private int countBoundUsers(InboundConfig inboundConfig) {
+        if (inboundConfig.getInboundRouteBindings() == null) {
+            return 0;
+        }
+        Set<Long> userIds = inboundConfig.getInboundRouteBindings().stream()
+                .filter(binding -> binding != null && binding.getUserIds() != null)
+                .flatMap(binding -> binding.getUserIds().stream())
+                .filter(userId -> userId != null)
+                .collect(Collectors.toSet());
+        return userIds.size();
     }
 
     /**
@@ -211,9 +219,9 @@ public class InboundConfigService {
 
         return new PageResponse<>(
                 inboundDTOs,
+                inboundPage.getTotalElements(),
                 inboundPage.getNumber() + 1, // Spring Data JPA页码从0开始，转换为从1开始
-                inboundPage.getSize(),
-                inboundPage.getTotalElements()
+                inboundPage.getSize()
         );
     }
 }

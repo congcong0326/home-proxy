@@ -17,7 +17,7 @@ const LogAudit: React.FC = () => {
   const [form] = Form.useForm<AccessLogFormValues>();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AccessLogListItem[]>([]);
-  const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 0, pageSize: 10 });
+  const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 1, pageSize: 10 });
   const [detail, setDetail] = useState<AccessLogDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -43,7 +43,7 @@ const LogAudit: React.FC = () => {
     const merged: AccessLogQueryParams = {
       ...restValues,
       page: pageInfo.page,
-      size: pageInfo.pageSize,
+      pageSize: pageInfo.pageSize,
       ...params,
     };
     merged.from = params?.from ?? restValues.from ?? (start ? start.toISOString() : undefined);
@@ -56,11 +56,11 @@ const LogAudit: React.FC = () => {
     try {
       const query = buildQueryParams(params);
       const res: PageResponse<AccessLogListItem> = await apiService.getAccessLogs(query);
-      setData(res.content || []);
+      setData(res.items || []);
       setPageInfo({
-        total: res.totalElements || 0,
-        page: res.number || 0,
-        pageSize: res.size || query.size || 10,
+        total: res.total || 0,
+        page: res.page || 1,
+        pageSize: res.pageSize || query.pageSize || 10,
       });
     } catch (e) {
       console.error(e);
@@ -76,16 +76,16 @@ const LogAudit: React.FC = () => {
   }, [pageInfo.page, pageInfo.pageSize]);
 
   const onSearch = () => {
-    setPageInfo(prev => ({ ...prev, page: 0 }));
-    fetchData({ page: 0 });
+    setPageInfo(prev => ({ ...prev, page: 1 }));
+    fetchData({ page: 1 });
   };
 
   const onReset = () => {
     form.resetFields();
     const [start, end] = getTodayRange();
     form.setFieldsValue({ range: [start, end] });
-    setPageInfo({ total: 0, page: 0, pageSize: 10 });
-    fetchData({ page: 0, size: 10, from: start.toISOString(), to: end.toISOString() });
+    setPageInfo({ total: 0, page: 1, pageSize: 10 });
+    fetchData({ page: 1, pageSize: 10, from: start.toISOString(), to: end.toISOString() });
   };
 
   const openDetail = async (id: string) => {
@@ -172,10 +172,10 @@ const LogAudit: React.FC = () => {
           dataSource={data}
           pagination={{
             total: pageInfo.total,
-            current: pageInfo.page + 1,
+            current: pageInfo.page,
             pageSize: pageInfo.pageSize,
             showSizeChanger: true,
-            onChange: (p, ps) => setPageInfo({ ...pageInfo, page: p - 1, pageSize: ps }),
+            onChange: (p, ps) => setPageInfo({ ...pageInfo, page: p, pageSize: ps }),
           }}
         />
       </Card>

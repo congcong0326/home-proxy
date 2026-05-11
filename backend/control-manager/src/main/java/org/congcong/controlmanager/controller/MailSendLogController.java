@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 
 @RestController
-@RequestMapping("/admin/send-logs")
+@RequestMapping("/api/mail/send-logs")
 @Validated
 @RequiredArgsConstructor
 public class MailSendLogController {
@@ -34,8 +34,9 @@ public class MailSendLogController {
                                              @RequestParam(required = false) MailSendStatus status,
                                              @RequestParam(required = false) String timeRange,
                                              @RequestParam(defaultValue = "1") @Min(1) int page,
-                                             @RequestParam(defaultValue = "10") @Min(1) int size) {
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+                                             @RequestParam(defaultValue = "10") @Min(1) int pageSize) {
+        pageSize = Math.min(pageSize, 200);
+        Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
         LocalDateTime startAt = null;
         LocalDateTime endAt = null;
         if (timeRange != null && !timeRange.isEmpty()) {

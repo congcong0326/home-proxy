@@ -16,9 +16,6 @@ export interface InboundConfigDTO {
   sniffEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
   inboundRouteBindings?: InboundRouteBinding[];
-  // 兼容旧数据
-  allowedUserIds?: number[];
-  routeIds?: number[];
   status: number;
   notes?: string;
   createdAt: string;
@@ -63,7 +60,7 @@ export interface InboundTrafficStats {
 
 export interface InboundQueryParams {
   page?: number;
-  size?: number;
+  pageSize?: number;
   sortBy?: string;
   sortDir?: 'asc' | 'desc';
   protocol?: ProtocolType;
@@ -73,16 +70,6 @@ export interface InboundQueryParams {
 }
 
 export interface PageResponse<T> {
-  content: T[];
-  totalElements: number;
-  totalPages: number;
-  size: number;
-  number: number;
-  first: boolean;
-  last: boolean;
-}
-
-export interface ApiPageResponse<T> {
   items: T[];
   total: number;
   page: number;

@@ -6,7 +6,6 @@ import {
   ResetCredentialRequest,
   UpdateStatusRequest,
   PageResponse,
-  ApiPageResponse,
   UserQueryParams
 } from '../types/user';
 import {
@@ -167,7 +166,7 @@ class ApiService {
   // ========== 用户管理接口 ==========
   
   // 分页查询用户列表
-  async getUsers(params: UserQueryParams = {}): Promise<ApiPageResponse<UserDTO>> {
+  async getUsers(params: UserQueryParams = {}): Promise<PageResponse<UserDTO>> {
     const searchParams = new URLSearchParams();
     
     if (params.page) searchParams.append('page', params.page.toString());
@@ -180,7 +179,7 @@ class ApiService {
     const queryString = searchParams.toString();
     const endpoint = queryString ? `/users?${queryString}` : '/users';
     
-    return this.request<ApiPageResponse<UserDTO>>(endpoint);
+    return this.request<PageResponse<UserDTO>>(endpoint);
   }
   
   // 根据ID查询用户详情
@@ -250,43 +249,23 @@ class ApiService {
     const searchParams = new URLSearchParams();
     
     if (params.page !== undefined) searchParams.append('page', params.page.toString());
-    if (params.size) searchParams.append('size', params.size.toString());
-    if (params.sort) searchParams.append('sort', params.sort);
-    if (params.direction) searchParams.append('direction', params.direction);
+    if (params.pageSize) searchParams.append('pageSize', params.pageSize.toString());
+    if (params.sortBy) searchParams.append('sortBy', params.sortBy);
+    if (params.sortDir) searchParams.append('sortDir', params.sortDir);
     if (params.name) searchParams.append('name', params.name);
     if (params.policy) searchParams.append('policy', params.policy);
     if (params.status !== undefined) searchParams.append('status', params.status.toString());
     
     const queryString = searchParams.toString();
     const endpoint = queryString ? `/routes?${queryString}` : '/routes';
-    
-    // 兼容后端返回 { items, total, page, pageSize } 的分页格式
-    const raw: any = await this.request<any>(endpoint);
-    if (raw && Array.isArray(raw.items)) {
-      const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
-      const size = typeof raw.pageSize === 'number' ? raw.pageSize : raw.items.length;
-      const number = typeof raw.page === 'number' ? raw.page : 0;
-      const totalPages = size > 0 ? Math.ceil(total / size) : 1;
-      const normalized: PageResponse<RouteDTO> = {
-        content: raw.items,
-        totalElements: total,
-        totalPages,
-        size,
-        number,
-        first: number === 0,
-        last: number + 1 >= totalPages,
-      };
-      return normalized;
-    }
-    // 若后端已返回标准 PageResponse 结构，直接透传
-    return raw as PageResponse<RouteDTO>;
+    return this.request<PageResponse<RouteDTO>>(endpoint);
   }
   
   // ========== 入站配置接口 ==========
   async getInbounds(params: InboundQueryParams = {}): Promise<PageResponse<InboundConfigDTO>> {
     const searchParams = new URLSearchParams();
     if (params.page !== undefined) searchParams.append('page', params.page.toString());
-    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+    if (params.pageSize !== undefined) searchParams.append('pageSize', params.pageSize.toString());
     if (params.sortBy) searchParams.append('sortBy', params.sortBy);
     if (params.sortDir) searchParams.append('sortDir', params.sortDir);
     if (params.protocol) searchParams.append('protocol', params.protocol);
@@ -295,24 +274,7 @@ class ApiService {
     if (params.status !== undefined) searchParams.append('status', params.status.toString());
     const endpoint = searchParams.toString() ? `/inbounds?${searchParams.toString()}` : '/inbounds';
 
-    const raw: any = await this.request<any>(endpoint);
-    if (raw && Array.isArray(raw.items)) {
-      const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
-      const size = typeof raw.pageSize === 'number' ? raw.pageSize : raw.items.length;
-      const number = typeof raw.page === 'number' ? raw.page : 0;
-      const totalPages = size > 0 ? Math.ceil(total / size) : 1;
-      const normalized: PageResponse<InboundConfigDTO> = {
-        content: raw.items,
-        totalElements: total,
-        totalPages,
-        size,
-        number,
-        first: number === 0,
-        last: number + 1 >= totalPages,
-      };
-      return normalized;
-    }
-    return raw as PageResponse<InboundConfigDTO>;
+    return this.request<PageResponse<InboundConfigDTO>>(endpoint);
   }
 
   async getInboundById(id: number): Promise<InboundConfigDTO> {
@@ -396,29 +358,12 @@ class ApiService {
     if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
     if (params.q) searchParams.append('q', params.q);
     if (params.page !== undefined) searchParams.append('page', String(params.page));
-    if (params.size !== undefined) searchParams.append('size', String(params.size));
+    if (params.pageSize !== undefined) searchParams.append('pageSize', String(params.pageSize));
     if (params.sort) searchParams.append('sort', params.sort);
 
     const queryString = searchParams.toString();
     const endpoint = queryString ? `/logs/access?${queryString}` : '/logs/access';
-    const raw = await this.request<any>(endpoint);
-    // 兼容两种分页响应结构：ApiPageResponse { items, page, size, total } 与 PageResponse { content, number, size, totalElements }
-    if (raw && Array.isArray(raw.items)) {
-      const size = raw.size ?? raw.pageSize ?? (params.size ?? 10);
-      const page = (raw.page ?? 1) - 1; // 转为0基
-      const total = raw.total ?? 0;
-      const totalPages = size > 0 ? Math.ceil(total / size) : 0;
-      return {
-        content: raw.items,
-        totalElements: total,
-        totalPages,
-        size,
-        number: page,
-        first: page <= 0,
-        last: page + 1 >= totalPages,
-      } as PageResponse<AccessLogListItem>;
-    }
-    return raw as PageResponse<AccessLogListItem>;
+    return this.request<PageResponse<AccessLogListItem>>(endpoint);
   }
 
   // 访问日志详情
@@ -525,7 +470,7 @@ class ApiService {
   async getRateLimits(params: RateLimitQueryParams = {}): Promise<RateLimitPageResponse<RateLimitDTO>> {
     const searchParams = new URLSearchParams();
     if (params.page !== undefined) searchParams.append('page', params.page.toString());
-    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+    if (params.pageSize !== undefined) searchParams.append('pageSize', params.pageSize.toString());
     if (params.sortBy) searchParams.append('sortBy', params.sortBy);
     if (params.sortDir) searchParams.append('sortDir', params.sortDir);
     if (params.scopeType) searchParams.append('scopeType', params.scopeType);
@@ -707,25 +652,25 @@ class ApiService {
 
   // ========== 邮件网关 ==========
   async listMailGateways(): Promise<MailGateway[]> {
-    return this.adminRequest<MailGateway[]>('/admin/gateways');
+    return this.request<MailGateway[]>('/mail/gateways');
   }
 
   async createMailGateway(data: Omit<MailGateway, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailGateway> {
-    return this.adminRequest<MailGateway>('/admin/gateways', {
+    return this.request<MailGateway>('/mail/gateways', {
       method: 'POST',
       body: JSON.stringify(data)
     });
   }
 
   async updateMailGateway(id: number, data: Omit<MailGateway, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailGateway> {
-    return this.adminRequest<MailGateway>(`/admin/gateways/${id}`, {
+    return this.request<MailGateway>(`/mail/gateways/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
     });
   }
 
   async toggleMailGateway(id: number, enabled: boolean): Promise<MailGateway> {
-    return this.adminRequest<MailGateway>(`/admin/gateways/${id}/enable`, {
+    return this.request<MailGateway>(`/mail/gateways/${id}/enable`, {
       method: 'POST',
       body: JSON.stringify({ enabled })
     });
@@ -737,30 +682,30 @@ class ApiService {
       searchParams.append('bizKey', bizKey);
     }
     const qs = searchParams.toString();
-    const endpoint = qs ? `/admin/targets?${qs}` : '/admin/targets';
-    return this.adminRequest<MailTarget[]>(endpoint);
+    const endpoint = qs ? `/mail/targets?${qs}` : '/mail/targets';
+    return this.request<MailTarget[]>(endpoint);
   }
 
   async getMailTarget(bizKey: string): Promise<MailTarget> {
-    return this.adminRequest<MailTarget>(`/admin/targets/${encodeURIComponent(bizKey)}`);
+    return this.request<MailTarget>(`/mail/targets/${encodeURIComponent(bizKey)}`);
   }
 
   async createMailTarget(data: Omit<MailTarget, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailTarget> {
-    return this.adminRequest<MailTarget>('/admin/targets', {
+    return this.request<MailTarget>('/mail/targets', {
       method: 'POST',
       body: JSON.stringify(data)
     });
   }
 
   async updateMailTarget(id: number, data: Omit<MailTarget, 'id' | 'createdAt' | 'updatedAt'>): Promise<MailTarget> {
-    return this.adminRequest<MailTarget>(`/admin/targets/${id}`, {
+    return this.request<MailTarget>(`/mail/targets/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
     });
   }
 
   async sendMail(data: MailBizTypeRequest): Promise<MailSendResponse> {
-    return this.adminRequest<MailSendResponse>('/internal/mail/send', {
+    return this.request<MailSendResponse>('/mail/send', {
       method: 'POST',
       body: JSON.stringify(data)
     });
@@ -772,40 +717,40 @@ class ApiService {
     if (params.status) searchParams.append('status', params.status);
     if (params.timeRange) searchParams.append('timeRange', params.timeRange);
     if (params.page) searchParams.append('page', params.page.toString());
-    if (params.size) searchParams.append('size', params.size.toString());
+    if (params.pageSize) searchParams.append('pageSize', params.pageSize.toString());
     const qs = searchParams.toString();
-    const endpoint = qs ? `/admin/send-logs?${qs}` : '/admin/send-logs';
-    return this.adminRequest<MailSendLogPage>(endpoint);
+    const endpoint = qs ? `/mail/send-logs?${qs}` : '/mail/send-logs';
+    return this.request<MailSendLogPage>(endpoint);
   }
 
   // ========== 通用定时任务 ==========
   async listScheduledTasks(): Promise<ScheduledTask[]> {
-    return this.adminRequest<ScheduledTask[]>('/internal/scheduler/tasks');
+    return this.request<ScheduledTask[]>('/scheduler/tasks');
   }
 
   async createScheduledTask(data: ScheduledTaskRequest): Promise<ScheduledTask> {
-    return this.adminRequest<ScheduledTask>('/internal/scheduler/tasks', {
+    return this.request<ScheduledTask>('/scheduler/tasks', {
       method: 'POST',
       body: JSON.stringify(data)
     });
   }
 
   async updateScheduledTask(id: number, data: ScheduledTaskRequest): Promise<ScheduledTask> {
-    return this.adminRequest<ScheduledTask>(`/internal/scheduler/tasks/${id}`, {
+    return this.request<ScheduledTask>(`/scheduler/tasks/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
     });
   }
 
   async toggleScheduledTask(id: number, enabled: boolean): Promise<ScheduledTask> {
-    return this.adminRequest<ScheduledTask>(`/internal/scheduler/tasks/${id}/toggle`, {
+    return this.request<ScheduledTask>(`/scheduler/tasks/${id}/toggle`, {
       method: 'POST',
       body: JSON.stringify({ enabled })
     });
   }
 
   async deleteScheduledTask(id: number): Promise<void> {
-    return this.adminRequest<void>(`/internal/scheduler/tasks/${id}`, {
+    return this.request<void>(`/scheduler/tasks/${id}`, {
       method: 'DELETE'
     });
   }

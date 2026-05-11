@@ -98,11 +98,11 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         buildWhere(req, sb, params);
         String orderBy = parseOrder(req.getSort());
         sb.append(" ORDER BY ").append(orderBy).append(" ");
-        int page = req.getPage() == null ? 0 : Math.max(req.getPage(), 0);
-        int size = req.getSize() == null ? 20 : Math.min(Math.max(req.getSize(), 1), 100);
+        int page = req.getPage() == null ? 1 : Math.max(req.getPage(), 1);
+        int size = req.getPageSize() == null ? 20 : Math.min(Math.max(req.getPageSize(), 1), 100);
         sb.append(" LIMIT ? OFFSET ?");
         params.add(size);
-        params.add(page * size);
+        params.add((page - 1) * size);
         List<Map<String,Object>> rows = client.query(sb.toString(), params.toArray());
         List<AccessLogListItem> items = new ArrayList<>(rows.size());
         for (Map<String,Object> r : rows) {
@@ -131,7 +131,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         buildWhere(req, countSql, countParams);
         List<Map<String,Object>> cntRows = client.query(countSql.toString(), countParams.toArray());
         long total = cntRows.isEmpty() ? 0L : toLong(cntRows.get(0).get("cnt"));
-        return new PageResponse<>(items, page + 1, size, total);
+        return new PageResponse<>(items, total, page, size);
     }
 
     @Override

@@ -36,7 +36,7 @@ public class Route {
     private String outboundTag;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "outbound_proxy_type", nullable = false)
+    @Column(name = "outbound_proxy_type")
     private ProtocolType outboundProxyType;
 
     @Column(name = "outbound_proxy_host", length = 255)
@@ -52,7 +52,7 @@ public class Route {
     private String outboundProxyPassword;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "outbound_proxy_enc_algo", nullable = false)
+    @Column(name = "outbound_proxy_enc_algo")
     private ProxyEncAlgo outboundProxyEncAlgo;
 
     @JdbcTypeCode(SqlTypes.JSON)

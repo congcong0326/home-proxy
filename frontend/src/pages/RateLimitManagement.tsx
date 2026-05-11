@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, Tag, Modal, Form, InputNumber, Select, DatePicker, TimePicker, message, Card, Row, Col, Typography, Switch } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, FilterOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { apiService } from '../services/api';
 import { UserDTO } from '../types/user';
-import { RateLimitDTO, RateLimitCreateRequest, RateLimitUpdateRequest, RateLimitScopeType, RateLimitQueryParams, PageResponse as RateLimitPageResponse } from '../types/ratelimit';
+import { RateLimitDTO, RateLimitCreateRequest, RateLimitUpdateRequest, RateLimitScopeType, RateLimitQueryParams } from '../types/ratelimit';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -44,7 +44,7 @@ const RateLimitManagement: React.FC = () => {
     try {
       const params: RateLimitQueryParams = {
         page: overrides.page ?? state.page,
-        size: overrides.size ?? state.pageSize,
+        pageSize: overrides.pageSize ?? state.pageSize,
         sortBy: overrides.sortBy ?? state.sortBy,
         sortDir: overrides.sortDir ?? state.sortDir,
         scopeType: overrides.scopeType ?? state.scopeType,
@@ -256,7 +256,7 @@ const RateLimitManagement: React.FC = () => {
           current: state.page,
           pageSize: state.pageSize,
           total: state.total,
-          onChange: (page, pageSize) => loadData({ page, size: pageSize }),
+          onChange: (page, pageSize) => loadData({ page, pageSize }),
         }}
       />
 

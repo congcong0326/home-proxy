@@ -70,7 +70,7 @@ public class ProxyWorkerApplication {
             log.info("  配置数据: {}", newConfig.toString());
             ObjectMapper mapper = new ObjectMapper();
             mapper.registerModule(new JavaTimeModule());
-            // 忽略来源对象中在目标类中不存在的字段（如 allowedUserIds、routeIds 等）
+            // 忽略来源对象中在目标类中不存在的管理端展示字段。
             mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             UserConfig anonymousUser = null;
             RouteConfig defaultRouteConfig = null;
@@ -114,17 +114,29 @@ public class ProxyWorkerApplication {
                     Map<Long, List<RouteConfig>> userToRoutesMap = new HashMap<>();
 
                     List<InboundRouteBinding> inboundRouteBindings = inbound.getInboundRouteBindings();
+                    if (inboundRouteBindings == null) {
+                        inboundRouteBindings = List.of();
+                    }
                     for (InboundRouteBinding inboundRouteBinding : inboundRouteBindings) {
-                        List<Long> userIds = inboundRouteBinding.getUserIds();
-                        List<Long> routeIds = inboundRouteBinding.getRouteIds();
+                        if (inboundRouteBinding == null) {
+                            continue;
+                        }
+                        List<Long> userIds = inboundRouteBinding.getUserIds() == null ? List.of() : inboundRouteBinding.getUserIds();
+                        List<Long> routeIds = inboundRouteBinding.getRouteIds() == null ? List.of() : inboundRouteBinding.getRouteIds();
                         List<RouteConfig> userBelongRoutes = new ArrayList<>();
                         for (Long routeId : routeIds) {
                             RouteDTO routeDTO = routeMap.get(routeId);
+                            if (routeDTO == null) {
+                                continue;
+                            }
                             userBelongRoutes.add(mapper.convertValue(routeDTO, RouteConfig.class));
                         }
                         for (Long userId : userIds) {
-                            userToRoutesMap.put(userId, userBelongRoutes);
                             UserDtoWithCredential userDtoWithCredential = userMap.get(userId);
+                            if (userDtoWithCredential == null) {
+                                continue;
+                            }
+                            userToRoutesMap.put(userId, userBelongRoutes);
                             UserConfig userConfig = mapper.convertValue(userDtoWithCredential, UserConfig.class);
                             userNameMap.put(userConfig.getUsername(), userConfig);
                             if (userConfig.getIpAddress() != null) {

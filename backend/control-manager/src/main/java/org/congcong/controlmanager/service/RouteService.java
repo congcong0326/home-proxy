@@ -50,9 +50,9 @@ public class RouteService {
         
         return new PageResponse<>(
                 routeDTOs,
+                routePage.getTotalElements(),
                 routePage.getNumber() + 1,
-                routePage.getSize(),
-                routePage.getTotalElements()
+                routePage.getSize()
         );
     }
 

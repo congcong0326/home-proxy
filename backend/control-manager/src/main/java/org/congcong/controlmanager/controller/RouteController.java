@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.controller;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.enums.RoutePolicy;
@@ -13,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -24,6 +26,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/routes")
 @RequiredArgsConstructor
+@Validated
 public class RouteController {
 
     private final RouteService routeService;
@@ -34,17 +37,18 @@ public class RouteController {
      */
     @GetMapping
     public ResponseEntity<PageResponse<RouteDTO>> getRoutes(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "id") String sort,
-            @RequestParam(defaultValue = "desc") String direction,
+            @RequestParam(defaultValue = "1") @Min(1) int page,
+            @RequestParam(defaultValue = "10") @Min(1) int pageSize,
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) RoutePolicy policy,
             @RequestParam(required = false) Integer status) {
         
-        Sort.Direction sortDirection = "asc".equalsIgnoreCase(direction) ? 
+        pageSize = Math.min(pageSize, 200);
+        Sort.Direction sortDirection = "asc".equalsIgnoreCase(sortDir) ?
             Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(sortDirection, sort));
+        Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(sortDirection, sortBy));
         
         PageResponse<RouteDTO> response = routeService.getRoutes(pageable, name, policy, status);
         return ResponseEntity.ok(response);

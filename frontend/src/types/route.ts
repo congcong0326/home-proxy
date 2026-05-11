@@ -150,27 +150,15 @@ export interface UpdateRouteRequest {
 // 路由查询参数类型
 export interface RouteQueryParams {
   page?: number;
-  size?: number;
-  sort?: string;
-  direction?: 'asc' | 'desc';
+  pageSize?: number;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
   name?: string;
   policy?: RoutePolicy;
   status?: number;
 }
 
-// 分页响应类型（复用user.ts中的定义）
 export interface PageResponse<T> {
-  content: T[];
-  totalElements: number;
-  totalPages: number;
-  size: number;
-  number: number;
-  first: boolean;
-  last: boolean;
-}
-
-// 实际API响应类型
-export interface ApiPageResponse<T> {
   items: T[];
   total: number;
   page: number;

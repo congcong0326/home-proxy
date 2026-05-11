@@ -56,16 +56,6 @@ public class InboundConfigCreateRequest {
      */
     private ProxyEncAlgo ssMethod;
 
-    /**
-     * 允许的用户ID列表
-     */
-    private List<Long> allowedUserIds;
-
-    /**
-     * 路由ID列表
-     */
-    private List<Long> routeIds;
-
     @NotNull(message = "绑定数据不能为空")
     private List<InboundRouteBinding> inboundRouteBindings;
 

@@ -3,7 +3,6 @@ import {
   Button,
   Card,
   Col,
-  Divider,
   Form,
   Input,
   InputNumber,
@@ -172,7 +171,7 @@ const InboundManagement: React.FC = () => {
     try {
       const res = await apiService.getInbounds({
         page: state.currentPage,
-        size: state.pageSize,
+        pageSize: state.pageSize,
         sortBy: state.sortBy,
         sortDir: state.sortDir,
         protocol: state.protocolFilter,
@@ -182,11 +181,11 @@ const InboundManagement: React.FC = () => {
       });
       setState(prev => ({
         ...prev,
-        inbounds: res.content,
-        total: res.totalElements,
+        inbounds: res.items,
+        total: res.total,
         loading: false,
       }));
-      await fetchInboundTraffic(res.content || []);
+      await fetchInboundTraffic(res.items || []);
     } catch (error) {
       console.error('加载入站配置失败:', error);
       setState(prev => ({ ...prev, loading: false }));
@@ -276,9 +275,9 @@ const InboundManagement: React.FC = () => {
               port: record.port,
               tlsEnabled: record.tlsEnabled,
               ssMethod: record.ssMethod,
-              inboundRouteBindings: (record.inboundRouteBindings && record.inboundRouteBindings.length > 0)
+              inboundRouteBindings: record.inboundRouteBindings && record.inboundRouteBindings.length > 0
                 ? record.inboundRouteBindings
-                : [{ userIds: record.allowedUserIds || [], routeIds: record.routeIds || [] }],
+                : [{ userIds: [], routeIds: [] }],
               status: record.status,
               notes: record.notes,
             });

@@ -12,6 +12,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -172,10 +173,23 @@ public class UserService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
 
         // TODO: 检查用户是否被入站配置引用
-        // 这里需要查询 inbound_configs 表的 allowed_user_ids 字段
+        // 这里需要查询 inbound_configs 表的 inbound_route_bindings 字段
         // 如果被引用，应该抛出 ResponseStatusException(HttpStatus.CONFLICT, "用户被入站配置引用，无法删除")
 
         userRepository.delete(user);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
+    public void batchDeleteUsers(List<Long> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户ID列表不能为空");
+        }
+        List<User> users = userRepository.findAllById(ids);
+        if (users.size() != ids.stream().distinct().count()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "部分用户不存在");
+        }
+        userRepository.deleteAll(users);
     }
 
     /**
@@ -223,6 +237,20 @@ public class UserService {
         return convertToDTO(savedUser);
     }
 
+    @Transactional
+    @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
+    public void batchUpdateStatus(List<Long> ids, Integer status) {
+        if (ids == null || ids.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户ID列表不能为空");
+        }
+        List<User> users = userRepository.findAllById(ids);
+        if (users.size() != ids.stream().distinct().count()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "部分用户不存在");
+        }
+        users.forEach(user -> user.setStatus(status));
+        userRepository.saveAll(users);
+    }
+
     /**
      * 将User实体转换为UserDTO
      */
@@ -248,9 +276,9 @@ public class UserService {
         
         return new PageResponse<>(
                 userDTOs,
+                userPage.getTotalElements(),
                 userPage.getNumber() + 1, // Spring Data JPA页码从0开始，转换为从1开始
-                userPage.getSize(),
-                userPage.getTotalElements()
+                userPage.getSize()
         );
     }
 

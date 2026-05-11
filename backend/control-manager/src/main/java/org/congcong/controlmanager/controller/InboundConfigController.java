@@ -37,7 +37,7 @@ public class InboundConfigController {
     @GetMapping
     public ResponseEntity<PageResponse<InboundConfigDTO>> getInboundConfigs(
             @RequestParam(defaultValue = "1") @Min(1) int page,
-            @RequestParam(defaultValue = "10") @Min(1) int size,
+            @RequestParam(defaultValue = "10") @Min(1) int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) ProtocolType protocol,
@@ -45,8 +45,9 @@ public class InboundConfigController {
             @RequestParam(required = false) Boolean tlsEnabled,
             @RequestParam(required = false) Integer status) {
 
+        pageSize = Math.min(pageSize, 200);
         Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
-        Pageable pageable = PageRequest.of(page - 1, size, Sort.by(direction, sortBy));
+        Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(direction, sortBy));
 
         PageResponse<InboundConfigDTO> response = inboundConfigService.getInboundConfigs(
                 pageable, protocol, port, tlsEnabled, status);

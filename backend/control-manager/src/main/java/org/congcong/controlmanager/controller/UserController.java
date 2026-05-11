@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/users")
@@ -117,13 +118,19 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
+    @DeleteMapping("/batch")
+    public ResponseEntity<Void> batchDeleteUsers(@Valid @RequestBody BatchDeleteRequest request) {
+        userService.batchDeleteUsers(request.getIds());
+        return ResponseEntity.noContent().build();
+    }
+
     /**
      * 重置用户凭证
      * PUT /api/users/{id}/credential
      */
     @PutMapping("/{id}/credential")
-    public ResponseEntity<Void> resetUserCredential(@PathVariable Long id, @RequestBody String credential) {
-        userService.resetCredential(id, credential);
+    public ResponseEntity<Void> resetUserCredential(@PathVariable Long id, @Valid @RequestBody ResetCredentialRequest request) {
+        userService.resetCredential(id, request.getNewCredential());
         return ResponseEntity.ok().build();
     }
 
@@ -137,6 +144,12 @@ public class UserController {
         return ResponseEntity.ok().build();
     }
 
+    @PutMapping("/batch/status")
+    public ResponseEntity<Void> batchUpdateUserStatus(@Valid @RequestBody BatchUpdateStatusRequest request) {
+        userService.batchUpdateStatus(request.getIds(), request.getStatus());
+        return ResponseEntity.ok().build();
+    }
+
     // 内部DTO类
     @Data
     public static class ResetCredentialRequest {
@@ -146,6 +159,21 @@ public class UserController {
 
     @Data
     public static class UpdateStatusRequest {
+        @NotNull(message = "状态不能为空")
+        private Integer status;
+    }
+
+    @Data
+    public static class BatchDeleteRequest {
+        @NotNull(message = "用户ID列表不能为空")
+        private List<Long> ids;
+    }
+
+    @Data
+    public static class BatchUpdateStatusRequest {
+        @NotNull(message = "用户ID列表不能为空")
+        private List<Long> ids;
+
         @NotNull(message = "状态不能为空")
         private Integer status;
     }

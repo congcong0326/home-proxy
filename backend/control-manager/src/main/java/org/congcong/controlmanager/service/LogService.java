@@ -3,43 +3,14 @@ package org.congcong.controlmanager.service;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.AccessLog;
 import org.congcong.controlmanager.dto.*;
-import org.congcong.controlmanager.entity.AccessLogEntity;
-import org.congcong.controlmanager.repository.AccessLogRepository;
-import org.congcong.controlmanager.repository.AuthLogRepository;
-import org.congcong.controlmanager.repository.agg.MonthlyAppStatsRepository;
-import org.congcong.controlmanager.repository.agg.MonthlyUserStatsRepository;
-import org.congcong.controlmanager.repository.agg.MonthlyUserAppStatsRepository;
-import org.congcong.controlmanager.repository.agg.MonthlySrcGeoStatsRepository;
-import org.congcong.controlmanager.repository.agg.MonthlyDstGeoStatsRepository;
-import org.congcong.controlmanager.repository.agg.DailyUserStatsRepository;
-import org.congcong.controlmanager.repository.agg.DailyAppStatsRepository;
-import org.congcong.controlmanager.repository.agg.DailyUserAppStatsRepository;
-import org.congcong.controlmanager.repository.agg.DailySrcGeoStatsRepository;
-import org.congcong.controlmanager.repository.agg.DailyDstGeoStatsRepository;
-import org.congcong.controlmanager.repository.agg.MinuteTrafficStatsRepository;
-import org.congcong.controlmanager.entity.agg.MinuteTrafficStats;
-import org.congcong.controlmanager.entity.agg.MonthlyAppStats;
-import org.congcong.controlmanager.entity.agg.MonthlyUserStats;
-import org.congcong.controlmanager.entity.agg.MonthlyUserAppStats;
-import org.congcong.controlmanager.entity.agg.MonthlySrcGeoStats;
-import org.congcong.controlmanager.entity.agg.MonthlyDstGeoStats;
-import org.congcong.controlmanager.entity.agg.DailyAppStats;
-import org.congcong.controlmanager.entity.agg.DailyUserStats;
-import org.congcong.controlmanager.entity.agg.DailyUserAppStats;
-import org.congcong.controlmanager.entity.agg.DailySrcGeoStats;
-import org.congcong.controlmanager.entity.agg.DailyDstGeoStats;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.congcong.controlmanager.logstore.AccessLogStoreFactory;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.YearMonth;
-import java.time.format.DateTimeParseException;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor

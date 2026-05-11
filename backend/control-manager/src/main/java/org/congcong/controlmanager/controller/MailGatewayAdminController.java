@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/gateways")
+@RequestMapping("/api/mail/gateways")
 @Validated
 @RequiredArgsConstructor
 public class MailGatewayAdminController {

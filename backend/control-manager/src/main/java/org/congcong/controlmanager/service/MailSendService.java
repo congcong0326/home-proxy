@@ -47,9 +47,9 @@ public class MailSendService {
         Page<MailSendLog> page = mailSendLogRepository.queryLogs(bizKey, status, startAt, endAt, pageable);
         return new PageResponse<>(
                 page.getContent().stream().map(this::toDto).toList(),
+                page.getTotalElements(),
                 pageable.getPageNumber() + 1,
-                pageable.getPageSize(),
-                page.getTotalElements()
+                pageable.getPageSize()
         );
     }
 

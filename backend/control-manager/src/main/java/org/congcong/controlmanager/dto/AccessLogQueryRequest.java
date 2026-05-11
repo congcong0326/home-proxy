@@ -27,7 +27,7 @@ public class AccessLogQueryRequest {
     private String originalTargetHost;
     private String rewriteTargetHost;
     private String q; // 自由文本
-    private Integer page = 0;
-    private Integer size = 20;
+    private Integer page = 1;
+    private Integer pageSize = 20;
     private String sort; // 如 ts,desc
 }

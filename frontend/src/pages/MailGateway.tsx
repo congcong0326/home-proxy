@@ -130,7 +130,7 @@ const MailGatewayPage: React.FC = () => {
       setLoadingLogs(true);
       const res = await apiService.listMailSendLogs({
         page: 1,
-        size: 6,
+        pageSize: 6,
         bizKey
       });
       setLogs(res.items || []);

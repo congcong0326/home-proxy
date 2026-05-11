@@ -73,12 +73,12 @@ public class LogController {
             @RequestParam(value = "rewriteTargetHost", required = false) String rewriteTargetHost,
             @RequestParam(value = "q", required = false) String q,
             @RequestParam(value = "page", required = false) Integer page,
-            @RequestParam(value = "size", required = false) Integer size,
+            @RequestParam(value = "pageSize", required = false) Integer pageSize,
             @RequestParam(value = "sort", required = false) String sort
     ) {
         AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
                 protocol, routePolicyId, routePolicyName, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
-                page, size, sort);
+                page, pageSize, sort);
         PageResponse<AccessLogListItem> resp = logService.queryAccessLogs(req);
         return ResponseEntity.ok(resp);
     }
