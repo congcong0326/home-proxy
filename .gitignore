@@ -47,3 +47,5 @@ mvnw.cmd
 # /dist/
 # **/*.zip
 # **/*.tar.gz
+# Spring Boot static build artifacts
+/backend/control-manager/src/main/resources/static/
