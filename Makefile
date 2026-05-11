@@ -8,7 +8,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build frontend-install frontend-build frontend-test frontend-dev frontend-sync-static
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it frontend-install frontend-build frontend-test frontend-dev frontend-sync-static
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -26,6 +26,9 @@ backend-dev:
 
 worker-build:
 	$(MVN) -f $(BACKEND_DIR)/pom.xml $(MAVEN_ARGS) -pl proxy-worker -am package -DskipTests
+
+worker-it:
+	$(MVN) -f $(BACKEND_DIR)/pom.xml $(MAVEN_ARGS) -pl proxy-worker -am verify -Pworker-it -DskipTests=false
 
 frontend-install:
 	$(NPM) $(NPM_ARGS) --prefix $(FRONTEND_DIR) ci

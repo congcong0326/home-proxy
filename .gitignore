@@ -3,6 +3,8 @@
 # Maven build outputs
 /target/
 **/target/
+/.m2/
+/.it-cache/
 
 # Gradle/other build outputs (in case)
 /out/
@@ -42,6 +44,7 @@ mvnw.cmd
 # Node (if any submodule uses it later)
 /node_modules/
 **/node_modules/
+/.npm/
 
 # Dist artifacts outside target (optional)
 # /dist/
@@ -49,3 +52,4 @@ mvnw.cmd
 # **/*.tar.gz
 # Spring Boot static build artifacts
 /backend/control-manager/src/main/resources/static/
+/backend/proxy-worker/target/it-xray/

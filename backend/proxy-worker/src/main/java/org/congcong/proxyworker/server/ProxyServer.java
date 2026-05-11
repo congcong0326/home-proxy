@@ -37,9 +37,13 @@ public abstract class ProxyServer {
     public abstract InboundConfig getInboundConfig();
 
     protected boolean useEpoll() {
+        if (!Boolean.parseBoolean(System.getProperty("proxyworker.netty.epoll.enabled", "true"))) {
+            log.info("native epoll disabled by system property proxyworker.netty.epoll.enabled=false");
+            return false;
+        }
         boolean available = Epoll.isAvailable();
         log.info("enable native epoll {}", available);
-        return Epoll.isAvailable();
+        return available;
     }
 
     public void start() throws InterruptedException {

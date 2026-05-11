@@ -3,7 +3,7 @@
 ## 项目结构与模块组织
 - `backend/` Maven 多模块：`common`(DTO/工具/配置模型)、`proxy-worker`(Netty 转发与协议嗅探)、`control-manager`(Spring Boot API、配置发布、指标聚合)。
 - `frontend/` React + TypeScript 单页，源码在 `frontend/src`，构建产物输出到 `frontend/build`。
-- `docs/` 存放研发文档，实施前按需读取。
+- `docs/` 存放研发文档，内容一般以中文书写，实施前按需读取。
 
 ## 渐进式披露
 - 第一层：先读本文件，掌握项目结构、构建命令、编码风格、测试与安全约束。

@@ -31,6 +31,10 @@ public abstract class AbstractProxyServer {
     protected abstract void doClose() throws InterruptedException;
 
     protected boolean useEpoll() {
+        if (!Boolean.parseBoolean(System.getProperty("proxyworker.netty.epoll.enabled", "true"))) {
+            log.info("native epoll disabled by system property proxyworker.netty.epoll.enabled=false");
+            return false;
+        }
         boolean available = Epoll.isAvailable();
         log.info("enable native epoll {}", available);
         return available;
