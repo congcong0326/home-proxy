@@ -84,6 +84,10 @@
     overflow-x: auto;
   }
 
+  .inbound-management .ant-table {
+    min-width: 0;
+  }
+
   .inbound-management .ant-modal .ant-row .ant-col {
     flex: 0 0 100%;
     max-width: 100%;

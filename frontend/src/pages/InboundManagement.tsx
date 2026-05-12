@@ -15,7 +15,8 @@ import {
   Table,
   Tag,
   Typography,
-  Statistic
+  Statistic,
+  Grid
 } from 'antd';
 import {
   PlusOutlined,
@@ -107,6 +108,8 @@ const InboundManagement: React.FC = () => {
   const [createForm] = Form.useForm<InboundConfigCreateRequest>();
   const [editForm] = Form.useForm<InboundConfigUpdateRequest>();
   const [trafficMap, setTrafficMap] = useState<Record<number, InboundTrafficStats>>({});
+  const screens = Grid.useBreakpoint();
+  const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
   // 监听协议选择，便于基于协议调整表单项可见性与默认值
   const createProtocolWatch = Form.useWatch('protocol', createForm);
@@ -370,7 +373,7 @@ const InboundManagement: React.FC = () => {
     }
   };
 
-  const columns = [
+  const desktopColumns = [
     { title: '名称', dataIndex: 'name', key: 'name' },
     { 
       title: '协议', 
@@ -410,6 +413,51 @@ const InboundManagement: React.FC = () => {
       )
     }
   ];
+
+  const mobileColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: InboundConfigDTO) => (
+        <Space direction="vertical" size={0}>
+          <span>{name}</span>
+          <Typography.Text type="secondary" className="mobile-row-meta">
+            {record.listenIp}:{record.port}
+          </Typography.Text>
+        </Space>
+      ),
+    },
+    {
+      title: '协议',
+      dataIndex: 'protocol',
+      key: 'protocol',
+      width: 92,
+      render: (v: ProtocolType) => <Tag color="blue">{PROTOCOL_TYPE_LABELS[v]}</Tag>,
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 76,
+      render: (s: number) => s === 1 ? <Tag color="green">启用</Tag> : <Tag color="red">禁用</Tag>,
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 116,
+      render: (_: any, record: InboundConfigDTO) => (
+        <Space size={4}>
+          <Button size="small" icon={<EditOutlined />} onClick={() => { void openEditModal(record); }}>编辑</Button>
+          <Popconfirm title={`确定删除入站配置「${record.name}」？`} onConfirm={() => handleDelete(record.id)}>
+            <Button size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const columns = isMobile ? mobileColumns : desktopColumns;
 
   const stats = useMemo(() => {
     const total = state.inbounds.length;

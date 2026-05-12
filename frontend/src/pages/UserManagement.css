@@ -330,7 +330,11 @@
   }
 
   .user-table {
-    min-width: 760px;
+    min-width: 0;
+  }
+
+  .user-table .ant-table {
+    min-width: 0;
   }
 }
 

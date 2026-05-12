@@ -18,6 +18,7 @@ import {
   Typography,
   Dropdown,
   MenuProps,
+  Grid,
 } from 'antd';
 import {
   SettingOutlined,
@@ -88,6 +89,8 @@ const RouteManagement: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<RouteDTO | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetSummaryDTO[]>([]);
+  const screens = Grid.useBreakpoint();
+  const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
   // 初始模拟路由数据
   const initialMockRoutes: RouteDTO[] = useMemo(() => [
@@ -516,7 +519,7 @@ const RouteManagement: React.FC = () => {
   }, []);
 
   // 表格列定义
-  const columns = [
+  const desktopColumns = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -659,6 +662,96 @@ const RouteManagement: React.FC = () => {
       },
     },
   ];
+
+  const mobileColumns = [
+    {
+      title: '路由名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (text: string, record: RouteDTO) => (
+        <Space direction="vertical" size={0}>
+          <Space>
+            <Text strong>{text}</Text>
+            {record.notes && (
+              <Tooltip title={record.notes}>
+                <Badge size="small" color="blue" />
+              </Tooltip>
+            )}
+          </Space>
+          <Text type="secondary" className="mobile-row-meta">
+            规则 {record.rules?.length || 0}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: '路由策略',
+      dataIndex: 'policy',
+      key: 'policy',
+      width: 92,
+      render: (policy: RoutePolicy) => (
+        <Tag color={ROUTE_POLICY_COLORS[policy]}>
+          {ROUTE_POLICY_LABELS[policy]}
+        </Tag>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 82,
+      render: (status: RouteStatus) => (
+        <Tag color={ROUTE_STATUS_COLORS[status]}>
+          {ROUTE_STATUS_LABELS[status]}
+        </Tag>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 96,
+      render: (_: any, record: RouteDTO) => {
+        const items: MenuProps['items'] = [
+          {
+            key: 'view',
+            icon: <EyeOutlined />,
+            label: '查看详情',
+            onClick: () => handleViewRoute(record),
+          },
+          {
+            key: 'edit',
+            icon: <EditOutlined />,
+            label: '编辑',
+            onClick: () => handleEditRoute(record),
+          },
+          {
+            type: 'divider',
+          },
+          {
+            key: 'delete',
+            icon: <DeleteOutlined />,
+            label: '删除',
+            danger: true,
+            onClick: () => {
+              Modal.confirm({
+                title: '确认删除',
+                content: `确定要删除路由 "${record.name}" 吗？`,
+                onOk: () => handleDeleteRoute(record),
+              });
+            },
+          },
+        ];
+
+        return (
+          <Dropdown menu={{ items }} trigger={['click']}>
+            <Button size="small" icon={<MoreOutlined />}>操作</Button>
+          </Dropdown>
+        );
+      },
+    },
+  ];
+
+  const columns = isMobile ? mobileColumns : desktopColumns;
 
   // 行选择配置
   const rowSelection = {
@@ -831,7 +924,7 @@ const RouteManagement: React.FC = () => {
       {/* 路由列表 */}
       <Card>
         <Table
-          rowSelection={rowSelection}
+          rowSelection={isMobile ? undefined : rowSelection}
           columns={columns}
           dataSource={state.routes}
           rowKey="id"
@@ -840,13 +933,13 @@ const RouteManagement: React.FC = () => {
             current: state.currentPage,
             pageSize: state.pageSize,
             total: state.total,
-            showSizeChanger: true,
-            showQuickJumper: true,
+            showSizeChanger: !isMobile,
+            showQuickJumper: !isMobile,
             showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
             onChange: handlePageChange,
           }}
           onChange={handleTableChange}
-          scroll={{ x: 1200 }}
+          scroll={isMobile ? undefined : { x: 1200 }}
         />
       </Card>
 

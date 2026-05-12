@@ -54,6 +54,8 @@ const mockInboundResponse = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
+  window.dispatchEvent(new Event('resize'));
   (apiService.getInbounds as jest.Mock).mockResolvedValue(mockInboundResponse);
   (apiService.getInboundMonthlyTraffic as jest.Mock).mockResolvedValue({
     inboundId: 1,
@@ -126,4 +128,21 @@ test('shows TLS switch only when creating SOCKS5 inbound config', async () => {
   fireEvent.click(await screen.findByTitle('HTTPS CONNECT协议'));
 
   await waitFor(() => expect(within(dialog).queryByText('启用TLS')).not.toBeInTheDocument());
+});
+
+test('uses a compact column set on mobile', async () => {
+  Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 500 });
+  window.dispatchEvent(new Event('resize'));
+
+  render(<InboundManagement />);
+
+  expect(await screen.findByText('socks inbound')).toBeInTheDocument();
+  await waitFor(() => expect(screen.queryByRole('columnheader', { name: '监听IP' })).not.toBeInTheDocument());
+  expect(screen.queryByRole('columnheader', { name: 'TLS' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: '本月流量(上/下行)' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: '更新时间' })).not.toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '名称' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '协议' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '状态' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: '操作' })).toBeInTheDocument();
 });

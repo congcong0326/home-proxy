@@ -314,6 +314,10 @@
   .route-management .ant-table-wrapper {
     overflow-x: auto;
   }
+
+  .route-management .ant-table {
+    min-width: 0;
+  }
 }
 
 .route-management .ant-dropdown-menu-item {

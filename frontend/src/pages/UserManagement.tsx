@@ -19,6 +19,7 @@ import {
   Typography,
   Dropdown,
   MenuProps,
+  Grid,
 } from 'antd';
 import {
   UserOutlined,
@@ -82,6 +83,8 @@ const UserManagement: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [credentialModalVisible, setCredentialModalVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+  const screens = Grid.useBreakpoint();
+  const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
   const [createForm] = Form.useForm();
   const [editForm] = Form.useForm();
@@ -365,7 +368,7 @@ const UserManagement: React.FC = () => {
   };
 
   // 表格列定义
-  const columns = [
+  const desktopColumns = [
     {
       title: 'ID',
       dataIndex: 'id',
@@ -477,6 +480,90 @@ const UserManagement: React.FC = () => {
       ),
     },
   ];
+
+  const mobileColumns = [
+    {
+      title: '用户名',
+      dataIndex: 'username',
+      key: 'username',
+      render: (text: string, record: UserDTO) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{text}</Text>
+          {record.ipAddress && <Text type="secondary" className="mobile-row-meta">{record.ipAddress}</Text>}
+        </Space>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 82,
+      render: (status: UserStatus) => (
+        <Tag color={USER_STATUS_COLORS[status] as any}>
+          {USER_STATUS_LABELS[status]}
+        </Tag>
+      ),
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 116,
+      render: (_: any, record: UserDTO) => (
+        <Space size={2}>
+          <Tooltip title="查看详情">
+            <Button
+              type="text"
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => {
+                Modal.info({
+                  title: '用户详情',
+                  content: (
+                    <div>
+                      <p><strong>ID:</strong> {record.id}</p>
+                      <p><strong>用户名:</strong> {record.username}</p>
+                      <p><strong>设备IP:</strong> {record.ipAddress || '-'}</p>
+                      <p><strong>状态:</strong> {USER_STATUS_LABELS[record.status as UserStatus]}</p>
+                      <p><strong>创建时间:</strong> {new Date(record.createdAt).toLocaleString('zh-CN')}</p>
+                      <p><strong>更新时间:</strong> {new Date(record.updatedAt).toLocaleString('zh-CN')}</p>
+                    </div>
+                  ),
+                });
+              }}
+            />
+          </Tooltip>
+          <Tooltip title="编辑">
+            <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEditModal(record)} />
+          </Tooltip>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'credential', icon: <KeyOutlined />, label: '重置凭证', onClick: () => openCredentialModal(record) },
+                {
+                  key: 'delete',
+                  icon: <DeleteOutlined />,
+                  label: '删除',
+                  danger: true,
+                  onClick: () => {
+                    Modal.confirm({
+                      title: '确认删除',
+                      content: '确定要删除这个用户吗？此操作不可恢复。',
+                      onOk: () => handleDeleteUser(record.id),
+                    });
+                  },
+                },
+              ],
+            }}
+            trigger={['click']}
+          >
+            <Button type="text" size="small" icon={<MoreOutlined />} />
+          </Dropdown>
+        </Space>
+      ),
+    },
+  ];
+
+  const columns = isMobile ? mobileColumns : desktopColumns;
 
   // 行选择配置
   const rowSelection = {
@@ -627,7 +714,7 @@ const UserManagement: React.FC = () => {
         {/* 用户表格 */}
         <Card className="table-card">
           <Table
-            rowSelection={rowSelection}
+            rowSelection={isMobile ? undefined : rowSelection}
             columns={columns}
             dataSource={state.users}
             rowKey="id"
@@ -636,13 +723,13 @@ const UserManagement: React.FC = () => {
               current: state.currentPage,
               pageSize: state.pageSize,
               total: state.total,
-              showSizeChanger: true,
-              showQuickJumper: true,
+              showSizeChanger: !isMobile,
+              showQuickJumper: !isMobile,
               showTotal: (total, range) => `第 ${range[0]}-${range[1]} 条，共 ${total} 条`,
               pageSizeOptions: ['10', '20', '50', '100'],
             }}
             onChange={handleTableChange}
-            scroll={{ x: 800 }}
+            scroll={isMobile ? undefined : { x: 800 }}
             className="user-table"
           />
         </Card>
