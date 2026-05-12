@@ -21,6 +21,8 @@ import {
   GlobalOutlined,
   NodeIndexOutlined,
   BranchesOutlined,
+  DatabaseOutlined,
+  ReadOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   AreaChartOutlined,
@@ -92,6 +94,16 @@ const ProxyConfig: React.FC = () => {
           key: '/config/routing',
           icon: <BranchesOutlined />,
           label: '路由规则',
+        },
+        {
+          key: '/config/rule-sets',
+          icon: <DatabaseOutlined />,
+          label: '规则集',
+        },
+        {
+          key: '/config/rule-sets/guide',
+          icon: <ReadOutlined />,
+          label: '规则源说明',
         },
       ],
     },
@@ -300,6 +312,10 @@ const getCardDescription = (key: string): string => {
       return '配置入站监听与协议';
     case '/config/routing':
       return '设置路由规则与流量分发策略';
+    case '/config/rule-sets':
+      return '统一管理 AI / GEO 等规则集与外部规则源同步';
+    case '/config/rule-sets/guide':
+      return '解释规则源类型、URL 写法、解析格式与现成配置案例';
     case '/config/overview/log-audit':
       return '查看访问日志，支持查询、过滤与详情';
     case '/config/overview/aggregate':

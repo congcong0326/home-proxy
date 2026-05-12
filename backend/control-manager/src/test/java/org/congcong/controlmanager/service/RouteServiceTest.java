@@ -16,6 +16,7 @@ import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -24,7 +25,8 @@ import org.springframework.web.server.ResponseStatusException;
 class RouteServiceTest {
 
     private final RouteRepository routeRepository = mock(RouteRepository.class);
-    private final RouteService routeService = new RouteService(routeRepository);
+    private final RuleSetRepository ruleSetRepository = mock(RuleSetRepository.class);
+    private final RouteService routeService = new RouteService(routeRepository, ruleSetRepository);
 
     @Test
     void rejectsVlessRealityRouteWhenRequiredConfigIsMissing() {

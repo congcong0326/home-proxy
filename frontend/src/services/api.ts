@@ -23,6 +23,18 @@ import {
   RouteQueryParams
 } from '../types/route';
 import {
+  CreateRuleSetRequest,
+  RuleSetBatchSyncRequest,
+  RuleSetDTO,
+  RuleSetItem,
+  RuleSetItemQueryParams,
+  RuleSetPageResponse,
+  RuleSetQueryParams,
+  RuleSetSummaryDTO,
+  RuleSetSyncResult,
+  UpdateRuleSetRequest,
+} from '../types/ruleset';
+import {
   RateLimitDTO,
   RateLimitCreateRequest,
   RateLimitUpdateRequest,
@@ -79,12 +91,49 @@ class ApiService {
     this.baseURL = baseURL;
   }
 
-  // 通用请求方法
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
+  private async readResponseBody<T>(response: Response): Promise<T> {
+    if (response.status === 204) {
+      return undefined as T;
+    }
+
+    const text = await response.text();
+    return text ? JSON.parse(text) as T : undefined as T;
+  }
+
+  private async getErrorMessage(response: Response): Promise<string> {
+    const text = await response.text().catch(() => '');
+    if (!text) {
+      return `HTTP error! status: ${response.status}`;
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      return parsed.message || `HTTP error! status: ${response.status}`;
+    } catch {
+      return text;
+    }
+  }
+
+  private handleUnauthorized(status: number, endpoint: string): void {
+    if (status !== 401 || endpoint === '/admin/login' || typeof window === 'undefined') {
+      return;
+    }
+
+    localStorage.removeItem('token');
+
+    if (window.location.pathname === '/login') {
+      return;
+    }
+
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const redirectQuery = currentPath && currentPath !== '/login'
+      ? `?redirect=${encodeURIComponent(currentPath)}`
+      : '';
+
+    window.location.replace(`/login${redirectQuery}`);
+  }
+
+  private async executeRequest<T>(url: string, endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
 
     const config: RequestInit = {
@@ -98,17 +147,27 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        const errorMessage = await this.getErrorMessage(response);
+        this.handleUnauthorized(response.status, endpoint);
+        throw new Error(errorMessage);
       }
 
-      return await response.json();
+      return await this.readResponseBody<T>(response);
     } catch (error) {
       console.error('API request failed:', error);
       throw error;
     }
+  }
+
+  // 通用请求方法
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseURL}${endpoint}`;
+    return this.executeRequest<T>(url, endpoint, options);
   }
 
   // 管理员接口专用请求方法（不带/api前缀）
@@ -117,30 +176,7 @@ class ApiService {
     options: RequestInit = {}
   ): Promise<T> {
     const url = endpoint; // 直接使用endpoint，不添加baseURL前缀
-    const token = localStorage.getItem('token');
-
-    const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
-      ...options,
-    };
-
-    try {
-      const response = await fetch(url, config);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
-    }
+    return this.executeRequest<T>(url, endpoint, options);
   }
 
   // 登录
@@ -276,10 +312,34 @@ class ApiService {
     if (params.name) searchParams.append('name', params.name);
     if (params.policy) searchParams.append('policy', params.policy);
     if (params.status !== undefined) searchParams.append('status', params.status.toString());
-    
+
     const queryString = searchParams.toString();
     const endpoint = queryString ? `/routes?${queryString}` : '/routes';
-    return this.request<PageResponse<RouteDTO>>(endpoint);
+
+    // 兼容后端返回 { items, total, page, pageSize } 或 Spring Page 格式
+    const raw: any = await this.request<any>(endpoint);
+    if (raw && Array.isArray(raw.items)) {
+      const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
+      const size = typeof raw.pageSize === 'number'
+        ? raw.pageSize
+        : (typeof raw.size === 'number' ? raw.size : raw.items.length);
+      const page = typeof raw.page === 'number' ? raw.page : 1;
+      return {
+        items: raw.items,
+        total,
+        page,
+        pageSize: size,
+      };
+    }
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: typeof raw.number === 'number' ? raw.number + 1 : 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+    return raw as PageResponse<RouteDTO>;
   }
   
   // ========== 入站配置接口 ==========
@@ -295,7 +355,29 @@ class ApiService {
     if (params.status !== undefined) searchParams.append('status', params.status.toString());
     const endpoint = searchParams.toString() ? `/inbounds?${searchParams.toString()}` : '/inbounds';
 
-    return this.request<PageResponse<InboundConfigDTO>>(endpoint);
+    const raw: any = await this.request<any>(endpoint);
+    if (raw && Array.isArray(raw.items)) {
+      const total = typeof raw.total === 'number' ? raw.total : raw.items.length;
+      const size = typeof raw.pageSize === 'number'
+        ? raw.pageSize
+        : (typeof raw.size === 'number' ? raw.size : raw.items.length);
+      const page = typeof raw.page === 'number' ? raw.page : 1;
+      return {
+        items: raw.items,
+        total,
+        page,
+        pageSize: size,
+      };
+    }
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: typeof raw.number === 'number' ? raw.number + 1 : 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+    return raw as PageResponse<InboundConfigDTO>;
   }
 
   async getInboundById(id: number): Promise<InboundConfigDTO> {
@@ -352,6 +434,116 @@ class ApiService {
   async deleteRoute(id: number): Promise<void> {
     return this.request<void>(`/routes/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ========== 规则集管理接口 ==========
+  async getRuleSets(params: RuleSetQueryParams = {}): Promise<RuleSetPageResponse<RuleSetSummaryDTO>> {
+    const searchParams = new URLSearchParams();
+
+    if (params.page !== undefined) searchParams.append('page', params.page.toString());
+    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+    if (params.sort) searchParams.append('sort', params.sort);
+    if (params.direction) searchParams.append('direction', params.direction);
+    if (params.name) searchParams.append('name', params.name);
+    if (params.category) searchParams.append('category', params.category);
+    if (params.enabled !== undefined) searchParams.append('enabled', String(params.enabled));
+    if (params.published !== undefined) searchParams.append('published', String(params.published));
+
+    const endpoint = searchParams.toString() ? `/rule-sets?${searchParams.toString()}` : '/rule-sets';
+    const raw: any = await this.request<any>(endpoint);
+
+    if (raw && Array.isArray(raw.items)) {
+      return {
+        items: raw.items,
+        total: typeof raw.total === 'number' ? raw.total : raw.items.length,
+        page: typeof raw.page === 'number' ? raw.page : 1,
+        pageSize: typeof raw.pageSize === 'number' ? raw.pageSize : (typeof raw.size === 'number' ? raw.size : raw.items.length),
+      };
+    }
+
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: (raw.number ?? 0) + 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+
+    return { items: [], total: 0, page: 1, pageSize: params.size ?? 10 };
+  }
+
+  async getRuleSetById(id: number): Promise<RuleSetSummaryDTO> {
+    return this.request<RuleSetSummaryDTO>(`/rule-sets/${id}`);
+  }
+
+  async getRuleSetItems(id: number, params: RuleSetItemQueryParams = {}): Promise<RuleSetPageResponse<RuleSetItem>> {
+    const searchParams = new URLSearchParams();
+
+    if (params.page !== undefined) searchParams.append('page', params.page.toString());
+    if (params.size !== undefined) searchParams.append('size', params.size.toString());
+
+    const endpoint = searchParams.toString()
+      ? `/rule-sets/${id}/items?${searchParams.toString()}`
+      : `/rule-sets/${id}/items`;
+    const raw: any = await this.request<any>(endpoint);
+
+    if (raw && Array.isArray(raw.items)) {
+      return {
+        items: raw.items,
+        total: typeof raw.total === 'number' ? raw.total : raw.items.length,
+        page: typeof raw.page === 'number' ? raw.page : 1,
+        pageSize: typeof raw.pageSize === 'number' ? raw.pageSize : (typeof raw.size === 'number' ? raw.size : raw.items.length),
+      };
+    }
+
+    if (raw && Array.isArray(raw.content)) {
+      return {
+        items: raw.content,
+        total: raw.totalElements ?? raw.content.length,
+        page: (raw.number ?? 0) + 1,
+        pageSize: raw.size ?? raw.content.length,
+      };
+    }
+
+    return { items: [], total: 0, page: params.page ?? 1, pageSize: params.size ?? 50 };
+  }
+
+  async createRuleSet(data: CreateRuleSetRequest): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>('/rule-sets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRuleSet(id: number, data: UpdateRuleSetRequest): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>(`/rule-sets/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRuleSet(id: number): Promise<void> {
+    return this.request<void>(`/rule-sets/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getPublishedRuleSets(): Promise<RuleSetSummaryDTO[]> {
+    return this.request<RuleSetSummaryDTO[]>('/rule-sets/published');
+  }
+
+  async syncRuleSet(id: number): Promise<RuleSetDTO> {
+    return this.request<RuleSetDTO>(`/rule-sets/${id}/sync`, {
+      method: 'POST',
+    });
+  }
+
+  async syncRuleSets(data?: RuleSetBatchSyncRequest): Promise<RuleSetSyncResult[]> {
+    return this.request<RuleSetSyncResult[]>('/rule-sets/sync-all', {
+      method: 'POST',
+      body: JSON.stringify(data ?? {}),
     });
   }
 

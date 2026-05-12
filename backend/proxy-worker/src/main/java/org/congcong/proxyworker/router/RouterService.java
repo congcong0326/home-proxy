@@ -14,6 +14,7 @@ import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.context.ProxyContextResolver;
+import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
@@ -83,6 +84,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             case GEO -> matchesGeoRoute(route, value, op, targetHost, hostIsIp, proxyTunnelRequest);
             case DOMAIN -> matchesDomainRoute(route, value, op, targetHost);
             case AD_BLOCK -> matchesAdRoute(route, op, targetHost, hostIsIp);
+            case RULE_SET -> matchesRuleSetRoute(value, op, targetHost, hostIsIp);
         };
     }
 
@@ -140,6 +142,18 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         boolean matched = (op == MatchOp.IN) == match.isMatched();
         if (matched) {
             log.debug("广告路由策略命中 {}", targetHost);
+        }
+        return matched;
+    }
+
+    private boolean matchesRuleSetRoute(String ruleSetKey, MatchOp op, String targetHost, boolean hostIsIp) {
+        if (hostIsIp) {
+            return false;
+        }
+        boolean match = RuleSetRegistry.match(ruleSetKey, targetHost);
+        boolean matched = (op == MatchOp.IN) == match;
+        if (matched) {
+            log.debug("规则集 {} 策略命中 {}", ruleSetKey, targetHost);
         }
         return matched;
     }

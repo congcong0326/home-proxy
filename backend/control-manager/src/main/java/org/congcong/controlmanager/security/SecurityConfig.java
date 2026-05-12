@@ -24,7 +24,7 @@ public class SecurityConfig {
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepo, blacklistRepo);
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            .authorizeHttpRequests(auth -> auth
+                .authorizeHttpRequests(auth -> auth
                     .requestMatchers("/admin/login").permitAll()
                     .requestMatchers(HttpMethod.GET, "/admin/setup-status").permitAll()
                     .requestMatchers(HttpMethod.POST, "/admin/setup").permitAll()

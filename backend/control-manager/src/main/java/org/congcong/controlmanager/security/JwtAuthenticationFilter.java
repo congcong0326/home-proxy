@@ -22,8 +22,52 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+    private static final Set<String> PUBLIC_ENDPOINTS = Set.of(
+            "/admin/login",
+            "/admin/setup-status",
+            "/admin/setup",
+            "/api/config/aggregate",
+            "/api/config/hash",
+            "/api/logs/access",
+            "/api/logs/auth"
+    );
+
+    private static final Set<String> PUBLIC_FRONTEND_ROUTES = Set.of(
+            "/",
+            "/login",
+            "/setup",
+            "/dashboard",
+            "/users",
+            "/routes",
+            "/inbound",
+            "/ratelimit",
+            "/logs",
+            "/analysis",
+            "/config",
+            "/change-password",
+            "/favicon.ico",
+            "/manifest.json",
+            "/robots.txt"
+    );
+
+    private static final Set<String> STATIC_RESOURCE_SUFFIXES = Set.of(
+            ".js",
+            ".css",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".gif",
+            ".svg",
+            ".ico",
+            ".woff",
+            ".woff2",
+            ".ttf",
+            ".eot"
+    );
+
     private final JwtService jwtService;
     private final AdminUserRepository userRepo;
     private final AdminTokenBlacklistRepository blacklistRepo;
@@ -42,48 +86,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        // 跳过公开端点的JWT验证
-        if ("/admin/login".equals(path) ||
-            "/admin/setup-status".equals(path) ||
-            "/admin/setup".equals(path) ||
-            "/api/config/aggregate".equals(path) || 
-            "/api/config/hash".equals(path) ||
-                "/api/logs/access".equals(path) ||
-                "/api/logs/auth".equals(path)) {
-            chain.doFilter(request, response); 
-            return; 
-        }
-        
-        // 跳过前端静态资源和路由页面的JWT验证
-        if (path.equals("/") || 
-            path.equals("/login") ||
-            path.equals("/setup") ||
-            path.equals("/dashboard") || 
-            path.equals("/users") || 
-            path.equals("/routes") || 
-            path.equals("/inbound") || 
-            path.equals("/ratelimit") || 
-            path.equals("/logs") || 
-            path.equals("/analysis") || 
-            path.equals("/config") ||
-            path.startsWith("/config/") ||
-            path.equals("/change-password") ||
-            path.startsWith("/static/") ||
-            path.endsWith(".js") ||
-            path.endsWith(".css") ||
-            path.endsWith(".png") ||
-            path.endsWith(".jpg") ||
-            path.endsWith(".jpeg") ||
-            path.endsWith(".gif") ||
-            path.endsWith(".svg") ||
-            path.endsWith(".ico") ||
-            path.endsWith(".woff") ||
-            path.endsWith(".woff2") ||
-            path.endsWith(".ttf") ||
-            path.endsWith(".eot") ||
-            path.equals("/favicon.ico") ||
-            path.equals("/manifest.json") ||
-            path.equals("/robots.txt")) {
+        // 跳过公开端点、前端页面路由和静态资源的JWT验证
+        if (isPublicRequest(path)) {
             chain.doFilter(request, response);
             return;
         }
@@ -134,5 +138,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType("application/json;charset=UTF-8");
         response.getWriter().write(String.format("{\"code\":\"%s\",\"message\":\"%s\",\"requestId\":\"%s\"}", code, msg, rid));
+    }
+
+    private boolean isPublicRequest(String path) {
+        if (PUBLIC_ENDPOINTS.contains(path) || PUBLIC_FRONTEND_ROUTES.contains(path)) {
+            return true;
+        }
+
+        if (path.startsWith("/config/") || path.startsWith("/static/")) {
+            return true;
+        }
+
+        return STATIC_RESOURCE_SUFFIXES.stream().anyMatch(path::endsWith);
     }
 }

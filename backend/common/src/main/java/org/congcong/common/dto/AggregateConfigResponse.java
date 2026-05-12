@@ -51,6 +51,11 @@ public class AggregateConfigResponse {
     private List<DnsRuleDTO> dnsRules;
 
     /**
+     * 已发布的规则集
+     */
+    private List<RuleSetDTO> ruleSets;
+
+    /**
      * 配置哈希值（用于ETag缓存机制）
      */
     private String configHash;
@@ -62,6 +67,7 @@ public class AggregateConfigResponse {
                                            List<RouteDTO> routes,
                                            List<RateLimitDTO> rateLimits,
                                            List<UserDtoWithCredential> users,
+                                           List<RuleSetDTO> ruleSets,
                                            String configHash) {
         AggregateConfigResponse response = new AggregateConfigResponse();
         response.setVersion("1.0");
@@ -70,6 +76,7 @@ public class AggregateConfigResponse {
         response.setRoutes(routes);
         response.setRateLimits(rateLimits);
         response.setUsers(users);
+        response.setRuleSets(ruleSets);
         response.setConfigHash(configHash);
         return response;
     }

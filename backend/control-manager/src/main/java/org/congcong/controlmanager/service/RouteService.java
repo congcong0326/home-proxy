@@ -5,25 +5,26 @@ import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -34,6 +35,7 @@ import java.util.UUID;
 public class RouteService {
 
     private final RouteRepository routeRepository;
+    private final RuleSetRepository ruleSetRepository;
 
     /**
      * 分页查询路由列表
@@ -74,6 +76,8 @@ public class RouteService {
         if (routeRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
+        validateRuleSetReferences(request.getRules(), request.getStatus() != null ? request.getStatus() : 1);
+        validateShadowsocksRoute(request.getOutboundProxyType(), request.getOutboundProxyEncAlgo(), request.getOutboundProxyPassword());
         validateOutboundProxy(
                 request.getPolicy(),
                 request.getOutboundProxyType(),
@@ -117,6 +121,14 @@ public class RouteService {
             route.setName(request.getName());
         }
 
+        List<RouteRule> targetRules = request.getRules() != null ? request.getRules() : route.getRules();
+        Integer targetStatus = request.getStatus() != null ? request.getStatus() : route.getStatus();
+        validateRuleSetReferences(targetRules, targetStatus);
+        ProtocolType targetProxyType = request.getOutboundProxyType() != null ? request.getOutboundProxyType() : route.getOutboundProxyType();
+        ProxyEncAlgo targetProxyEncAlgo = request.getOutboundProxyEncAlgo() != null ? request.getOutboundProxyEncAlgo() : route.getOutboundProxyEncAlgo();
+        String targetProxyPassword = request.getOutboundProxyPassword() != null ? request.getOutboundProxyPassword() : route.getOutboundProxyPassword();
+        validateShadowsocksRoute(targetProxyType, targetProxyEncAlgo, targetProxyPassword);
+
         // 更新其他字段
         if (request.getRules() != null) {
             route.setRules(request.getRules());
@@ -141,6 +153,9 @@ public class RouteService {
         }
         if (request.getOutboundProxyPassword() != null) {
             route.setOutboundProxyPassword(request.getOutboundProxyPassword());
+        }
+        if (request.getOutboundProxyEncAlgo() != null) {
+            route.setOutboundProxyEncAlgo(request.getOutboundProxyEncAlgo());
         }
         if (request.getOutboundProxyConfig() != null) {
             route.setOutboundProxyConfig(request.getOutboundProxyConfig());
@@ -278,6 +293,57 @@ public class RouteService {
             route.setCreatedAt(null);
             route.setUpdatedAt(null);
             routeRepository.save(route);
+        }
+    }
+
+    private void validateRuleSetReferences(List<RouteRule> rules, Integer routeStatus) {
+        if (rules == null) {
+            return;
+        }
+        boolean routeEnabled = routeStatus == null || routeStatus == 1;
+        for (RouteRule rule : rules) {
+            if (rule == null || rule.getConditionType() != RouteConditionType.RULE_SET) {
+                continue;
+            }
+            String ruleSetKey = rule.getValue() == null ? null : rule.getValue().trim();
+            if (ruleSetKey == null || ruleSetKey.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "RULE_SET 路由规则必须指定规则集 key");
+            }
+            if (!ruleSetRepository.existsByRuleKey(ruleSetKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "引用的规则集不存在: " + ruleSetKey);
+            }
+            if (routeEnabled && !ruleSetRepository.existsByRuleKeyAndEnabledTrueAndPublishedTrue(ruleSetKey)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "启用中的路由只能引用已启用且已发布的规则集: " + ruleSetKey);
+            }
+        }
+    }
+
+    private void validateShadowsocksRoute(ProtocolType outboundProxyType, ProxyEncAlgo outboundProxyEncAlgo, String outboundProxyPassword) {
+        if (outboundProxyType != ProtocolType.SHADOW_SOCKS) {
+            return;
+        }
+        if (outboundProxyEncAlgo == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 出站必须指定加密算法");
+        }
+        if (!outboundProxyEncAlgo.isShadowSocks2022()) {
+            return;
+        }
+        if (outboundProxyPassword == null || outboundProxyPassword.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 2022 出站必须填写 Base64 预共享密钥");
+        }
+        try {
+            String[] keys = outboundProxyPassword.split(":");
+            for (String key : keys) {
+                byte[] decoded = Base64.getDecoder().decode(key.trim());
+                if (decoded.length != outboundProxyEncAlgo.getPskLength()) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Shadowsocks 2022 每段预共享密钥都需要是 " + outboundProxyEncAlgo.getPskLength() + " 字节 Base64 数据"
+                    );
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 2022 预共享密钥必须是有效的 Base64 字符串，支持 iPSK:uPSK 形式");
         }
     }
 }

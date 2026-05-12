@@ -37,6 +37,12 @@ import {
   PROTOCOL_TYPE_LABELS,
   OutboundProxyEncAlgo,
 } from '../types/route';
+import {
+  PROXY_ENC_ALGO_OPTIONS,
+  SHADOWSOCKS_2022_PSK_LENGTH,
+  isShadowsocks2022Algo,
+} from '../types/proxyEncAlgo';
+import { RuleSetSummaryDTO } from '../types/ruleset';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
 const { TextArea } = Input;
@@ -48,6 +54,7 @@ interface RouteFormProps {
   onCancel: () => void;
   loading?: boolean;
   mode: 'create' | 'edit';
+  ruleSetOptions?: RuleSetSummaryDTO[];
 }
 
 interface FormValues {
@@ -77,6 +84,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
   onCancel,
   loading = false,
   mode,
+  ruleSetOptions = [],
 }) => {
   const [form] = Form.useForm<FormValues>();
   const [policy, setPolicy] = useState<RoutePolicy>(initialValues?.policy || RoutePolicy.DIRECT);
@@ -87,6 +95,11 @@ const RouteForm: React.FC<RouteFormProps> = ({
   );
   // 监听代理类型以控制加密算法下拉框的显示
   const outboundProxyTypeWatch = Form.useWatch('outboundProxyType', form);
+  const outboundProxyEncAlgoWatch = Form.useWatch('outboundProxyEncAlgo', form);
+  const allowMultiDnsHost = outboundProxyTypeWatch === ProtocolType.DOT || outboundProxyTypeWatch === ProtocolType.DNS_SERVER;
+  const shadowsocks2022PskLength = outboundProxyEncAlgoWatch
+    ? SHADOWSOCKS_2022_PSK_LENGTH[outboundProxyEncAlgoWatch]
+    : undefined;
 
   useEffect(() => {
     if (initialValues) {
@@ -169,7 +182,8 @@ const RouteForm: React.FC<RouteFormProps> = ({
     const newRules = [...rules];
     const defaults =
       value === RouteConditionType.GEO ? 'CN' :
-      value === RouteConditionType.AD_BLOCK ? '是' : '';
+      value === RouteConditionType.AD_BLOCK ? '是' :
+      value === RouteConditionType.RULE_SET ? (ruleSetOptions[0]?.ruleKey || '') : '';
     newRules[index] = { ...newRules[index], conditionType: value, value: defaults };
     setRules(newRules);
     form.setFieldsValue({ rules: newRules });
@@ -317,6 +331,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
             <li>支持域名匹配，如：example.com</li>
             <li>支持通配符匹配，如：*.example.com</li>
             <li>支持子域名匹配，如：sub.example.com</li>
+            <li>支持引用已发布规则集，如：ai-openai、ai-common</li>
             <li>至少需要配置一个有效规则</li>
           </ul>
         }
@@ -341,6 +356,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                   { value: RouteConditionType.DOMAIN, label: '域名' },
                   { value: RouteConditionType.GEO, label: '地理位置' },
                   { value: RouteConditionType.AD_BLOCK, label: '去除广告' },
+                  { value: RouteConditionType.RULE_SET, label: '规则集' },
                 ]}
               />
               </Col>
@@ -369,6 +385,17 @@ const RouteForm: React.FC<RouteFormProps> = ({
                     onChange={(val) => handleRuleValueChange(index, val as string)}
                     style={{ width: '100%' }}
                     options={[{ value: '是', label: '是' }]}
+                  />
+                ) : rule.conditionType === RouteConditionType.RULE_SET ? (
+                  <Select
+                    value={rule.value || undefined}
+                    onChange={(val) => handleRuleValueChange(index, val as string)}
+                    style={{ width: '100%' }}
+                    placeholder="请选择已发布规则集"
+                    options={ruleSetOptions.map((item) => ({
+                      value: item.ruleKey,
+                      label: `${item.name} (${item.ruleKey})`,
+                    }))}
                   />
                 ) : (
                   <Input
@@ -441,11 +468,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 >
                   <Select
                     placeholder="请选择加密算法"
-                    options={[
-                      { value: 'aes_256_gcm', label: 'aes_256_gcm' },
-                      { value: 'aes_128_gcm', label: 'aes_128_gcm' },
-                      { value: 'chacha20_ietf_poly1305', label: 'chacha20_ietf_poly1305' },
-                    ]}
+                    options={PROXY_ENC_ALGO_OPTIONS}
                   />
                 </Form.Item>
               </Col>
@@ -478,10 +501,29 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 label="代理地址"
                 rules={[
                   { required: true, message: '请输入代理地址' },
-                  { pattern: /^[a-zA-Z0-9.-]+$/, message: '请输入有效的主机地址' },
+                  {
+                    validator: (_, value: string) => {
+                      if (!value) return Promise.resolve();
+                      const hostPattern = /^[a-zA-Z0-9.-]+$/;
+                      if (allowMultiDnsHost) {
+                        const parts = value.split(',').map((p: string) => p.trim()).filter(Boolean);
+                        if (!parts.length) {
+                          return Promise.reject(new Error('请输入至少一个地址'));
+                        }
+                        const invalid = parts.find(p => !hostPattern.test(p));
+                        return invalid
+                          ? Promise.reject(new Error('请输入有效的主机地址，多个地址请用逗号分隔'))
+                          : Promise.resolve();
+                      }
+                      return hostPattern.test(value)
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('请输入有效的主机地址'));
+                    },
+                  },
                 ]}
+                extra={allowMultiDnsHost ? '支持多个DNS上游，使用英文逗号分隔，例如：1.1.1.1,8.8.8.8' : undefined}
               >
-                <Input placeholder="请输入代理服务器地址" />
+                <Input placeholder={allowMultiDnsHost ? '多个DNS上游用逗号分隔，如 1.1.1.1,8.8.8.8' : '请输入代理服务器地址'} />
               </Form.Item>
             </Col>
           </Row>
@@ -518,6 +560,12 @@ const RouteForm: React.FC<RouteFormProps> = ({
                   <Form.Item
                     name="outboundProxyPassword"
                     label="密码（可选）"
+                    extra={
+                      outboundProxyTypeWatch === ProtocolType.SHADOW_SOCKS &&
+                      isShadowsocks2022Algo(outboundProxyEncAlgoWatch)
+                        ? `支持单个 Base64 uPSK，或 iPSK:uPSK 形式；每段都必须是 ${shadowsocks2022PskLength} 字节 Base64`
+                        : undefined
+                    }
                   >
                     <Input.Password placeholder="代理认证密码" />
                   </Form.Item>

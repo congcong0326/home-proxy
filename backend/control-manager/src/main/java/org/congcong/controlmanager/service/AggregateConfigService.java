@@ -25,6 +25,7 @@ public class AggregateConfigService {
     private final RateLimitService rateLimitService;
     private final RouteService routeService;
     private final UserService userService;
+    private final RuleSetService ruleSetService;
 
 
     /**
@@ -39,11 +40,12 @@ public class AggregateConfigService {
         List<RouteDTO> routes = getEnabledRoutes();
         List<RateLimitDTO> rateLimits = getEnabledRateLimits();
         List<UserDtoWithCredential> users = getEnabledUsers();
+        List<RuleSetDTO> ruleSets = getPublishedRuleSets();
         
         // 计算配置哈希值
-        String configHash = calculateConfigHash(inbounds, routes, rateLimits, users);
+        String configHash = calculateConfigHash(inbounds, routes, rateLimits, users, ruleSets);
         // todo
-        return AggregateConfigResponse.of(inbounds, routes, rateLimits, users, configHash);
+        return AggregateConfigResponse.of(inbounds, routes, rateLimits, users, ruleSets, configHash);
     }
 
     /**
@@ -57,8 +59,9 @@ public class AggregateConfigService {
         List<RouteDTO> routes = getEnabledRoutes();
         List<RateLimitDTO> rateLimits = getEnabledRateLimits();
         List<UserDtoWithCredential> users = getEnabledUsers();
+        List<RuleSetDTO> ruleSets = getPublishedRuleSets();
         
-        return calculateConfigHash(inbounds, routes, rateLimits, users);
+        return calculateConfigHash(inbounds, routes, rateLimits, users, ruleSets);
     }
 
 
@@ -91,13 +94,18 @@ public class AggregateConfigService {
         return userService.findUserDTOWithCredentialByStatus(1);
     }
 
+    private List<RuleSetDTO> getPublishedRuleSets() {
+        return ruleSetService.getPublishedRuleSetsWithItems();
+    }
+
     /**
      * 计算配置哈希值
      */
     private String calculateConfigHash(List<InboundConfigDTO> inbounds,
                                      List<RouteDTO> routes,
                                      List<RateLimitDTO> rateLimits,
-                                     List<UserDtoWithCredential> users) {
+                                     List<UserDtoWithCredential> users,
+                                     List<RuleSetDTO> ruleSets) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             
@@ -162,6 +170,22 @@ public class AggregateConfigService {
                         .append(user.getCredential())
                         .append(user.getStatus())
                         .append(user.getUpdatedAt());
+            });
+
+            ruleSets.forEach(ruleSet -> {
+                configContent.append("ruleSet:")
+                        .append(ruleSet.getId())
+                        .append(ruleSet.getRuleKey())
+                        .append(ruleSet.getName())
+                        .append(ruleSet.getCategory())
+                        .append(ruleSet.getMatchTarget())
+                        .append(ruleSet.getSourceType())
+                        .append(ruleSet.getSourceConfig())
+                        .append(ruleSet.getEnabled())
+                        .append(ruleSet.getPublished())
+                        .append(ruleSet.getVersionNo())
+                        .append(ruleSet.getItems())
+                        .append(ruleSet.getUpdatedAt());
             });
             
             byte[] hashBytes = digest.digest(configContent.toString().getBytes(StandardCharsets.UTF_8));
