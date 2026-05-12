@@ -92,6 +92,43 @@ body {
   font-weight: 700;
 }
 
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-picker,
+.ant-select-selector {
+  border: 2px solid var(--retro-border) !important;
+  border-radius: var(--retro-radius) !important;
+  background: var(--retro-panel-light) !important;
+  color: var(--retro-text);
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-input-number:hover,
+.ant-picker:hover,
+.ant-select:not(.ant-select-disabled):hover .ant-select-selector {
+  border-color: var(--retro-primary) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper-focused,
+.ant-input-number-focused,
+.ant-picker-focused,
+.ant-select-focused .ant-select-selector {
+  border-color: var(--retro-primary) !important;
+  box-shadow: inset -1px -1px 0 #ffffff, inset 1px 1px 0 var(--retro-panel-dark), 0 0 0 2px rgba(0, 59, 70, 0.18) !important;
+}
+
+.ant-input-affix-wrapper .ant-input,
+.ant-input-number-input,
+.ant-select-selection-search-input {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 .mobile-row-meta {
   font-size: 11px;
   line-height: 1.3;

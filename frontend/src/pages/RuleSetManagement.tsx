@@ -815,6 +815,7 @@ const RuleSetManagement: React.FC = () => {
 
       <Drawer
         title={detailRuleSet ? `规则集详情 · ${detailRuleSet.name}` : '规则集详情'}
+        rootClassName="rule-set-detail-drawer"
         width={960}
         open={detailOpen}
         onClose={() => {

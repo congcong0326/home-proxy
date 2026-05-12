@@ -686,8 +686,23 @@
   font-family: var(--retro-font);
 }
 
+.traffic-overview .user-stats-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--retro-primary);
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
+  z-index: 1;
+  border-bottom: 2px solid var(--retro-border);
+  box-shadow: inset 0 -1px 0 #000;
+}
+
 .user-stats-table td {
   background: var(--retro-panel-light);
+}
+
+.traffic-overview .user-stats-table tbody tr:hover td {
+  background: var(--retro-panel);
 }
 
 @media (max-width: 768px) {

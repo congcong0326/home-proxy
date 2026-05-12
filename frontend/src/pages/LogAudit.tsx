@@ -5,6 +5,7 @@ import { Card, Form, Row, Col, Input, DatePicker, Button, Table, Tag, Drawer, Sp
 import apiService from '../services/api';
 import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
 import { formatBytes } from '../utils/format';
+import './LogAudit.css';
 
 const { RangePicker } = DatePicker;
 const { Text } = Typography;
@@ -123,8 +124,8 @@ const LogAudit: React.FC = () => {
   ];
 
   return (
-    <div>
-      <Card title="日志审计" bordered={false} style={{ marginBottom: 16 }}>
+    <div className="log-audit-page">
+      <Card className="log-audit-card" title="日志审计" bordered={false} style={{ marginBottom: 16 }}>
         <Form form={form} layout="vertical" initialValues={{ range: getTodayRange() }}>
           <Row gutter={16}>
             <Col xs={24} sm={12} md={8}>
@@ -164,8 +165,9 @@ const LogAudit: React.FC = () => {
         </Form>
       </Card>
 
-      <Card bordered={false}>
+      <Card className="log-audit-card log-audit-table-card" bordered={false}>
         <Table
+          className="log-audit-table"
           rowKey="requestId"
           loading={loading}
           columns={columns}
@@ -180,7 +182,7 @@ const LogAudit: React.FC = () => {
         />
       </Card>
 
-      <Drawer title="访问详情" width={600} open={detailOpen} onClose={() => setDetailOpen(false)}>
+      <Drawer title="访问详情" rootClassName="log-audit-drawer" width={600} open={detailOpen} onClose={() => setDetailOpen(false)}>
         {detail ? (
           <div>
             <Card size="small" title="基本信息" style={{ marginBottom: 12 }}>

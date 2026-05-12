@@ -1,17 +1,29 @@
 .log-audit-page {
-  padding: 12px;
-  background: #0b1526;
+  padding: 18px;
+  background: var(--retro-bg);
 }
 
 .log-audit-card {
-  border: 1px solid #1f2b3e;
-  border-radius: 8px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
-  background: #0f1c2f;
+  border: 2px solid var(--retro-border);
+  background: var(--retro-panel);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
 }
 
 .log-audit-card .ant-card-head {
-  border-bottom: 1px solid #1f2b3e;
+  background: var(--retro-primary);
+  border-bottom: 2px solid var(--retro-border);
+}
+
+.log-audit-card .ant-card-head-title {
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
+}
+
+.log-audit-card .ant-form-item-label > label {
+  color: var(--retro-muted);
+  font-family: var(--retro-font);
+  font-weight: 700;
 }
 
 .log-audit-table-card .ant-card-body {
@@ -20,22 +32,42 @@
 
 .log-audit-table .ant-table-thead > tr > th {
   font-weight: 600;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
 }
 
 .log-audit-table .ant-table-tbody > tr:hover > td {
-  background: #12243a;
+  background: var(--retro-panel);
 }
 
 .log-audit-drawer .ant-drawer-header {
-  border-bottom: 1px solid #1f2b3e;
+  background: var(--retro-primary);
+  border-bottom: 2px solid var(--retro-border);
+}
+
+.log-audit-drawer .ant-drawer-content,
+.log-audit-drawer .ant-drawer-body {
+  background: var(--retro-panel);
+}
+
+.log-audit-drawer .ant-drawer-title,
+.log-audit-drawer .ant-drawer-close {
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
 }
 
 .log-audit-drawer .ant-card {
-  border: 1px solid #1f2b3e;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+  border: 2px solid var(--retro-border);
+  background: var(--retro-panel-light);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
 }
 
 .log-audit-drawer .ant-card-head {
-  border-bottom: 1px solid #1f2b3e;
+  background: var(--retro-primary);
+  border-bottom: 2px solid var(--retro-border);
+}
+
+.log-audit-drawer .ant-card-head-title {
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
 }
