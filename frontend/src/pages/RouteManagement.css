@@ -218,6 +218,104 @@
   border-radius: 6px;
 }
 
+/* Retro NOC route management styling */
+.route-management {
+  background: var(--retro-bg);
+}
+
+.route-management .page-header,
+.route-management .operation-bar,
+.route-management .ant-card {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.route-management .page-header {
+  padding: 14px;
+}
+
+.page-header .ant-typography,
+.route-management .ant-card-head-title {
+  color: var(--retro-primary);
+  font-family: var(--retro-font);
+  letter-spacing: 0;
+}
+
+.route-management .stats-row .ant-card:hover,
+.route-management .ant-card:hover,
+.route-management .ant-btn:hover {
+  transform: none;
+}
+
+.route-management .ant-btn-primary {
+  background: var(--retro-primary);
+  border: 2px solid var(--retro-border);
+}
+
+.route-management .ant-btn-primary:hover {
+  background: var(--retro-primary-light) !important;
+}
+
+.route-management .ant-table-wrapper {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+}
+
+.route-management .ant-table-thead > tr > th {
+  background: var(--retro-primary) !important;
+  color: var(--retro-screen-muted) !important;
+  border-bottom: 2px solid var(--retro-border);
+  font-family: var(--retro-font);
+}
+
+.route-management .ant-table-tbody > tr:hover > td {
+  background: var(--retro-panel-light);
+}
+
+.route-management .ant-statistic-title {
+  color: var(--retro-muted);
+  font-family: var(--retro-font);
+  font-weight: 700;
+}
+
+.route-management .ant-modal-header {
+  background: var(--retro-primary);
+  border-bottom: 2px solid var(--retro-border);
+}
+
+.route-management .ant-modal-title,
+.route-management .ant-modal-close {
+  color: var(--retro-screen-muted);
+}
+
+@media (max-width: 768px) {
+  .route-management {
+    padding: 10px;
+  }
+
+  .route-management .stats-row .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  .route-management .operation-bar .ant-row,
+  .route-management .operation-bar .ant-space {
+    width: 100%;
+  }
+
+  .route-management .operation-bar .ant-space {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .route-management .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}
+
 .route-management .ant-dropdown-menu-item {
   transition: all 0.3s ease;
 }

@@ -34,6 +34,7 @@ import { RouteDTO } from '../types/route';
 import { PROXY_ENC_ALGO_OPTIONS } from '../types/proxyEncAlgo';
 import { formatBytes } from '../utils/format';
 import RouteOrderEditor from '../components/RouteOrderEditor';
+import './InboundManagement.css';
 
 const { Title } = Typography;
 

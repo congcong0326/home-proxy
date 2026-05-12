@@ -1,0 +1,91 @@
+.inbound-management {
+  padding: 18px;
+  background: var(--retro-bg);
+  min-height: 100%;
+}
+
+.inbound-management .page-header,
+.inbound-management .operation-bar,
+.inbound-management > .ant-table-wrapper,
+.inbound-management > .ant-card {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.inbound-management .page-header {
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.inbound-management .page-header h2,
+.inbound-management .page-header .ant-typography {
+  color: var(--retro-primary);
+  font-family: var(--retro-font);
+  letter-spacing: 0;
+}
+
+.inbound-management .stats-row {
+  margin-bottom: 12px;
+}
+
+.inbound-management .stats-row .ant-card,
+.inbound-management .operation-bar {
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.inbound-management .ant-statistic-title,
+.inbound-management .ant-form-item-label > label {
+  color: var(--retro-muted);
+  font-family: var(--retro-font);
+  font-weight: 700;
+}
+
+.inbound-management .ant-table-wrapper {
+  border: 2px solid var(--retro-border);
+}
+
+.inbound-management .ant-modal-header {
+  background: var(--retro-primary);
+  border-bottom: 2px solid var(--retro-border);
+}
+
+.inbound-management .ant-modal-title {
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
+}
+
+@media (max-width: 768px) {
+  .inbound-management {
+    padding: 10px;
+  }
+
+  .inbound-management .stats-row .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .inbound-management .operation-bar .ant-row,
+  .inbound-management .operation-bar .ant-space {
+    width: 100%;
+  }
+
+  .inbound-management .operation-bar .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .inbound-management .ant-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .inbound-management .ant-modal .ant-row .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+}
