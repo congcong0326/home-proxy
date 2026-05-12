@@ -6,10 +6,13 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface RuleSetRepository extends JpaRepository<RuleSetEntity, Long>, JpaSpecificationExecutor<RuleSetEntity> {
 
     boolean existsByRuleKey(String ruleKey);
+
+    Optional<RuleSetEntity> findByRuleKey(String ruleKey);
 
     boolean existsByRuleKeyAndIdNot(String ruleKey, Long id);
 

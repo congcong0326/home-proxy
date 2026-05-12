@@ -5,6 +5,7 @@ import org.congcong.common.dto.RuleSetDTO;
 import org.congcong.common.dto.RuleSetItemDTO;
 import org.congcong.common.dto.RuleSetSummaryDTO;
 import org.congcong.common.enums.RuleSetCategory;
+import org.congcong.common.enums.RuleSetMatchTarget;
 import org.congcong.common.enums.RuleSetSourceType;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.dto.ruleset.RuleSetBatchSyncRequest;
@@ -39,6 +40,76 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class RuleSetService {
+
+    private static final List<DefaultRuleSetTemplate> DEFAULT_RULE_SET_TEMPLATES = List.of(
+            template("geo-cn", "Geolocation CN", RuleSetCategory.GEO,
+                    "中国域名规则集，适合直连或本地出口。",
+                    "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt",
+                    "DOMAIN_LIST_COMMUNITY",
+                    "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/cn"),
+            template("geo-not-cn", "Geolocation Not CN", RuleSetCategory.GEO,
+                    "非中国域名规则集，适合统一走境外出口。",
+                    "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt",
+                    "DOMAIN_LIST_COMMUNITY",
+                    "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/geolocation-!cn"),
+            template("ad-domain", "Advertising Domains", RuleSetCategory.AD,
+                    "广告域名规则集，适合阻断或去广告路由。",
+                    "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/reject-list.txt",
+                    "DOMAIN_LIST_COMMUNITY",
+                    "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/category-ads-all"),
+            template("ai-openai", "OpenAI", RuleSetCategory.AI,
+                    "OpenAI 域名规则集，适合独立分流 ChatGPT 和 OpenAI API。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/OpenAI/OpenAI.yaml",
+                    "CLASH_CLASSICAL"),
+            template("ai-claude", "Claude", RuleSetCategory.AI,
+                    "Claude/Anthropic 域名规则集，适合独立分流 Claude 服务。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Claude/Claude.yaml",
+                    "CLASH_CLASSICAL"),
+            template("ai-gemini", "Gemini", RuleSetCategory.AI,
+                    "Gemini 域名规则集，适合独立分流 Google AI 服务。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Gemini/Gemini.yaml",
+                    "CLASH_CLASSICAL"),
+            template("ai-copilot", "Copilot", RuleSetCategory.AI,
+                    "Copilot 域名规则集，适合独立分流 GitHub Copilot。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Copilot/Copilot.yaml",
+                    "CLASH_CLASSICAL"),
+            template("dev-github", "GitHub", RuleSetCategory.DEV,
+                    "GitHub 域名规则集，适合开发工具和代码托管分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/GitHub/GitHub.yaml",
+                    "CLASH_CLASSICAL"),
+            template("platform-google", "Google", RuleSetCategory.SAAS,
+                    "Google 服务域名规则集，适合平台级分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Google/Google.yaml",
+                    "CLASH_CLASSICAL"),
+            template("platform-apple", "Apple", RuleSetCategory.SAAS,
+                    "Apple 服务域名规则集，适合平台级分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Apple/Apple.yaml",
+                    "CLASH_CLASSICAL"),
+            template("platform-microsoft", "Microsoft", RuleSetCategory.SAAS,
+                    "Microsoft 服务域名规则集，适合平台级分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Microsoft/Microsoft.yaml",
+                    "CLASH_CLASSICAL"),
+            template("platform-telegram", "Telegram", RuleSetCategory.SAAS,
+                    "Telegram 域名规则集，适合即时通讯服务分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Telegram/Telegram.yaml",
+                    "CLASH_CLASSICAL"),
+            template("stream-youtube", "YouTube", RuleSetCategory.STREAMING,
+                    "YouTube 域名规则集，适合流媒体分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/YouTube/YouTube.yaml",
+                    "CLASH_CLASSICAL"),
+            template("stream-netflix", "Netflix", RuleSetCategory.STREAMING,
+                    "Netflix 域名规则集，适合流媒体分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Netflix/Netflix.yaml",
+                    "CLASH_CLASSICAL"),
+            template("stream-disney", "Disney", RuleSetCategory.STREAMING,
+                    "Disney 域名规则集，适合流媒体分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Disney/Disney.yaml",
+                    "CLASH_CLASSICAL"),
+            template("stream-spotify", "Spotify", RuleSetCategory.STREAMING,
+                    "Spotify 域名规则集，适合音乐流媒体分流。",
+                    "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Spotify/Spotify.yaml",
+                    "CLASH_CLASSICAL")
+    );
 
     private final RuleSetRepository ruleSetRepository;
     private final RuleSetPayloadRepository ruleSetPayloadRepository;
@@ -200,6 +271,46 @@ public class RuleSetService {
                 .toList();
     }
 
+    @Transactional
+    public void ensureDefaultRuleSetsExist() {
+        for (DefaultRuleSetTemplate template : DEFAULT_RULE_SET_TEMPLATES) {
+            var existing = ruleSetRepository.findByRuleKey(template.ruleKey());
+            if (existing.isPresent()) {
+                updateLegacyDefaultRuleSetSource(existing.get(), template);
+                continue;
+            }
+            RuleSetEntity entity = new RuleSetEntity();
+            entity.setRuleKey(template.ruleKey());
+            entity.setName(template.name());
+            entity.setCategory(template.category());
+            entity.setMatchTarget(RuleSetMatchTarget.DOMAIN);
+            entity.setSourceType(RuleSetSourceType.GIT_RAW_FILE);
+            entity.setSourceConfig(sourceConfig(template.url(), template.format()));
+            entity.setEnabled(false);
+            entity.setPublished(false);
+            entity.setVersionNo(1L);
+            entity.setDescription(template.description());
+            applyItems(entity, List.of());
+            entity = ruleSetRepository.save(entity);
+            saveItems(entity);
+        }
+    }
+
+    private void updateLegacyDefaultRuleSetSource(RuleSetEntity entity, DefaultRuleSetTemplate template) {
+        if (entity.getSourceType() != RuleSetSourceType.GIT_RAW_FILE || template.legacyUrls().isEmpty()) {
+            return;
+        }
+        String sourceConfig = entity.getSourceConfig();
+        boolean usesLegacySource = template.legacyUrls().stream().anyMatch(legacyUrl ->
+                sourceConfig != null && sourceConfig.contains(legacyUrl));
+        if (!usesLegacySource) {
+            return;
+        }
+        entity.setSourceConfig(sourceConfig(template.url(), template.format()));
+        entity.setDescription(template.description());
+        ruleSetRepository.save(entity);
+    }
+
     private RuleSetSummaryDTO convertToSummaryDTO(RuleSetEntity entity) {
         return new RuleSetSummaryDTO(
                 entity.getId(),
@@ -332,6 +443,19 @@ public class RuleSetService {
 
     private String safeValue(String value) {
         return value == null ? "" : value;
+    }
+
+    private static DefaultRuleSetTemplate template(String ruleKey, String name, RuleSetCategory category,
+                                                   String description, String url, String format, String... legacyUrls) {
+        return new DefaultRuleSetTemplate(ruleKey, name, category, description, url, format, List.of(legacyUrls));
+    }
+
+    private static String sourceConfig(String url, String format) {
+        return "{\"url\":\"" + url + "\",\"format\":\"" + format + "\"}";
+    }
+
+    private record DefaultRuleSetTemplate(String ruleKey, String name, RuleSetCategory category,
+                                          String description, String url, String format, List<String> legacyUrls) {
     }
 
     private Specification<RuleSetEntity> buildSummarySpecification(String name, RuleSetCategory category,

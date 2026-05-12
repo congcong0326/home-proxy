@@ -2,6 +2,7 @@ package org.congcong.controlmanager.config;
 
 import lombok.RequiredArgsConstructor;
 import org.congcong.controlmanager.service.RouteService;
+import org.congcong.controlmanager.service.RuleSetService;
 import org.congcong.controlmanager.service.UserService;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -18,9 +19,12 @@ public class DataInitializer implements ApplicationRunner {
 
     private final RouteService routeService;
 
+    private final RuleSetService ruleSetService;
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
         userService.ensureDefaultAnonymousUserExists();
         routeService.ensureDefaultRouteExists();
+        ruleSetService.ensureDefaultRuleSetsExist();
     }
 }

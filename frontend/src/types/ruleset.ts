@@ -17,7 +17,6 @@ export enum RuleSetMatchTarget {
 export enum RuleSetSourceType {
   MANUAL = 'MANUAL',
   GIT_RAW_FILE = 'GIT_RAW_FILE',
-  GITHUB_RELEASE_ASSET = 'GITHUB_RELEASE_ASSET',
   HTTP_FILE = 'HTTP_FILE',
 }
 
@@ -159,7 +158,6 @@ export const RULE_SET_CATEGORY_LABELS: Record<RuleSetCategory, string> = {
 export const RULE_SET_SOURCE_LABELS: Record<RuleSetSourceType, string> = {
   [RuleSetSourceType.MANUAL]: '手工维护',
   [RuleSetSourceType.GIT_RAW_FILE]: 'Git Raw 文件',
-  [RuleSetSourceType.GITHUB_RELEASE_ASSET]: 'GitHub Release 资产',
   [RuleSetSourceType.HTTP_FILE]: 'HTTP 文件',
 };
 

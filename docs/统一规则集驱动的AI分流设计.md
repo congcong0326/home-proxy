@@ -574,7 +574,6 @@ RuleSource:
 - `name`
 - `sourceType`
   - `GIT_RAW_FILE`
-  - `GITHUB_RELEASE_ASSET`
   - `HTTP_FILE`
   - `MANUAL_TEXT`
 - `repo`

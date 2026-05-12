@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.congcong.common.dto.InboundConfigDTO;
+import org.congcong.common.enums.RuleSetSourceType;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +40,14 @@ class ApiContractTest {
 
         assertFalse(fields.contains("allowedUserIds"));
         assertFalse(fields.contains("routeIds"));
+    }
+
+    @Test
+    void ruleSetSourceTypesDoNotExposeGitHubReleaseAsset() {
+        Set<String> sourceTypes = Arrays.stream(RuleSetSourceType.values())
+                .map(Enum::name)
+                .collect(Collectors.toSet());
+
+        assertFalse(sourceTypes.contains("GITHUB_RELEASE_ASSET"));
     }
 }

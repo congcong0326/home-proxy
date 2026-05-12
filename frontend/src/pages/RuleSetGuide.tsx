@@ -13,7 +13,6 @@ import {
 import {
   ArrowLeftOutlined,
   BookOutlined,
-  CloudDownloadOutlined,
   GlobalOutlined,
   LinkOutlined,
   RobotOutlined,
@@ -43,14 +42,6 @@ const sourceTypeCards = [
     description: '读取任意可访问的 HTTP 或 HTTPS 地址，适合公司内网镜像、对象存储、自建规则服务或第三方直链。',
     urlExample: 'https://rules.example.com/geo/geolocation-not-cn.txt',
     recommendation: '如果文件不在 GitHub Raw，而是在你自己的规则服务、CDN 或对象存储上，就选它。',
-  },
-  {
-    key: RuleSetSourceType.GITHUB_RELEASE_ASSET,
-    icon: <CloudDownloadOutlined />,
-    title: 'GitHub Release 资产',
-    description: '读取 GitHub Releases 页面挂载的发布产物。常见于规则仓库预编译后的 dat、yaml、txt 资产。',
-    urlExample: 'https://github.com/<owner>/<repo>/releases/download/<tag>/<asset-name>',
-    recommendation: '如果你是在 Releases 页面复制下载地址，而不是在仓库文件页复制 Raw 地址，就选它。',
   },
 ];
 
@@ -87,7 +78,7 @@ const fieldGuides = [
   },
   {
     field: '来源类型',
-    detail: '告诉系统这个 URL 是从哪里来的。当前 P0 里三种外部源最后都会走 HTTP 下载，但来源类型会影响配置语义和团队维护可读性。',
+    detail: '告诉系统这个 URL 是从哪里来的。GitHub 仓库 Raw 地址选 Git Raw，其他任意可下载直链选 HTTP 文件。',
   },
   {
     field: '规则源 URL',
@@ -125,40 +116,40 @@ const examples = [
 value = ai-openai`,
   },
   {
-    title: '地理位置非中国规则集',
-    summary: '适合把 geolocation-!cn 类型的域名统一走境外出口。',
+    title: '境外代理域名规则集',
+    summary: '适合把常见境外域名统一走境外出口，来源是 Xray/V2Ray 常用 rules-dat 的可同步文本列表。',
     tags: ['GEO', '推荐', 'Git Raw 文件'],
     formValues: `规则集 Key: geo-not-cn
 名称: Geolocation Not CN
 分类: GEO
 匹配目标: DOMAIN
 来源类型: GIT_RAW_FILE
-规则源 URL: https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/geolocation-!cn
+规则源 URL: https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt
 解析格式: DOMAIN_LIST_COMMUNITY
 启用: 开
 发布到 Worker: 开`,
     sourceConfig: `{
-  "url": "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/geolocation-!cn",
+  "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt",
   "format": "DOMAIN_LIST_COMMUNITY"
 }`,
     routeUsage: `conditionType = RULE_SET
 value = geo-not-cn`,
   },
   {
-    title: '地理位置中国规则集',
-    summary: '适合把中国站点优先直连，把国外站点交给其他规则处理。',
+    title: '中国直连域名规则集',
+    summary: '适合把常见中国域名优先直连，来源是 Xray/V2Ray 常用 rules-dat 的可同步文本列表。',
     tags: ['GEO', '常用', 'Git Raw 文件'],
     formValues: `规则集 Key: geo-cn
 名称: Geolocation CN
 分类: GEO
 匹配目标: DOMAIN
 来源类型: GIT_RAW_FILE
-规则源 URL: https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/cn
+规则源 URL: https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt
 解析格式: DOMAIN_LIST_COMMUNITY
 启用: 开
 发布到 Worker: 开`,
     sourceConfig: `{
-  "url": "https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/cn",
+  "url": "https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt",
   "format": "DOMAIN_LIST_COMMUNITY"
 }`,
     routeUsage: `conditionType = RULE_SET
@@ -217,7 +208,7 @@ const RuleSetGuide: React.FC = () => {
         type="info"
         showIcon
         message="当前 P0 实现的真实行为"
-        description="GIT_RAW_FILE、HTTP_FILE、GITHUB_RELEASE_ASSET 在当前版本里最终都会由控制面通过 HTTP/HTTPS 拉取内容，再按你选择的解析格式解析。它们的主要区别在于来源语义、URL 来源和团队维护方式，而不是 Worker 侧执行逻辑。"
+        description="GIT_RAW_FILE 和 HTTP_FILE 在当前版本里最终都会由控制面通过 HTTP/HTTPS 拉取内容，再按你选择的解析格式解析。GitHub Release 资产不再作为独立来源类型，Release 直链请按 HTTP 文件配置。"
       />
 
       <Row gutter={[16, 16]}>
@@ -244,7 +235,7 @@ const RuleSetGuide: React.FC = () => {
                 <span className="rule-set-guide-step-index">1</span>
                 <div>
                   <Text strong>先看文件从哪里来</Text>
-                  <Paragraph>GitHub 仓库文件页复制 Raw 地址，用 Git Raw；公司镜像和任意直链，用 HTTP；Releases 下载页复制资产地址，用 GitHub Release 资产。</Paragraph>
+                <Paragraph>GitHub 仓库文件页复制 Raw 地址，用 Git Raw；公司镜像、对象存储、Releases 下载地址和任意可下载直链，用 HTTP 文件。</Paragraph>
                 </div>
               </div>
               <div className="rule-set-guide-step">

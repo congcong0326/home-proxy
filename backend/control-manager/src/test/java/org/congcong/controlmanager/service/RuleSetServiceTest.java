@@ -32,13 +32,18 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -58,6 +63,101 @@ class RuleSetServiceTest {
 
     @InjectMocks
     private RuleSetService ruleSetService;
+
+    @Test
+    @DisplayName("启动时补齐默认规则集模板，且默认不启用不发布")
+    void testEnsureDefaultRuleSetsExistSeedsDisabledUnpublishedTemplates() throws Exception {
+        AtomicLong idSequence = new AtomicLong(1L);
+
+        when(ruleSetRepository.findByRuleKey(any())).thenReturn(Optional.empty());
+        when(ruleSetRepository.save(any(RuleSetEntity.class))).thenAnswer(invocation -> {
+            RuleSetEntity entity = invocation.getArgument(0);
+            entity.setId(idSequence.getAndIncrement());
+            return entity;
+        });
+        when(ruleSetPayloadRepository.save(any(RuleSetPayloadEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ruleSetService.ensureDefaultRuleSetsExist();
+
+        ArgumentCaptor<RuleSetEntity> entityCaptor = ArgumentCaptor.forClass(RuleSetEntity.class);
+        verify(ruleSetRepository, times(16)).save(entityCaptor.capture());
+        verify(ruleSetPayloadRepository, times(16)).save(any(RuleSetPayloadEntity.class));
+
+        List<RuleSetEntity> templates = entityCaptor.getAllValues();
+        Set<String> ruleKeys = templates.stream().map(RuleSetEntity::getRuleKey).collect(java.util.stream.Collectors.toSet());
+        assertEquals(Set.of(
+                "geo-cn", "geo-not-cn", "ad-domain",
+                "ai-openai", "ai-claude", "ai-gemini", "ai-copilot",
+                "dev-github",
+                "platform-google", "platform-apple", "platform-microsoft", "platform-telegram",
+                "stream-youtube", "stream-netflix", "stream-disney", "stream-spotify"
+        ), ruleKeys);
+
+        RuleSetEntity openAi = templates.stream()
+                .filter(template -> "ai-openai".equals(template.getRuleKey()))
+                .findFirst()
+                .orElseThrow();
+        RuleSetEntity geoCn = templates.stream()
+                .filter(template -> "geo-cn".equals(template.getRuleKey()))
+                .findFirst()
+                .orElseThrow();
+
+        templates.forEach(template -> assertAll(
+                () -> assertFalse(template.getEnabled()),
+                () -> assertFalse(template.getPublished()),
+                () -> assertEquals(RuleSetMatchTarget.DOMAIN, template.getMatchTarget()),
+                () -> assertEquals(RuleSetSourceType.GIT_RAW_FILE, template.getSourceType()),
+                () -> assertEquals(1L, template.getVersionNo()),
+                () -> assertEquals(0, template.getItemCount()),
+                () -> assertTrue(template.getItems().isEmpty()),
+                () -> assertNotNull(template.getSourceConfig())
+        ));
+        assertEquals(RuleSetCategory.AI, openAi.getCategory());
+        assertTrue(openAi.getSourceConfig().contains("OpenAI/OpenAI.yaml"));
+        assertTrue(openAi.getSourceConfig().contains("CLASH_CLASSICAL"));
+        assertEquals(RuleSetCategory.GEO, geoCn.getCategory());
+        assertTrue(geoCn.getSourceConfig().contains("Loyalsoldier/v2ray-rules-dat/release/direct-list.txt"));
+        assertTrue(geoCn.getSourceConfig().contains("DOMAIN_LIST_COMMUNITY"));
+    }
+
+    @Test
+    @DisplayName("默认规则集模板已存在时不重复插入")
+    void testEnsureDefaultRuleSetsExistSkipsExistingTemplates() throws Exception {
+        when(ruleSetRepository.findByRuleKey(any())).thenReturn(Optional.of(externalEntity(1L, "existing", List.of(), false)));
+
+        ruleSetService.ensureDefaultRuleSetsExist();
+
+        verify(ruleSetRepository, never()).save(any(RuleSetEntity.class));
+        verify(ruleSetPayloadRepository, never()).save(any(RuleSetPayloadEntity.class));
+    }
+
+    @Test
+    @DisplayName("启动时修正上一版默认地理规则源")
+    void testEnsureDefaultRuleSetsExistUpdatesLegacyGeoTemplates() throws Exception {
+        RuleSetEntity legacyGeoCn = externalEntity(1L, "geo-cn", List.of(), false);
+        legacyGeoCn.setCategory(RuleSetCategory.GEO);
+        legacyGeoCn.setSourceType(RuleSetSourceType.GIT_RAW_FILE);
+        legacyGeoCn.setSourceConfig("{\"url\":\"https://raw.githubusercontent.com/v2fly/domain-list-community/master/data/cn\",\"format\":\"DOMAIN_LIST_COMMUNITY\"}");
+
+        when(ruleSetRepository.findByRuleKey(any())).thenAnswer(invocation -> {
+            String ruleKey = invocation.getArgument(0);
+            if ("geo-cn".equals(ruleKey)) {
+                return Optional.of(legacyGeoCn);
+            }
+            return Optional.of(externalEntity(2L, ruleKey, List.of(), false));
+        });
+        when(ruleSetRepository.save(any(RuleSetEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ruleSetService.ensureDefaultRuleSetsExist();
+
+        ArgumentCaptor<RuleSetEntity> entityCaptor = ArgumentCaptor.forClass(RuleSetEntity.class);
+        verify(ruleSetRepository).save(entityCaptor.capture());
+        assertEquals("geo-cn", entityCaptor.getValue().getRuleKey());
+        assertTrue(entityCaptor.getValue().getSourceConfig().contains("Loyalsoldier/v2ray-rules-dat/release/direct-list.txt"));
+        assertFalse(entityCaptor.getValue().getEnabled());
+        assertFalse(entityCaptor.getValue().getPublished());
+        verify(ruleSetPayloadRepository, never()).save(any(RuleSetPayloadEntity.class));
+    }
 
     @Test
     @DisplayName("分页查询规则集摘要时不返回完整规则项")
