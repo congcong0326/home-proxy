@@ -1,3 +1,14 @@
+export interface DiskHost {
+  hostId: string;
+  hostName: string;
+  lastSeenAt: string;
+  lastSourceIp?: string;
+}
+
+export interface DiskPushToken {
+  token: string;
+}
+
 export interface DiskInfo {
   device: string;
   model: string;

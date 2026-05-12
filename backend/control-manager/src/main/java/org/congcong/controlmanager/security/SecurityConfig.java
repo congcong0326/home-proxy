@@ -31,6 +31,7 @@ public class SecurityConfig {
                     .requestMatchers("/api/config/aggregate").permitAll()
                     .requestMatchers("/api/config/hash").permitAll()
                     .requestMatchers("/api/logs/**").permitAll()
+                    .requestMatchers(HttpMethod.POST, "/api/disk/push").permitAll()
                     .requestMatchers("/error").permitAll()
                     // 允许访问静态资源
                     .requestMatchers("/", "/static/**", "/favicon.ico", "/manifest.json", "/robots.txt").permitAll()

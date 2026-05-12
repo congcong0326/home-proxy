@@ -2,6 +2,7 @@ package org.congcong.controlmanager.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.lang.reflect.Field;
@@ -13,7 +14,10 @@ import java.util.stream.Collectors;
 import org.congcong.common.dto.InboundConfigDTO;
 import org.congcong.common.enums.RuleSetSourceType;
 import org.congcong.controlmanager.dto.PageResponse;
+import org.congcong.controlmanager.service.DiskMonitorTokenService;
+import org.congcong.controlmanager.service.DiskService;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 
 class ApiContractTest {
 
@@ -49,5 +53,21 @@ class ApiContractTest {
                 .collect(Collectors.toSet());
 
         assertFalse(sourceTypes.contains("GITHUB_RELEASE_ASSET"));
+    }
+
+    @Test
+    void diskServiceMarksSpringConstructorWhenTestConstructorExists() {
+        boolean hasAutowiredConstructor = Arrays.stream(DiskService.class.getDeclaredConstructors())
+                .anyMatch(constructor -> constructor.isAnnotationPresent(Autowired.class));
+
+        assertTrue(hasAutowiredConstructor);
+    }
+
+    @Test
+    void diskMonitorTokenServiceMarksSpringConstructorWhenTestConstructorExists() {
+        boolean hasAutowiredConstructor = Arrays.stream(DiskMonitorTokenService.class.getDeclaredConstructors())
+                .anyMatch(constructor -> constructor.isAnnotationPresent(Autowired.class));
+
+        assertTrue(hasAutowiredConstructor);
     }
 }

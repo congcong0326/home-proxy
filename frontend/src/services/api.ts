@@ -67,7 +67,7 @@ import {
   TrafficTrendParams,
   TrafficStatsParams
 } from '../types/dashboard';
-import { DiskInfo, DiskDetail } from '../types/disk';
+import { DiskHost, DiskInfo, DiskDetail, DiskPushToken } from '../types/disk';
 import {
   MailGateway,
   MailTarget,
@@ -853,14 +853,30 @@ class ApiService {
   }
 
   // ========== 磁盘监控接口 ==========
-  async getDisks(): Promise<DiskInfo[]> {
-    return this.request<DiskInfo[]>('/disk/list');
+  async getDiskHosts(): Promise<DiskHost[]> {
+    return this.request<DiskHost[]>('/disk/hosts');
   }
 
-  async getDiskDetail(device: string): Promise<DiskDetail> {
+  async getDiskPushToken(): Promise<DiskPushToken> {
+    return this.request<DiskPushToken>('/disk/push-token');
+  }
+
+  async regenerateDiskPushToken(): Promise<DiskPushToken> {
+    return this.request<DiskPushToken>('/disk/push-token/regenerate', {
+      method: 'POST'
+    });
+  }
+
+  async getDisks(hostId?: string): Promise<DiskInfo[]> {
+    const query = hostId ? `?hostId=${encodeURIComponent(hostId)}` : '';
+    return this.request<DiskInfo[]>(`/disk/list${query}`);
+  }
+
+  async getDiskDetail(device: string, hostId?: string): Promise<DiskDetail> {
     // 后端参数需要去掉前导'/'，并让 'dev/' 被后端剥离为设备名
     const param = device.replace(/^\//, '');
-    return this.request<DiskDetail>(`/disk/detail/${encodeURIComponent(param)}`);
+    const query = hostId ? `?hostId=${encodeURIComponent(hostId)}` : '';
+    return this.request<DiskDetail>(`/disk/detail/${encodeURIComponent(param)}${query}`);
   }
 
   // ========== 邮件网关 ==========

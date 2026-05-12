@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Tag, Table, Descriptions, Space, Button, Statistic, Row, Col, Alert, Radio } from 'antd';
-import { HddOutlined, ReloadOutlined, LineChartOutlined, FireOutlined } from '@ant-design/icons';
+import { Card, Tag, Table, Descriptions, Space, Button, Statistic, Row, Col, Alert, Radio, Select, Typography } from 'antd';
+import { HddOutlined, ReloadOutlined, LineChartOutlined, FireOutlined, ClusterOutlined, KeyOutlined } from '@ant-design/icons';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,7 +13,7 @@ import {
   Legend,
 } from 'chart.js';
 import { apiService } from '../services/api';
-import { DiskInfo, DiskDetail } from '../types/disk';
+import { DiskHost, DiskInfo, DiskDetail } from '../types/disk';
 import './Dashboard.css';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTitle, Tooltip, Legend);
@@ -45,6 +45,15 @@ const formatBytes = (val?: number) => {
 };
 
 const DiskMonitor: React.FC = () => {
+  const [hosts, setHosts] = useState<DiskHost[]>([]);
+  const [selectedHostId, setSelectedHostId] = useState<string | null>(null);
+  const [loadingHosts, setLoadingHosts] = useState(false);
+  const [errorHosts, setErrorHosts] = useState<string | null>(null);
+  const [pushToken, setPushToken] = useState('');
+  const [loadingToken, setLoadingToken] = useState(false);
+  const [regeneratingToken, setRegeneratingToken] = useState(false);
+  const [errorToken, setErrorToken] = useState<string | null>(null);
+
   const [disks, setDisks] = useState<DiskInfo[]>([]);
   const [loadingList, setLoadingList] = useState(false);
   const [errorList, setErrorList] = useState<string | null>(null);
@@ -55,28 +64,13 @@ const DiskMonitor: React.FC = () => {
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [metric, setMetric] = useState<'temperature' | 'read' | 'write'>('temperature');
 
-  const loadDisks = async () => {
-    try {
-      setLoadingList(true);
-      setErrorList(null);
-      const data = await apiService.getDisks();
-      setDisks(data);
-      if (!selectedDevice && data.length > 0) {
-        handleSelectDevice(data[0].device);
-      }
-    } catch (e: any) {
-      setErrorList(e?.message || '加载磁盘列表失败');
-    } finally {
-      setLoadingList(false);
-    }
-  };
-
-  const handleSelectDevice = async (device: string) => {
+  const handleSelectDevice = async (device: string, hostId = selectedHostId) => {
+    if (!hostId) return;
     try {
       setSelectedDevice(device);
       setLoadingDetail(true);
       setErrorDetail(null);
-      const d = await apiService.getDiskDetail(device);
+      const d = await apiService.getDiskDetail(device, hostId);
       setDetail(d);
     } catch (e: any) {
       setErrorDetail(e?.message || '加载磁盘详情失败');
@@ -85,9 +79,107 @@ const DiskMonitor: React.FC = () => {
     }
   };
 
+  const loadDisks = async (hostId = selectedHostId) => {
+    if (!hostId) {
+      setDisks([]);
+      setSelectedDevice(null);
+      setDetail(null);
+      return;
+    }
+    try {
+      setLoadingList(true);
+      setErrorList(null);
+      const data = await apiService.getDisks(hostId);
+      setDisks(data);
+      if (data.length === 0) {
+        setSelectedDevice(null);
+        setDetail(null);
+        return;
+      }
+      const nextDevice = selectedDevice && data.some((disk) => disk.device === selectedDevice)
+        ? selectedDevice
+        : data[0].device;
+      await handleSelectDevice(nextDevice, hostId);
+    } catch (e: any) {
+      setErrorList(e?.message || '加载磁盘列表失败');
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const loadHosts = async () => {
+    try {
+      setLoadingHosts(true);
+      setErrorHosts(null);
+      const data = await apiService.getDiskHosts();
+      setHosts(data);
+      if (data.length === 0) {
+        setSelectedHostId(null);
+        setDisks([]);
+        setSelectedDevice(null);
+        setDetail(null);
+        return;
+      }
+      const nextHostId = selectedHostId && data.some((host) => host.hostId === selectedHostId)
+        ? selectedHostId
+        : data[0].hostId;
+      setSelectedHostId(nextHostId);
+      await loadDisks(nextHostId);
+    } catch (e: any) {
+      setErrorHosts(e?.message || '加载主机列表失败');
+    } finally {
+      setLoadingHosts(false);
+    }
+  };
+
+  const loadPushToken = async () => {
+    try {
+      setLoadingToken(true);
+      setErrorToken(null);
+      const data = await apiService.getDiskPushToken();
+      setPushToken(data.token);
+    } catch (e: any) {
+      setErrorToken(e?.message || '加载上报 Token 失败');
+    } finally {
+      setLoadingToken(false);
+    }
+  };
+
+  const handleRegeneratePushToken = async () => {
+    try {
+      setRegeneratingToken(true);
+      setErrorToken(null);
+      const data = await apiService.regenerateDiskPushToken();
+      setPushToken(data.token);
+    } catch (e: any) {
+      setErrorToken(e?.message || '重新生成上报 Token 失败');
+    } finally {
+      setRegeneratingToken(false);
+    }
+  };
+
   useEffect(() => {
-    loadDisks();
+    loadPushToken();
+    loadHosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectedHost = useMemo(
+    () => hosts.find((host) => host.hostId === selectedHostId) || null,
+    [hosts, selectedHostId]
+  );
+
+  const isSelectedHostStale = useMemo(() => {
+    if (!selectedHost?.lastSeenAt) return false;
+    return Date.now() - new Date(selectedHost.lastSeenAt).getTime() > 30 * 60 * 1000;
+  }, [selectedHost]);
+
+  const handleHostChange = (hostId: string) => {
+    setSelectedHostId(hostId);
+    setSelectedDevice(null);
+    setDetail(null);
+    loadDisks(hostId);
+  };
 
   const riskTips = useMemo(() => {
     if (!detail) return [] as string[];
@@ -178,16 +270,66 @@ const DiskMonitor: React.FC = () => {
     <div className="traffic-overview">
       <div className="page-header">
         <h2>磁盘监控</h2>
-        <p>查看磁盘健康状态、温度与读写曲线（10分钟采样）</p>
+        <p>查看宿主机推送的磁盘健康状态、温度与读写曲线（10分钟采样）</p>
       </div>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Row gutter={[16, 12]} align="middle">
+          <Col xs={24} md={5}>
+            <Space>
+              <KeyOutlined />
+              <Typography.Text strong>上报 Token</Typography.Text>
+            </Space>
+          </Col>
+          <Col xs={24} md={15}>
+            <Typography.Text
+              code
+              copyable={pushToken ? { text: pushToken } : false}
+              style={{ display: 'block', whiteSpace: 'normal', wordBreak: 'break-all' }}
+            >
+              {loadingToken ? '加载中...' : pushToken || '-'}
+            </Typography.Text>
+            <Typography.Text type="secondary" style={{ display: 'block', marginTop: 6, wordBreak: 'break-all' }}>
+              DISK_PUSH_TOKEN={pushToken || '<等待加载>'}
+            </Typography.Text>
+          </Col>
+          <Col xs={24} md={4} style={{ textAlign: 'right' }}>
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={handleRegeneratePushToken}
+              loading={regeneratingToken}
+              disabled={loadingToken}
+            >
+              重新生成
+            </Button>
+          </Col>
+        </Row>
+      </Card>
+
+      {errorToken && <Alert type="error" message={errorToken} style={{ marginBottom: 12 }} />}
 
       {/* 顶部汇总与刷新 */}
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={16} align="middle">
-          <Col span={6}>
+          <Col span={7}>
+            <Select
+              aria-label="监控主机"
+              placeholder="选择主机"
+              value={selectedHostId || undefined}
+              loading={loadingHosts}
+              onChange={handleHostChange}
+              style={{ width: '100%' }}
+              options={hosts.map((host) => ({
+                value: host.hostId,
+                label: host.hostName || host.hostId,
+              }))}
+              suffixIcon={<ClusterOutlined />}
+            />
+          </Col>
+          <Col span={5}>
             <Statistic title="磁盘数量" value={disks.length} prefix={<HddOutlined />} />
           </Col>
-          <Col span={12}>
+          <Col span={8}>
             {detail && (
               <Space size="middle">
                 <Tag color={healthColor(detail.health)}>
@@ -198,46 +340,69 @@ const DiskMonitor: React.FC = () => {
               </Space>
             )}
           </Col>
-          <Col span={6} style={{ textAlign: 'right' }}>
-            <Button icon={<ReloadOutlined />} onClick={loadDisks} loading={loadingList}>
-              刷新列表
+          <Col span={4} style={{ textAlign: 'right' }}>
+            <Button icon={<ReloadOutlined />} onClick={loadHosts} loading={loadingHosts || loadingList}>
+              刷新
             </Button>
           </Col>
         </Row>
       </Card>
 
-      <div className="dashboard-grid">
-        {/* 左侧：磁盘列表 */}
-        <Card className="dashboard-card">
-          <h3>磁盘列表</h3>
-          {errorList && <Alert type="error" message={errorList} style={{ marginBottom: 12 }} />}
-          <Table
-            rowKey="device"
-            dataSource={disks}
-            loading={loadingList}
-            pagination={false}
-            size="small"
-            onRow={(record) => ({ onClick: () => handleSelectDevice(record.device) })}
-            rowClassName={(record) => (record.device === selectedDevice ? 'selected-row' : '')}
-            columns={[
-              { title: '设备', dataIndex: 'device', key: 'device' },
-              { title: '型号', dataIndex: 'model', key: 'model' },
-              { title: '序列号', dataIndex: 'serial', key: 'serial' },
-              { title: '容量', dataIndex: 'size', key: 'size' },
-              { title: '状态', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={healthColor(v)}>{v}</Tag> },
-              { title: '温度(°C)', dataIndex: 'temperature', key: 'temperature' },
-            ]}
-          />
-        </Card>
+      {errorHosts && <Alert type="error" message={errorHosts} style={{ marginBottom: 12 }} />}
 
-        {/* 右侧：磁盘详情与温度曲线 */}
-        <Card className="dashboard-card" style={{ minHeight: 420 }}>
-          <h3>磁盘详情</h3>
-          {errorDetail && <Alert type="error" message={errorDetail} style={{ marginBottom: 12 }} />}
-          {!detail ? (
-            <div className="loading">请选择左侧磁盘查看详情</div>
-          ) : (
-            <>
+      {hosts.length === 0 && !loadingHosts && (
+        <Alert
+          type="info"
+          showIcon
+          message="暂无主机上报数据"
+          description="请在宿主机配置 scripts/disk-monitor/push-smartctl.sh，并通过 cron 定时推送 smartctl 信息。"
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {isSelectedHostStale && (
+        <Alert
+          type="warning"
+          showIcon
+          message="当前主机上报已超过30分钟"
+          description="请检查宿主机 cron、网络和 DISK_PUSH_TOKEN 配置。"
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      {hosts.length > 0 && (
+        <div className="dashboard-grid">
+          {/* 左侧：磁盘列表 */}
+          <Card className="dashboard-card">
+            <h3>磁盘列表</h3>
+            {errorList && <Alert type="error" message={errorList} style={{ marginBottom: 12 }} />}
+            <Table
+              rowKey="device"
+              dataSource={disks}
+              loading={loadingList}
+              pagination={false}
+              size="small"
+              onRow={(record) => ({ onClick: () => handleSelectDevice(record.device) })}
+              rowClassName={(record) => (record.device === selectedDevice ? 'selected-row' : '')}
+              columns={[
+                { title: '设备', dataIndex: 'device', key: 'device' },
+                { title: '型号', dataIndex: 'model', key: 'model' },
+                { title: '序列号', dataIndex: 'serial', key: 'serial' },
+                { title: '容量', dataIndex: 'size', key: 'size' },
+                { title: '状态', dataIndex: 'status', key: 'status', render: (v: string) => <Tag color={healthColor(v)}>{v}</Tag> },
+                { title: '温度(°C)', dataIndex: 'temperature', key: 'temperature' },
+              ]}
+            />
+          </Card>
+
+          {/* 右侧：磁盘详情与温度曲线 */}
+          <Card className="dashboard-card" style={{ minHeight: 420 }} loading={loadingDetail && !detail}>
+            <h3>磁盘详情</h3>
+            {errorDetail && <Alert type="error" message={errorDetail} style={{ marginBottom: 12 }} />}
+            {!detail ? (
+              <div className="loading">请选择左侧磁盘查看详情</div>
+            ) : (
+              <>
               <Descriptions bordered column={2} size="small" style={{ marginBottom: 12 }}>
                 <Descriptions.Item label="设备">{detail.device}</Descriptions.Item>
                 <Descriptions.Item label="型号">{detail.model}</Descriptions.Item>
@@ -312,10 +477,11 @@ const DiskMonitor: React.FC = () => {
               <div className="trend-chart-container" style={{ height: 360 }}>
                 <Line data={chartCtx.data as any} options={chartOptions} />
               </div>
-            </>
-          )}
-        </Card>
-      </div>
+              </>
+            )}
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

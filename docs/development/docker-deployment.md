@@ -41,6 +41,8 @@ CLICKHOUSE_PASSWORD=change_me
 ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
 ```
 
+磁盘监控已改为宿主机主动推送。进入控制面“磁盘监控”页面后，系统会自动生成并明文展示上报 Token；将该值写入宿主机的 `scripts/disk-monitor/disk-monitor.env` 中的 `DISK_PUSH_TOKEN`，再通过 cron 定时调用 `push-smartctl.sh`。`DISK_MONITOR_PUSH_TOKEN` 仅作为兼容旧部署的可选初始 Token；如果没有设置，页面会随机生成并持久化。
+
 如需清空控制面数据库和日志卷，重新进入首次创建管理员流程：
 
 ```bash
