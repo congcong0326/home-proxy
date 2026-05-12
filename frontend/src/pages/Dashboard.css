@@ -564,3 +564,175 @@
 .user-stats-table tbody tr:hover {
   background: #f9fafb;
 }
+
+/* Retro NOC status pages */
+.dashboard,
+.traffic-overview,
+.wol-management {
+  padding: 18px;
+  background: var(--retro-bg);
+}
+
+.page-header,
+.dashboard-header {
+  border: 2px solid var(--retro-border);
+  background: var(--retro-panel);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+  padding: 14px;
+  margin-bottom: 12px;
+}
+
+.page-header h2,
+.page-header p,
+.dashboard-title,
+.card-title {
+  letter-spacing: 0;
+}
+
+.page-header h2,
+.dashboard-title,
+.card-title {
+  color: var(--retro-primary);
+  font-family: var(--retro-font);
+  font-weight: 700;
+}
+
+.page-header p {
+  color: var(--retro-muted);
+  margin: 6px 0 0;
+}
+
+.dashboard-card,
+.traffic-stat-item,
+.wol-device-card,
+.modal-content {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.dashboard-card:hover,
+.wol-device-card:hover {
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.traffic-trend-card .trend-chart-container {
+  background: var(--retro-screen);
+  border: 2px solid #000;
+  padding: 10px;
+}
+
+.tab-button,
+.wol-button,
+.device-action-btn,
+.btn-primary,
+.btn-secondary {
+  border-radius: var(--retro-radius);
+  border: 2px solid var(--retro-border);
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+  font-family: var(--retro-font);
+  font-weight: 700;
+}
+
+.tab-button.active,
+.wol-button.primary,
+.device-action-btn.wake,
+.btn-primary {
+  background: var(--retro-primary);
+  color: var(--retro-screen-muted);
+  border-color: var(--retro-border);
+}
+
+.tab-button:hover,
+.wol-button.secondary:hover,
+.btn-secondary:hover {
+  background: var(--retro-panel-light);
+  color: var(--retro-primary);
+}
+
+.device-status.online,
+.stat-value.download {
+  color: var(--retro-ok);
+}
+
+.device-status.offline,
+.stat-value.upload {
+  color: var(--retro-warning);
+}
+
+.device-disabled,
+.error {
+  color: var(--retro-danger);
+}
+
+.trend-select,
+.trend-date-input,
+.wol-form input,
+.wol-form textarea {
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  background: var(--retro-panel-light);
+  color: var(--retro-text);
+}
+
+.user-stats-table table {
+  border: 2px solid var(--retro-border);
+}
+
+.user-stats-table th {
+  background: var(--retro-primary);
+  color: var(--retro-screen-muted);
+  font-family: var(--retro-font);
+}
+
+.user-stats-table td {
+  background: var(--retro-panel-light);
+}
+
+@media (max-width: 768px) {
+  .dashboard,
+  .traffic-overview,
+  .wol-management {
+    padding: 10px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .traffic-stats-grid,
+  .wol-devices-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-controls,
+  .wol-controls,
+  .device-actions,
+  .form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trend-select,
+  .trend-date-input,
+  .wol-button,
+  .device-action-btn,
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .modal-content {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    overflow: auto;
+  }
+
+  .user-stats-table,
+  .dashboard-card .ant-table-wrapper {
+    overflow-x: auto;
+  }
+}

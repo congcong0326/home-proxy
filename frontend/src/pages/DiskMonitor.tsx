@@ -311,7 +311,7 @@ const DiskMonitor: React.FC = () => {
       {/* 顶部汇总与刷新 */}
       <Card style={{ marginBottom: 16 }}>
         <Row gutter={16} align="middle">
-          <Col span={7}>
+          <Col xs={24} md={7}>
             <Select
               aria-label="监控主机"
               placeholder="选择主机"
@@ -326,10 +326,10 @@ const DiskMonitor: React.FC = () => {
               suffixIcon={<ClusterOutlined />}
             />
           </Col>
-          <Col span={5}>
+          <Col xs={12} md={5}>
             <Statistic title="磁盘数量" value={disks.length} prefix={<HddOutlined />} />
           </Col>
-          <Col span={8}>
+          <Col xs={24} md={8}>
             {detail && (
               <Space size="middle">
                 <Tag color={healthColor(detail.health)}>
@@ -340,7 +340,7 @@ const DiskMonitor: React.FC = () => {
               </Space>
             )}
           </Col>
-          <Col span={4} style={{ textAlign: 'right' }}>
+          <Col xs={24} md={4} style={{ textAlign: 'right' }}>
             <Button icon={<ReloadOutlined />} onClick={loadHosts} loading={loadingHosts || loadingList}>
               刷新
             </Button>
