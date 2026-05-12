@@ -1,20 +1,14 @@
 package org.congcong.proxyworker.integration.support;
 
-import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
 import org.congcong.common.dto.RouteRule;
-import org.congcong.common.enums.DomainRuleType;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.common.util.geo.DomainFakeLoader;
-import org.congcong.common.util.geo.DomainRuleEngine;
-import org.congcong.common.util.geo.DomainRuleSet;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
@@ -110,25 +104,6 @@ public final class ProxyWorkerIntegrationFixtures {
 
     public static RouteConfig dnsForwardRoute(String host, int port) {
         return outboundRoute(ProtocolType.DNS_SERVER, host, port);
-    }
-
-    public static void installDomainRulesForTests() {
-        try {
-            Field rulesField = DomainRuleEngine.class.getDeclaredField("RULES");
-            rulesField.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            ConcurrentMap<DomainRuleType, DomainRuleSet> rules =
-                    (ConcurrentMap<DomainRuleType, DomainRuleSet>) rulesField.get(null);
-            rules.put(DomainRuleType.DOMAIN, new DomainFakeLoader().load());
-
-            Field initField = DomainRuleEngine.class.getDeclaredField("init");
-            initField.setAccessible(true);
-            initField.setBoolean(null, true);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to install test domain rules", e);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to load test domain rules", e);
-        }
     }
 
     private static InboundConfig tcpInbound(Long id, ProtocolType protocol, int port, List<RouteConfig> routes, RouteConfig defaultRoute) {

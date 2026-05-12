@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Edit these values before installing this script on the host.
+CONTROL_MANAGER_URL="http://127.0.0.1:18081"
+DISK_PUSH_TOKEN="replace-with-the-token-visible-on-disk-monitor-page"
+HOST_ID="nas-main"
+HOST_NAME="NAS Main"
+
 LSBLK_BIN="${LSBLK_BIN:-lsblk}"
 SMARTCTL_BIN="${SMARTCTL_BIN:-smartctl}"
 CURL_BIN="${CURL_BIN:-curl}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
-require_env() {
+require_config() {
   local name="$1"
   if [[ -z "${!name:-}" ]]; then
-    echo "missing required env: ${name}" >&2
+    echo "missing required config: ${name}" >&2
     exit 2
   fi
 }
@@ -22,15 +28,15 @@ require_command() {
   fi
 }
 
-require_env CONTROL_MANAGER_URL
-require_env DISK_PUSH_TOKEN
-require_env HOST_ID
+require_config CONTROL_MANAGER_URL
+require_config DISK_PUSH_TOKEN
+require_config HOST_ID
+require_config HOST_NAME
 require_command "${LSBLK_BIN}"
 require_command "${SMARTCTL_BIN}"
 require_command "${CURL_BIN}"
 require_command "${PYTHON_BIN}"
 
-HOST_NAME="${HOST_NAME:-$(hostname -f 2>/dev/null || hostname 2>/dev/null || printf '%s' "${HOST_ID}")}"
 CONTROL_MANAGER_URL="${CONTROL_MANAGER_URL%/}"
 
 TMP_DIR="$(mktemp -d)"

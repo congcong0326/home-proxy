@@ -5,7 +5,7 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.validator.routines.DomainValidator;
+import org.apache.commons.validator.routines.InetAddressValidator;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.*;
@@ -36,7 +36,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         private static final RouterService INSTANCE = new RouterService();
     }
 
-    private static final DomainValidator domainValidator = DomainValidator.getInstance();
+    private static final InetAddressValidator inetAddressValidator = InetAddressValidator.getInstance();
 
 
     @Override
@@ -45,7 +45,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
         List<RouteConfig> routes = FindRoutes.find(proxyTunnelRequest.getUser().getId(), inboundConfig);
         String targetHost = proxyTunnelRequest.getTargetHost();
-        boolean hostIsIp = !domainValidator.isValid(targetHost);
+        boolean hostIsIp = isIp(targetHost);
         RouteConfig matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
         if (matchedRoute == null) {
             matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
@@ -83,13 +83,17 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         return switch (conditionType) {
             case GEO -> matchesGeoRoute(route, value, op, targetHost, hostIsIp, proxyTunnelRequest);
             case DOMAIN -> matchesDomainRoute(route, value, op, targetHost);
-            case AD_BLOCK -> matchesAdRoute(route, op, targetHost, hostIsIp);
+            case AD_BLOCK -> false;
             case RULE_SET -> matchesRuleSetRoute(value, op, targetHost, hostIsIp);
         };
     }
 
     private boolean matchesGeoRoute(RouteConfig route, String expectedCountry, MatchOp op, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
-        ensureLocationResolved(hostIsIp, proxyTunnelRequest, targetHost);
+        String geoTarget = geoLookupTarget(proxyTunnelRequest, targetHost, hostIsIp);
+        if (geoTarget == null) {
+            return false;
+        }
+        ensureLocationResolved(proxyTunnelRequest, geoTarget);
         if (!proxyTunnelRequest.isLocationResolveSuccess()) {
             return false;
         }
@@ -102,46 +106,19 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         return matched;
     }
 
-    private void ensureLocationResolved(boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest, String targetHost) {
+    private void ensureLocationResolved(ProxyTunnelRequest proxyTunnelRequest, String targetIp) {
         if (proxyTunnelRequest.isLocationResolveSuccess()) {
             return;
         }
-        boolean foreign;
-        if (hostIsIp) {
-            // ip通过IP库判断
-            foreign = GeoIPUtil.getInstance().isForeign(targetHost, null);
-        } else {
-            // 域名通过规则判断
-            // 无法匹配的还是应该走国内连接
-            MatchResult foreignResult = DomainRuleEngine.match(DomainRuleType.GEO_FOREIGN, targetHost);
-            MatchResult cnResult = DomainRuleEngine.match(DomainRuleType.GEO_CN, targetHost);
-            if (cnResult.isMatched()) {
-                foreign = false;
-            } else {
-                foreign = foreignResult.isMatched();
-            }
-        }
+        boolean foreign = GeoIPUtil.getInstance().isForeign(targetIp, null);
         proxyTunnelRequest.setCountry(foreign ? "NOT CN" : "CN");
         proxyTunnelRequest.setLocationResolveSuccess(true);
     }
 
     private boolean matchesDomainRoute(RouteConfig route, String ruleValue, MatchOp op, String targetHost) {
-        MatchResult match = DomainRuleEngine.match(DomainRuleType.DOMAIN, targetHost, ruleValue);
-        boolean matched = (op == MatchOp.IN) == match.isMatched();
+        boolean matched = (op == MatchOp.IN) == DomainMatcher.matches(targetHost, ruleValue);
         if (matched) {
             log.debug("域名路由 {} 策略命中 {}", ruleValue, targetHost);
-        }
-        return matched;
-    }
-
-    private boolean matchesAdRoute(RouteConfig route, MatchOp op, String targetHost, boolean hostIsIp) {
-        if (hostIsIp) {
-            return false;
-        }
-        MatchResult match = DomainRuleEngine.match(DomainRuleType.AD, targetHost);
-        boolean matched = (op == MatchOp.IN) == match.isMatched();
-        if (matched) {
-            log.debug("广告路由策略命中 {}", targetHost);
         }
         return matched;
     }
@@ -156,6 +133,21 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             log.debug("规则集 {} 策略命中 {}", ruleSetKey, targetHost);
         }
         return matched;
+    }
+
+    private String geoLookupTarget(ProxyTunnelRequest proxyTunnelRequest, String targetHost, boolean hostIsIp) {
+        if (hostIsIp) {
+            return targetHost;
+        }
+        String targetIp = proxyTunnelRequest.getTargetIp();
+        if (isIp(targetIp)) {
+            return targetIp;
+        }
+        return null;
+    }
+
+    private boolean isIp(String value) {
+        return value != null && inetAddressValidator.isValid(value);
     }
 
     private RouteConfig fallbackRoute(InboundConfig inboundConfig, ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) {

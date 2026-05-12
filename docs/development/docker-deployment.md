@@ -88,14 +88,26 @@ volumes:
   - ../../config/proxy-worker.properties:/app/config/proxy-worker.properties:ro
 ```
 
-## 可选挂载
+## GeoIP 数据库
 
-GeoIP 数据库需要放到 worker 工作目录，文件名包含 `mmdb` 即可：
+私有容器化部署推荐在构建镜像前放置 MaxMind `GeoLite2-City.mmdb`：
+
+```bash
+mkdir -p data/geoip
+cp /path/to/GeoLite2-City.mmdb data/geoip/GeoLite2-City.mmdb
+make docker-build
+```
+
+`data/geoip/*.mmdb` 已被 Git 忽略。`control-manager` 和 `proxy-worker` 镜像都会把该目录复制到 `/app/data/geoip/`：worker 用它做透明代理 IP 路由判断，control-manager 用它补全访问日志中的国家/城市。
+
+如需运行时挂载覆盖镜像内置数据库：
 
 ```yaml
 volumes:
-  - ../../backend/GeoLite2-City.mmdb:/app/GeoLite2-City.mmdb:ro
+  - ../../data/geoip/GeoLite2-City.mmdb:/app/data/geoip/GeoLite2-City.mmdb:ro
 ```
+
+也可以通过 `GEOIP_MMDB_PATH` 指向其他挂载路径，或通过 `GEOIP_DATA_DIR` 指向包含 `GeoLite2-City.mmdb` 的目录。未找到 mmdb 时，服务仍可启动，但 GeoIP 路由和日志城市解析会降级。
 
 TLS 证书可挂载到容器内，并通过环境变量指定：
 

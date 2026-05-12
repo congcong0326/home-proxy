@@ -85,6 +85,8 @@ const routeOrderRules = [
   },
 ];
 
+const supportsTls = (protocol?: ProtocolType) => protocol === ProtocolType.SOCKS5;
+
 const InboundManagement: React.FC = () => {
   const [state, setState] = useState<PageState>({
     loading: false,
@@ -109,16 +111,16 @@ const InboundManagement: React.FC = () => {
   const createProtocolWatch = Form.useWatch('protocol', createForm);
   const editProtocolWatch = Form.useWatch('protocol', editForm);
 
-  // 根据协议选择调整创建表单的 TLS 默认值
+  // 非 SOCKS5 协议不展示 TLS，提交时也保持关闭
   useEffect(() => {
-    if (createProtocolWatch === ProtocolType.TP_PROXY) {
+    if (!supportsTls(createProtocolWatch)) {
       createForm.setFieldsValue({ tlsEnabled: false });
     }
   }, [createForm, createProtocolWatch]);
 
-  // 根据协议调整编辑表单的 TLS 默认值
+  // 非 SOCKS5 协议不展示 TLS，提交时也保持关闭
   useEffect(() => {
-    if (editProtocolWatch === ProtocolType.TP_PROXY) {
+    if (!supportsTls(editProtocolWatch)) {
       editForm.setFieldsValue({ tlsEnabled: false });
     }
   }, [editForm, editProtocolWatch]);
@@ -131,7 +133,6 @@ const InboundManagement: React.FC = () => {
   const protocolSelectOptions = useMemo(() => ([
     { value: ProtocolType.SOCKS5, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5] },
     { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
-    { value: ProtocolType.SOCKS5_HTTPS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5_HTTPS] },
     { value: ProtocolType.SS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SS] },
     { value: ProtocolType.TP_PROXY, label: PROTOCOL_TYPE_LABELS[ProtocolType.TP_PROXY] },
     { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
@@ -329,6 +330,7 @@ const InboundManagement: React.FC = () => {
       const values = await createForm.validateFields();
       const payload: InboundConfigCreateRequest = {
         ...values,
+        tlsEnabled: supportsTls(values.protocol) ? values.tlsEnabled : false,
         sniffEnabled: true, // 默认开启嗅探以兼容后端字段
       };
       await apiService.createInbound(payload);
@@ -346,6 +348,7 @@ const InboundManagement: React.FC = () => {
       const values = await editForm.validateFields();
       const payload: InboundConfigUpdateRequest = {
         ...values,
+        tlsEnabled: supportsTls(values.protocol) ? values.tlsEnabled : false,
         sniffEnabled: editingItem.sniffEnabled ?? true, // 编辑时保留原值（默认开启）
       };
       await apiService.updateInbound(editingItem.id, payload);
@@ -376,7 +379,16 @@ const InboundManagement: React.FC = () => {
     },
     { title: '监听IP', dataIndex: 'listenIp', key: 'listenIp' },
     { title: '端口', dataIndex: 'port', key: 'port' },
-    { title: 'TLS', dataIndex: 'tlsEnabled', key: 'tlsEnabled', render: (v: boolean) => v ? <Tag color="green">启用</Tag> : <Tag color="default">关闭</Tag> },
+    {
+      title: 'TLS',
+      dataIndex: 'tlsEnabled',
+      key: 'tlsEnabled',
+      render: (v: boolean, record: InboundConfigDTO) => (
+        supportsTls(record.protocol)
+          ? (v ? <Tag color="green">启用</Tag> : <Tag color="default">关闭</Tag>)
+          : '-'
+      ),
+    },
     { title: '本月流量(上/下行)', key: 'traffic', render: (_: any, record: InboundConfigDTO) => {
       const t = record.id ? trafficMap[record.id] : undefined;
       if (!t) return '-';
@@ -401,7 +413,7 @@ const InboundManagement: React.FC = () => {
   const stats = useMemo(() => {
     const total = state.inbounds.length;
     const enabled = state.inbounds.filter(i => i.status === 1).length;
-    const tlsOn = state.inbounds.filter(i => i.tlsEnabled).length;
+    const tlsOn = state.inbounds.filter(i => supportsTls(i.protocol) && i.tlsEnabled).length;
     return { total, enabled, tlsOn };
   }, [state.inbounds]);
 
@@ -497,7 +509,9 @@ const InboundManagement: React.FC = () => {
             <Col span={12}><Form.Item name="port" label="端口" rules={[{ required: true, type: 'number', min: 1, max: 65535 }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            {supportsTls(createProtocolWatch) && (
+              <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            )}
             <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
@@ -574,7 +588,9 @@ const InboundManagement: React.FC = () => {
             <Col span={12}><Form.Item name="port" label="端口" rules={[{ required: true, type: 'number', min: 1, max: 65535 }]}><InputNumber style={{ width: '100%' }} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            {supportsTls(editProtocolWatch) && (
+              <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
+            )}
             <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>

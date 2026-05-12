@@ -63,6 +63,25 @@ class RouteServiceTest {
         assertEquals(config, route.getOutboundProxyConfig());
     }
 
+    @Test
+    void rejectsAdBlockRouteCondition() {
+        when(routeRepository.existsByName("ad-block")).thenReturn(false);
+        CreateRouteRequest request = new CreateRouteRequest();
+        request.setName("ad-block");
+        request.setPolicy(RoutePolicy.DIRECT);
+        request.setStatus(1);
+        RouteRule rule = routeRule();
+        rule.setConditionType(RouteConditionType.AD_BLOCK);
+        request.setRules(List.of(rule));
+
+        ResponseStatusException error = assertThrows(
+                ResponseStatusException.class,
+                () -> routeService.createRoute(request));
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        assertEquals("AD_BLOCK 路由条件已下线，请使用 RULE_SET 规则集替代", error.getReason());
+    }
+
     private CreateRouteRequest vlessRealityRequest(Map<String, Object> config) {
         CreateRouteRequest request = new CreateRouteRequest();
         request.setName("reality");

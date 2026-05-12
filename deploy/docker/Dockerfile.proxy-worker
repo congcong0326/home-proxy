@@ -3,6 +3,7 @@ FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 
 COPY backend/proxy-worker/target/proxy-worker-*.jar /app/proxy-worker.jar
+COPY data/geoip/ /app/data/geoip/
 
 ENV JAVA_OPTS=""
 

@@ -44,17 +44,18 @@ FAKE_CURL
 
 chmod +x "${TMP_DIR}/lsblk" "${TMP_DIR}/smartctl" "${TMP_DIR}/curl"
 
-PATH="${TMP_DIR}:${PATH}" \
-CONTROL_MANAGER_URL="http://control-manager:8081" \
-DISK_PUSH_TOKEN="secret-token" \
-HOST_ID="nas-main" \
-HOST_NAME="NAS Main" \
-CURL_ARGS_OUTPUT="${TMP_DIR}/curl.args" \
-CURL_PAYLOAD_OUTPUT="${TMP_DIR}/payload.json" \
-bash "${SCRIPT_DIR}/push-smartctl.sh"
+env \
+  -u CONTROL_MANAGER_URL \
+  -u DISK_PUSH_TOKEN \
+  -u HOST_ID \
+  -u HOST_NAME \
+  PATH="${TMP_DIR}:${PATH}" \
+  CURL_ARGS_OUTPUT="${TMP_DIR}/curl.args" \
+  CURL_PAYLOAD_OUTPUT="${TMP_DIR}/payload.json" \
+  bash "${SCRIPT_DIR}/push-smartctl.sh"
 
-grep -q 'http://control-manager:8081/api/disk/push' "${TMP_DIR}/curl.args"
-grep -q 'X-Disk-Push-Token: secret-token' "${TMP_DIR}/curl.args"
+grep -q 'http://127.0.0.1:18081/api/disk/push' "${TMP_DIR}/curl.args"
+grep -q 'X-Disk-Push-Token: replace-with-the-token-visible-on-disk-monitor-page' "${TMP_DIR}/curl.args"
 
 python3 - "${TMP_DIR}/payload.json" <<'PY'
 import json

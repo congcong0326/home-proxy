@@ -60,10 +60,17 @@ http.client.read.timeout=10000
 
 ## GeoIP2（可选）
 
-若提供 GeoLite2-City.mmdb，将启用地理位置解析与缓存。mmdb 默认查找顺序：
-- 显式传入路径（代码构造函数参数）
-- 工作目录 `data/GeoLite2-City.mmdb`
-- 环境变量 `GEOIP2_MMDB_PATH`
+若提供 MaxMind `GeoLite2-City.mmdb`，将启用 IP 国家/城市解析与缓存。容器化私有部署推荐在构建镜像前把数据库放到仓库根目录的 `data/geoip/GeoLite2-City.mmdb`，Dockerfile 会复制到镜像内的 `/app/data/geoip/GeoLite2-City.mmdb`。
+
+mmdb 默认查找顺序：
+
+1. JVM system property `geoip.mmdb.path`
+2. 环境变量 `GEOIP_MMDB_PATH`
+3. JVM system property `geoip.data.dir` 下的 `GeoLite2-City.mmdb`
+4. 环境变量 `GEOIP_DATA_DIR` 下的 `GeoLite2-City.mmdb`
+5. 容器默认路径 `/app/data/geoip/GeoLite2-City.mmdb`
+6. 工作目录 `data/geoip/GeoLite2-City.mmdb`
+7. 兼容旧部署：工作目录下文件名包含 `mmdb` 的文件
 
 未找到 mmdb 时，地理位置不可用，但域名/IP 解析仍可用。
 ```
@@ -102,12 +109,9 @@ configService.start();
 AggregateConfigResponse currentConfig = configService.getCurrentConfig();
 
 // GeoIP 使用示例
-GeoIPUtil geo = GeoIPUtil.createDefault();
-if (geo.isAvailable()) {
-    geo.lookup("www.example.com").ifPresent(loc -> {
-        System.out.println("Country=" + loc.getCountry() + ", City=" + loc.getCity());
-    });
-}
+GeoIPUtil.getInstance().lookup("www.example.com").ifPresent(loc -> {
+    System.out.println("Country=" + loc.getCountry() + ", City=" + loc.getCity());
+});
 ```
 
 ## HTTP 304 缓存机制

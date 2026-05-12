@@ -7,13 +7,12 @@ import com.maxmind.geoip2.model.CityResponse;
 import com.maxmind.geoip2.exception.AddressNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.file.Path;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Logger;
 
 /**
  * IP/域名地理位置解析工具。
@@ -52,23 +51,13 @@ public class GeoIPUtil implements AutoCloseable {
                 .build() : null;
 
         try {
-            String jarDir = System.getProperty("user.dir");  // 获取当前工作目录（JAR所在的目录）
-            File workDir = new File(jarDir);
-            File[] files = workDir.listFiles();
-            if (files != null) {
-                File mmdb = null;
-                for (File file : files) {
-                    if (file.getName().contains("mmdb")) {
-                        mmdb = file;
-                        break;
-                    }
-                }
-                if (mmdb != null) {
-                    log.info("load GeoLite2-City.mmdb");
-                    dbReader = new DatabaseReader.Builder(mmdb).build();
-                } else {
-                    log.info("not find mmdb");
-                }
+            Optional<Path> mmdb = GeoIpDatabaseLocator.resolveDefault();
+            if (mmdb.isPresent()) {
+                Path mmdbPath = mmdb.get();
+                log.info("load GeoLite2-City.mmdb from {}", mmdbPath);
+                dbReader = new DatabaseReader.Builder(mmdbPath.toFile()).build();
+            } else {
+                log.info("not find GeoLite2-City.mmdb");
             }
         } catch (IOException e) {
             log.warn("load GeoLite2-City.mmdb", e);

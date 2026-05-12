@@ -4,6 +4,7 @@ import { ProxyEncAlgo } from './proxyEncAlgo';
 export enum RouteConditionType {
   DOMAIN = 'DOMAIN',
   GEO = 'GEO',
+  /** @deprecated use RULE_SET instead */
   AD_BLOCK = 'AD_BLOCK',
   RULE_SET = 'RULE_SET'
 }

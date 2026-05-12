@@ -76,6 +76,7 @@ public class RouteService {
         if (routeRepository.existsByName(request.getName())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
+        validateAdBlockConditionDisabled(request.getRules());
         validateRuleSetReferences(request.getRules(), request.getStatus() != null ? request.getStatus() : 1);
         validateShadowsocksRoute(request.getOutboundProxyType(), request.getOutboundProxyEncAlgo(), request.getOutboundProxyPassword());
         validateOutboundProxy(
@@ -123,6 +124,7 @@ public class RouteService {
 
         List<RouteRule> targetRules = request.getRules() != null ? request.getRules() : route.getRules();
         Integer targetStatus = request.getStatus() != null ? request.getStatus() : route.getStatus();
+        validateAdBlockConditionDisabled(targetRules);
         validateRuleSetReferences(targetRules, targetStatus);
         ProtocolType targetProxyType = request.getOutboundProxyType() != null ? request.getOutboundProxyType() : route.getOutboundProxyType();
         ProxyEncAlgo targetProxyEncAlgo = request.getOutboundProxyEncAlgo() != null ? request.getOutboundProxyEncAlgo() : route.getOutboundProxyEncAlgo();
@@ -314,6 +316,17 @@ public class RouteService {
             }
             if (routeEnabled && !ruleSetRepository.existsByRuleKeyAndEnabledTrueAndPublishedTrue(ruleSetKey)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "启用中的路由只能引用已启用且已发布的规则集: " + ruleSetKey);
+            }
+        }
+    }
+
+    private void validateAdBlockConditionDisabled(List<RouteRule> rules) {
+        if (rules == null) {
+            return;
+        }
+        for (RouteRule rule : rules) {
+            if (rule != null && rule.getConditionType() == RouteConditionType.AD_BLOCK) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "AD_BLOCK 路由条件已下线，请使用 RULE_SET 规则集替代");
             }
         }
     }

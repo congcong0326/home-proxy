@@ -14,7 +14,6 @@ import ProxyConfig from './pages/ProxyConfig';
 import UserManagement from './pages/UserManagement';
 import RouteManagement from './pages/RouteManagement';
 import RuleSetManagement from './pages/RuleSetManagement';
-import RuleSetGuide from './pages/RuleSetGuide';
 import './App.css';
 import InboundManagement from './pages/InboundManagement';
 import LogAudit from './pages/LogAudit';
@@ -120,7 +119,6 @@ const AppContent: React.FC = () => {
           <Route path="users" element={<UserManagement />} />
           <Route path="routing" element={<RouteManagement />} />
           <Route path="rule-sets" element={<RuleSetManagement />} />
-          <Route path="rule-sets/guide" element={<RuleSetGuide />} />
           <Route path="inbound" element={<InboundManagement />} />
           {/* 访问概览嵌套路由 */}
           <Route path="overview/log-audit" element={<LogAudit />} />

@@ -64,6 +64,8 @@ services:
       ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
       DISK_MONITOR_PUSH_TOKEN: ${DISK_MONITOR_PUSH_TOKEN:-}
       DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
+      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
+      GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     ports:
       - "${CONTROL_HOST_PORT:-18081}:8081"
     networks:

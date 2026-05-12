@@ -7,6 +7,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/control-manager/target/control-manager-*.jar /app/control-manager.jar
+COPY data/geoip/ /app/data/geoip/
 
 ENV JAVA_OPTS=""
 EXPOSE 8081

@@ -161,14 +161,14 @@ ADMIN_AUTH_JWT_SECRET=...
 
 密钥、数据库密码、证书私钥不写入镜像。开发环境可以使用 `.env`，生产环境应使用宿主机环境变量、Compose env file、CI/CD secret 或专门的密钥管理方案。
 
-`proxy-worker` 如需 TLS 证书或 GeoIP 数据，应通过挂载提供：
+TLS 证书仍通过挂载提供；私有容器化部署的 GeoIP 数据推荐在构建镜像前放到仓库根目录 `data/geoip/GeoLite2-City.mmdb`，并由 `control-manager` 与 `proxy-worker` 镜像复制到 `/app/data/geoip/`：
 
 ```text
 /etc/nas-proxy/certs
-/app/GeoLite2-City.mmdb
+/app/data/geoip/GeoLite2-City.mmdb
 ```
 
-`GeoIPUtil` 当前会在进程工作目录查找文件名包含 `mmdb` 的文件，因此 worker 容器启动目录应放置或挂载 `GeoLite2-City.mmdb`。
+`GeoIPUtil` 会优先读取 `geoip.mmdb.path`、`GEOIP_MMDB_PATH`、`geoip.data.dir`、`GEOIP_DATA_DIR`，然后读取容器默认路径 `/app/data/geoip/GeoLite2-City.mmdb`。运行时仍可挂载同路径覆盖镜像内置数据库。
 
 ## Port And Conflict Strategy
 

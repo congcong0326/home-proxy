@@ -27,6 +27,8 @@ test('does not show unfinished rate limit and geo distribution entries', async (
 
   expect(screen.queryByText('限流设置')).not.toBeInTheDocument();
   expect(screen.queryByText('地理位置分布')).not.toBeInTheDocument();
+  expect(screen.queryByText('规则源说明')).not.toBeInTheDocument();
+  expect(screen.getByText('规则集')).toBeInTheDocument();
   expect(screen.getByText('日志审计')).toBeInTheDocument();
 });
 

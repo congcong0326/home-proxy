@@ -1,5 +1,8 @@
 package org.congcong.common.enums;
 
 public enum RouteConditionType {
-    DOMAIN, GEO, AD_BLOCK, RULE_SET;
+    DOMAIN, GEO,
+    @Deprecated
+    AD_BLOCK,
+    RULE_SET;
 }

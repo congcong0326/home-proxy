@@ -25,7 +25,6 @@ import {
 } from 'antd';
 import {
   ApiOutlined,
-  BookOutlined,
   CloudSyncOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -36,7 +35,6 @@ import {
   ReloadOutlined,
   RobotOutlined,
 } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
 import {
   CreateRuleSetRequest,
@@ -117,7 +115,6 @@ const parseSourceConfig = (sourceConfig?: string): { sourceUrl?: string; sourceF
 };
 
 const RuleSetManagement: React.FC = () => {
-  const navigate = useNavigate();
   const [form] = Form.useForm<RuleSetFormValues>();
   const [ruleSets, setRuleSets] = useState<RuleSetSummaryDTO[]>([]);
   const [loading, setLoading] = useState(false);
@@ -503,11 +500,6 @@ const RuleSetManagement: React.FC = () => {
         <Paragraph type="secondary">
           统一管理 AI / GEO / 广告等规则集。外部规则源只在控制面同步，路由规则只引用内部 `ruleKey`。
         </Paragraph>
-        <Space wrap>
-          <Button icon={<BookOutlined />} onClick={() => navigate('/config/rule-sets/guide')}>
-            查看规则源说明
-          </Button>
-        </Space>
       </div>
 
       <div className="rule-set-grid">
@@ -722,18 +714,11 @@ const RuleSetManagement: React.FC = () => {
                 </Col>
               </Row>
               <Card size="small" className="rule-set-source-help">
-                <Space align="start" style={{ justifyContent: 'space-between', width: '100%' }}>
-                  <div>
-                    <Text strong>sourceConfig 预览</Text>
-                    <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-                      前端会自动把 URL 和格式拼成后端需要的 JSON。推荐 `domain-list-community` 用于 `v2fly/domain-list-community`，
-                      `Clash Classical` 用于 `blackmatrix7/ios_rule_script`。
-                    </Paragraph>
-                  </div>
-                  <Button type="link" icon={<BookOutlined />} onClick={() => navigate('/config/rule-sets/guide')}>
-                    查看说明和案例
-                  </Button>
-                </Space>
+                <Text strong>sourceConfig 预览</Text>
+                <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                  前端会自动把 URL 和格式拼成后端需要的 JSON。推荐 `domain-list-community` 用于 `v2fly/domain-list-community`，
+                  `Clash Classical` 用于 `blackmatrix7/ios_rule_script`。
+                </Paragraph>
               </Card>
             </>
           )}

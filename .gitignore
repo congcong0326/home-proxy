@@ -49,6 +49,10 @@ mvnw.cmd
 **/node_modules/
 /.npm/
 
+# Local GeoIP databases for private Docker image builds
+/data/geoip/*.mmdb
+/data/geoip/*.mmdb.gz
+
 # Dist artifacts outside target (optional)
 # /dist/
 # **/*.zip

@@ -132,8 +132,23 @@ const RouteForm: React.FC<RouteFormProps> = ({
   const handlePolicyChange = (value: RoutePolicy) => {
     setPolicy(value);
     // 切换不同策略时清理相关字段
-    if (value === RoutePolicy.DESTINATION_OVERRIDE || value === RoutePolicy.DNS_REWRITING) {
-      // 目标重写不需要认证信息
+    if (value === RoutePolicy.DESTINATION_OVERRIDE) {
+      // 目标重写只需要目标地址和端口，不需要出站标签或代理认证信息
+      form.setFieldsValue({
+        outboundTag: undefined,
+        outboundProxyType: undefined,
+        outboundProxyUsername: undefined,
+        outboundProxyPassword: undefined,
+        outboundProxyEncAlgo: undefined,
+        realityServerName: undefined,
+        realityPublicKey: undefined,
+        realityShortId: undefined,
+        realityUuid: undefined,
+        realityFlow: undefined,
+        realityConnectTimeoutMillis: undefined,
+      });
+    } else if (value === RoutePolicy.DNS_REWRITING) {
+      // DNS 重写不需要认证信息
       form.setFieldsValue({
         outboundProxyUsername: undefined,
         outboundProxyPassword: undefined,
@@ -182,7 +197,6 @@ const RouteForm: React.FC<RouteFormProps> = ({
     const newRules = [...rules];
     const defaults =
       value === RouteConditionType.GEO ? 'CN' :
-      value === RouteConditionType.AD_BLOCK ? '是' :
       value === RouteConditionType.RULE_SET ? (ruleSetOptions[0]?.ruleKey || '') : '';
     newRules[index] = { ...newRules[index], conditionType: value, value: defaults };
     setRules(newRules);
@@ -226,7 +240,6 @@ const RouteForm: React.FC<RouteFormProps> = ({
             : {},
         }),
         ...(values.policy === RoutePolicy.DESTINATION_OVERRIDE && {
-          outboundTag: values.outboundTag,
           outboundProxyHost: values.outboundProxyHost,
           outboundProxyPort: values.outboundProxyPort,
         }),
@@ -355,7 +368,6 @@ const RouteForm: React.FC<RouteFormProps> = ({
                 options={[
                   { value: RouteConditionType.DOMAIN, label: '域名' },
                   { value: RouteConditionType.GEO, label: '地理位置' },
-                  { value: RouteConditionType.AD_BLOCK, label: '去除广告' },
                   { value: RouteConditionType.RULE_SET, label: '规则集' },
                 ]}
               />
@@ -378,13 +390,6 @@ const RouteForm: React.FC<RouteFormProps> = ({
                     onChange={(val) => handleRuleValueChange(index, val as string)}
                     style={{ width: '100%' }}
                     options={[{ value: 'CN', label: '中国' }]}
-                  />
-                ) : rule.conditionType === RouteConditionType.AD_BLOCK ? (
-                  <Select
-                    value={rule.value || '是'}
-                    onChange={(val) => handleRuleValueChange(index, val as string)}
-                    style={{ width: '100%' }}
-                    options={[{ value: '是', label: '是' }]}
                   />
                 ) : rule.conditionType === RouteConditionType.RULE_SET ? (
                   <Select
@@ -657,26 +662,28 @@ const RouteForm: React.FC<RouteFormProps> = ({
         <>
           <Divider orientation="left">{policy === RoutePolicy.DNS_REWRITING ? 'DNS解析配置' : '目标重写配置'}</Divider>
           <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="outboundTag"
-                label={
-                  <Space>
-                    出站标签
-                    <Tooltip title="用于标识此配置的唯一标签">
-                      <InfoCircleOutlined />
-                    </Tooltip>
-                  </Space>
-                }
-                rules={[
-                  { required: true, message: '请输入出站标签' },
-                  { pattern: /^[a-zA-Z0-9_-]+$/, message: '标签只能包含字母、数字、下划线和连字符' },
-                ]}
-              >
-                <Input placeholder="请输入出站标签" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
+            {policy === RoutePolicy.DNS_REWRITING && (
+              <Col span={12}>
+                <Form.Item
+                  name="outboundTag"
+                  label={
+                    <Space>
+                      出站标签
+                      <Tooltip title="用于标识此配置的唯一标签">
+                        <InfoCircleOutlined />
+                      </Tooltip>
+                    </Space>
+                  }
+                  rules={[
+                    { required: true, message: '请输入出站标签' },
+                    { pattern: /^[a-zA-Z0-9_-]+$/, message: '标签只能包含字母、数字、下划线和连字符' },
+                  ]}
+                >
+                  <Input placeholder="请输入出站标签" />
+                </Form.Item>
+              </Col>
+            )}
+            <Col span={policy === RoutePolicy.DNS_REWRITING ? 12 : 24}>
               <Form.Item
                 name="outboundProxyHost"
                 label={policy === RoutePolicy.DNS_REWRITING ? '应答IP' : '目标地址'}

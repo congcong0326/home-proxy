@@ -468,7 +468,7 @@ const RouteManagement: React.FC = () => {
                   : rule.conditionType === RouteConditionType.GEO
                     ? '地理位置'
                     : rule.conditionType === RouteConditionType.AD_BLOCK
-                      ? '广告过滤'
+                      ? '广告过滤（已下线）'
                       : '规则集'}{' '}
                 {rule.op === MatchOp.IN ? '属于' : '不属于'}{' '}
                 {rule.value}
@@ -477,7 +477,9 @@ const RouteManagement: React.FC = () => {
           </ul>
           {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DESTINATION_OVERRIDE || route.policy === RoutePolicy.DNS_REWRITING) && (
             <>
-              <p><strong>出站标签：</strong>{route.outboundTag}</p>
+              {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DNS_REWRITING) && (
+                <p><strong>出站标签：</strong>{route.outboundTag}</p>
+              )}
               {route.policy === RoutePolicy.OUTBOUND_PROXY && (
                 <>
                   <p><strong>代理类型：</strong>{route.outboundProxyType ? PROTOCOL_TYPE_LABELS[route.outboundProxyType as ProtocolType] : '未设置'}</p>
@@ -563,13 +565,16 @@ const RouteManagement: React.FC = () => {
       key: 'outbound',
       width: 200,
       render: (_: any, record: RouteDTO) => {
-        if (record.policy === RoutePolicy.OUTBOUND_PROXY || record.policy === RoutePolicy.DESTINATION_OVERRIDE) {
+        if (record.policy === RoutePolicy.OUTBOUND_PROXY) {
           return (
             <Space direction="vertical" size="small">
               <Text type="secondary">{record.outboundTag}</Text>
               <Text code>{record.outboundProxyHost}:{record.outboundProxyPort}</Text>
             </Space>
           );
+        }
+        if (record.policy === RoutePolicy.DESTINATION_OVERRIDE) {
+          return <Text code>{record.outboundProxyHost}:{record.outboundProxyPort}</Text>;
         }
         return <Text type="secondary">-</Text>;
       },

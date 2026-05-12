@@ -20,7 +20,6 @@ class WorkerRoutingIT {
 
     @Test
     void domainRuleCanSelectOutboundProxyWhileFallbackBlocks() {
-        ProxyWorkerIntegrationFixtures.installDomainRulesForTests();
         int workerPort = PortAllocator.tcpPort();
         int xrayPort = PortAllocator.tcpPort();
         RouteConfig matched = ProxyWorkerIntegrationFixtures.outboundRouteForDomain(
