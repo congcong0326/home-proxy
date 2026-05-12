@@ -1,0 +1,109 @@
+:root {
+  --retro-bg: #bfc4bf;
+  --retro-panel: #d6d8d3;
+  --retro-panel-light: #f1f3ee;
+  --retro-panel-dark: #8b908b;
+  --retro-border: #111813;
+  --retro-primary: #003b46;
+  --retro-primary-light: #2c6a72;
+  --retro-screen: #101812;
+  --retro-screen-text: #39ff88;
+  --retro-screen-muted: #d9fff4;
+  --retro-warning: #b97900;
+  --retro-danger: #9b1c1c;
+  --retro-ok: #126b3f;
+  --retro-text: #101812;
+  --retro-muted: #4b554d;
+  --retro-radius: 2px;
+  --retro-font: "Courier New", Consolas, "Liberation Mono", monospace;
+  --retro-ui-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  background: var(--retro-bg);
+  color: var(--retro-text);
+  font-family: var(--retro-ui-font);
+}
+
+.retro-panel,
+.ant-card,
+.content-wrapper,
+.config-overview {
+  background: var(--retro-panel);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
+}
+
+.retro-screen {
+  background: var(--retro-screen);
+  border: 2px solid #000;
+  color: var(--retro-screen-text);
+  font-family: var(--retro-font);
+}
+
+.retro-status-light {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--retro-font);
+}
+
+.retro-status-light::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background: var(--retro-screen-text);
+  border: 1px solid #022b13;
+  box-shadow: 0 0 8px rgba(57, 255, 136, 0.75);
+}
+
+.ant-btn {
+  border-radius: var(--retro-radius);
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+  font-weight: 700;
+}
+
+.ant-btn-primary {
+  background: var(--retro-primary);
+  border-color: var(--retro-border);
+  color: var(--retro-screen-muted);
+}
+
+.ant-btn-primary:hover {
+  background: var(--retro-primary-light) !important;
+  border-color: var(--retro-border) !important;
+}
+
+.ant-table-wrapper,
+.ant-table {
+  border-radius: var(--retro-radius);
+}
+
+.ant-table-thead > tr > th {
+  background: var(--retro-primary) !important;
+  color: var(--retro-screen-muted) !important;
+  font-family: var(--retro-font);
+}
+
+.ant-tag {
+  border-radius: var(--retro-radius);
+  font-family: var(--retro-font);
+  font-weight: 700;
+}
+
+@media (max-width: 768px) {
+  .ant-table-wrapper {
+    overflow-x: auto;
+  }
+
+  .ant-modal {
+    max-width: calc(100vw - 24px);
+  }
+
+  .ant-card,
+  .content-wrapper,
+  .config-overview {
+    box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+  }
+}

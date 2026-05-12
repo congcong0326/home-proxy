@@ -159,7 +159,36 @@ const AppContent: React.FC = () => {
 function App() {
   return (
     <Provider store={store}>
-      <ConfigProvider locale={zhCN}>
+      <ConfigProvider
+        locale={zhCN}
+        theme={{
+          token: {
+            colorPrimary: '#003b46',
+            colorSuccess: '#126b3f',
+            colorWarning: '#b97900',
+            colorError: '#9b1c1c',
+            colorText: '#101812',
+            colorBgLayout: '#bfc4bf',
+            colorBgContainer: '#d6d8d3',
+            borderRadius: 2,
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
+          },
+          components: {
+            Layout: {
+              bodyBg: '#bfc4bf',
+              headerBg: '#d6d8d3',
+              siderBg: '#d6d8d3',
+            },
+            Menu: {
+              darkItemBg: '#d6d8d3',
+              darkSubMenuItemBg: '#c8cbc6',
+              darkItemColor: '#101812',
+              darkItemSelectedBg: '#003b46',
+              darkItemSelectedColor: '#d9fff4',
+            },
+          },
+        }}
+      >
         <AppContent />
       </ConfigProvider>
     </Provider>
