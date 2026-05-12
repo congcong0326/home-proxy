@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { store } from '../store';
@@ -48,4 +48,18 @@ test('shows data backup under the system operations menu', async () => {
 
   expect(screen.getAllByText('数据备份')).toHaveLength(2);
   expect(screen.getByText('Backup Page')).toBeInTheDocument();
+});
+
+test('opens mobile navigation drawer from the header menu button', async () => {
+  Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 500 });
+  window.dispatchEvent(new Event('resize'));
+
+  renderProxyConfig('/config');
+
+  const menuButton = await screen.findByRole('button', { name: /打开导航|收起导航|展开导航/ });
+  fireEvent.click(menuButton);
+
+  await waitFor(() => expect(screen.getByText('NETWORK ADMIN MENU')).toBeInTheDocument());
+  expect(screen.getAllByText('WOL唤醒页面').length).toBeGreaterThan(0);
+  expect(screen.getAllByText('路由规则').length).toBeGreaterThan(0);
 });

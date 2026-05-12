@@ -11,7 +11,9 @@ import {
   Avatar,
   Dropdown,
   Space,
-  Divider
+  Divider,
+  Drawer,
+  Grid
 } from 'antd';
 import {
   UserOutlined,
@@ -42,10 +44,13 @@ const { Title, Text } = Typography;
 
 const ProxyConfig: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+  const screens = Grid.useBreakpoint();
+  const isMobile = screens.md === false || (typeof window !== 'undefined' && window.innerWidth <= 768);
 
   // 菜单项配置 - 手风琴式结构
   const menuItems = [
@@ -131,6 +136,21 @@ const ProxyConfig: React.FC = () => {
     navigate(key);
   };
 
+  const renderMenu = () => (
+    <Menu
+      theme="dark"
+      mode="inline"
+      selectedKeys={[location.pathname]}
+      defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview']}
+      className="proxy-config-menu"
+      items={menuItems}
+      onClick={({ key }) => {
+        handleMenuClick(key);
+        setMobileMenuOpen(false);
+      }}
+    />
+  );
+
   // 处理用户下拉菜单点击
   const handleUserMenuClick = async ({ key }: { key: string }) => {
     switch (key) {
@@ -215,16 +235,28 @@ const ProxyConfig: React.FC = () => {
           )}
         </div>
         
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview']}
-          className="proxy-config-menu"
-          items={menuItems}
-          onClick={({ key }) => handleMenuClick(key)}
-        />
+        {renderMenu()}
       </Sider>
+
+      <Drawer
+        title="NETWORK ADMIN MENU"
+        placement="left"
+        open={mobileMenuOpen}
+        onClose={() => setMobileMenuOpen(false)}
+        className="retro-nav-drawer"
+        width={300}
+      >
+        <div className="proxy-config-logo mobile">
+          <div className="logo-icon">
+            <GlobalOutlined />
+          </div>
+          <div className="logo-text">
+            <Title level={4} className="logo-title">NAS代理</Title>
+            <Text className="logo-subtitle">Retro NOC Console</Text>
+          </div>
+        </div>
+        {renderMenu()}
+      </Drawer>
 
       {/* 主内容区域 */}
       <Layout className="proxy-config-main">
@@ -233,8 +265,15 @@ const ProxyConfig: React.FC = () => {
           <div className="header-left">
             <Button
               type="text"
+              aria-label={isMobile ? '打开导航' : collapsed ? '展开导航' : '收起导航'}
               icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-              onClick={() => setCollapsed(!collapsed)}
+              onClick={() => {
+                if (isMobile) {
+                  setMobileMenuOpen(true);
+                  return;
+                }
+                setCollapsed(!collapsed);
+              }}
               className="collapse-btn"
             />
             

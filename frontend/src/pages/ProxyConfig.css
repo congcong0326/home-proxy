@@ -1,14 +1,16 @@
 /* 代理配置页面样式 */
 .proxy-config-layout {
   min-height: 100vh;
-  background: #f0f2f5;
+  background: var(--retro-bg);
 }
 
 /* 侧边栏样式 */
 .proxy-config-sider {
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  background: var(--retro-panel) !important;
+  border-right: 2px solid var(--retro-border);
+  box-shadow: inset 2px 2px 0 #ffffff, inset -2px -2px 0 var(--retro-panel-dark);
   z-index: 100;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
 }
 
 .proxy-config-sider .ant-layout-sider-children {
@@ -21,89 +23,87 @@
 .proxy-config-logo {
   display: flex;
   align-items: center;
-  padding: 24px 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: 12px;
+  margin: 10px;
+  padding: 14px 12px;
+  background: var(--retro-primary);
+  border: 2px solid var(--retro-border);
+  box-shadow: inset 1px 1px 0 var(--retro-primary-light);
+}
+
+.proxy-config-logo.mobile {
+  margin: 0 0 12px;
 }
 
 .logo-icon {
-  font-size: 32px;
-  color: #1890ff;
-  margin-right: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 30px;
+  color: var(--retro-screen-muted);
 }
 
 .logo-text {
   flex: 1;
-  opacity: 1;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
 }
 
 .logo-title {
-  color: #fff !important;
+  color: var(--retro-screen-muted) !important;
   margin: 0 !important;
-  font-size: 18px;
-  font-weight: 600;
+  font-family: var(--retro-font);
+  font-size: 16px;
+  font-weight: 700;
   line-height: 1.2;
 }
 
 .logo-subtitle {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  color: var(--retro-screen-text);
+  font-family: var(--retro-font);
+  font-size: 11px;
   display: block;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* 菜单样式 */
 .proxy-config-menu {
   flex: 1;
   border-right: none;
-  background: transparent;
-  padding: 16px 0;
+  background: transparent !important;
+  padding: 8px 0;
 }
 
-.proxy-config-menu .ant-menu-item {
+.proxy-config-menu .ant-menu-item,
+.proxy-config-menu .ant-menu-submenu-title {
   margin: 4px 8px;
-  border-radius: 8px;
-  height: 48px;
-  line-height: 48px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
+  border-radius: var(--retro-radius);
+  height: 38px;
+  line-height: 38px;
+  color: var(--retro-text) !important;
+  font-family: var(--retro-font);
+  font-size: 12px;
+  font-weight: 700;
+  transition: none;
 }
 
 .proxy-config-menu .ant-menu-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(24, 144, 255, 0.1), rgba(24, 144, 255, 0.05));
-  opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: none;
 }
 
-.proxy-config-menu .ant-menu-item:hover::before {
-  opacity: 1;
+.proxy-config-menu .ant-menu-submenu-arrow,
+.proxy-config-menu .ant-menu-item .anticon,
+.proxy-config-menu .ant-menu-submenu-title .anticon {
+  color: inherit !important;
 }
 
 .proxy-config-menu .ant-menu-item-selected {
-  background: linear-gradient(135deg, #1890ff, #40a9ff) !important;
-  color: #fff !important;
-  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
-  transform: translateX(4px);
+  background: var(--retro-primary) !important;
+  color: var(--retro-screen-muted) !important;
+  box-shadow: inset 1px 1px 0 var(--retro-primary-light);
+  transform: none;
 }
 
-.proxy-config-menu .ant-menu-item-selected .anticon {
-  color: #fff;
-}
-
-.proxy-config-menu .ant-menu-item .anticon {
-  font-size: 16px;
-  margin-right: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+.proxy-config-menu .ant-menu-item:hover,
+.proxy-config-menu .ant-menu-submenu-title:hover {
+  background: var(--retro-panel-light) !important;
+  color: var(--retro-primary) !important;
 }
 
 /* 主内容区域 */
@@ -115,179 +115,182 @@
 
 /* 头部样式 */
 .proxy-config-header {
-  background: #fff;
-  padding: 0 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  height: 56px;
+  background: var(--retro-panel);
+  border-bottom: 2px solid var(--retro-border);
+  box-shadow: inset 0 1px 0 #ffffff;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  padding: 0 18px;
   z-index: 10;
   position: relative;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
+.proxy-config-header::before {
+  content: "HOME-PROXY NETWORK ADMIN";
+  color: var(--retro-primary);
+  font-family: var(--retro-font);
+  font-size: 12px;
+  font-weight: 700;
+  margin-right: 12px;
+  white-space: nowrap;
 }
 
-.collapse-btn {
-  font-size: 18px;
-  color: #666;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.collapse-btn:hover {
-  color: #1890ff;
-  background: rgba(24, 144, 255, 0.1);
-}
-
-.header-breadcrumb {
-  font-size: 14px;
-}
-
-.header-breadcrumb .ant-breadcrumb-link {
-  color: #666;
-  transition: color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.header-breadcrumb .ant-breadcrumb-link:hover {
-  color: #1890ff;
-}
-
+.header-left,
 .header-right {
   display: flex;
   align-items: center;
 }
 
+.header-left {
+  gap: 12px;
+  min-width: 0;
+}
+
+.collapse-btn {
+  color: var(--retro-text);
+  border: 2px solid var(--retro-border);
+  border-radius: var(--retro-radius);
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+}
+
+.collapse-btn:hover {
+  color: var(--retro-screen-muted) !important;
+  background: var(--retro-primary) !important;
+}
+
+.header-breadcrumb {
+  font-size: 13px;
+  font-family: var(--retro-font);
+}
+
+.header-breadcrumb .ant-breadcrumb-link,
 .welcome-text {
-  color: #666;
-  font-size: 14px;
+  color: var(--retro-muted);
 }
 
 .user-btn {
-  height: 40px;
-  border-radius: 20px;
-  padding: 0 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  height: 36px;
+  border-radius: var(--retro-radius);
+  padding: 0 12px;
+  font-family: var(--retro-font);
 }
 
 .user-btn:hover {
-  background: rgba(24, 144, 255, 0.1);
-  color: #1890ff;
+  background: var(--retro-panel-light) !important;
+  color: var(--retro-primary) !important;
 }
 
 /* 内容区域 */
 .proxy-config-content {
   flex: 1;
-  padding: 24px;
-  background: #f0f2f5;
+  padding: 18px;
+  background: var(--retro-bg);
   overflow-y: auto;
 }
 
 .content-wrapper {
   width: 100%;
   margin: 0;
-  min-height: calc(100vh - 112px);
+  min-height: calc(100vh - 92px);
   padding: 0;
 }
 
 /* 配置概览样式 */
 .config-overview {
-  background: #fff;
-  border-radius: 12px;
-  padding: 32px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  animation: fadeInUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 24px;
+  animation: fadeInUp 0.25s ease;
 }
 
 .overview-title {
-  color: #262626 !important;
+  color: var(--retro-primary) !important;
   margin-bottom: 8px !important;
-  font-weight: 600;
+  font-family: var(--retro-font);
+  font-weight: 700;
   text-align: center;
 }
 
 .overview-description {
-  color: #8c8c8c;
-  font-size: 16px;
+  color: var(--retro-muted);
+  font-size: 15px;
   text-align: center;
   display: block;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .config-cards {
-  margin-top: 32px;
+  margin-top: 24px;
 }
 
 .config-card {
-  border-radius: 12px;
-  border: 1px solid #f0f0f0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: var(--retro-radius);
+  border: 2px solid var(--retro-border);
   overflow: hidden;
   position: relative;
 }
 
 .config-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(24, 144, 255, 0.05), rgba(24, 144, 255, 0.02));
-  opacity: 0;
-  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: none;
 }
 
 .config-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  border-color: #1890ff;
-}
-
-.config-card:hover::before {
-  opacity: 1;
+  transform: none;
+  border-color: var(--retro-primary);
 }
 
 .card-content {
   text-align: center;
-  padding: 24px 16px;
+  padding: 22px 14px;
   position: relative;
   z-index: 1;
 }
 
 .card-icon {
-  font-size: 48px;
-  color: #1890ff;
-  margin-bottom: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 40px;
+  color: var(--retro-primary);
+  margin-bottom: 14px;
 }
 
 .config-card:hover .card-icon {
-  transform: scale(1.1);
-  color: #40a9ff;
+  transform: none;
+  color: var(--retro-primary-light);
 }
 
 .card-title {
-  color: #262626 !important;
+  color: var(--retro-text) !important;
   margin-bottom: 8px !important;
-  font-weight: 600;
-  font-size: 18px;
+  font-family: var(--retro-font);
+  font-weight: 700;
+  font-size: 16px;
 }
 
 .card-description {
-  color: #8c8c8c;
-  font-size: 14px;
+  color: var(--retro-muted);
+  font-size: 13px;
   line-height: 1.5;
+}
+
+.retro-nav-drawer .ant-drawer-header,
+.retro-nav-drawer .ant-drawer-body {
+  background: var(--retro-panel);
+  border-color: var(--retro-border);
+}
+
+.retro-nav-drawer .ant-drawer-title {
+  font-family: var(--retro-font);
+  color: var(--retro-primary);
+}
+
+.retro-nav-drawer .ant-drawer-close {
+  color: var(--retro-text);
 }
 
 /* 动画效果 */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(30px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -295,114 +298,67 @@
   }
 }
 
-@keyframes slideInLeft {
-  from {
-    opacity: 0;
-    transform: translateX(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-
 /* 响应式设计 */
 @media (max-width: 768px) {
-  .proxy-config-header {
-    padding: 0 16px;
+  .proxy-config-sider {
+    display: none;
   }
-  
+
+  .proxy-config-header {
+    padding: 0 10px;
+  }
+
+  .proxy-config-header::before,
+  .welcome-text,
+  .header-breadcrumb {
+    display: none;
+  }
+
   .header-left {
     gap: 8px;
   }
-  
-  .welcome-text {
-    display: none;
-  }
-  
+
   .proxy-config-content {
+    padding: 10px;
+  }
+
+  .content-wrapper {
+    min-height: calc(100vh - 76px);
+  }
+
+  .config-overview {
     padding: 16px;
   }
-  
-  .config-overview {
-    padding: 24px 16px;
-  }
-  
+
   .overview-title {
-    font-size: 24px !important;
+    font-size: 22px !important;
   }
-  
+
   .overview-description {
-    font-size: 14px;
-  }
-  
-  .card-content {
-    padding: 20px 12px;
-  }
-  
-  .card-icon {
-    font-size: 36px;
-    margin-bottom: 12px;
-  }
-  
-  .card-title {
-    font-size: 16px !important;
-  }
-  
-  .card-description {
     font-size: 13px;
+  }
+
+  .card-content {
+    padding: 18px 12px;
+  }
+
+  .card-icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+  }
+
+  .card-title {
+    font-size: 15px !important;
+  }
+
+  .card-description {
+    font-size: 12px;
   }
 }
 
 @media (max-width: 576px) {
-  .proxy-config-sider {
-    position: fixed;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    z-index: 1000;
-  }
-  
-  .proxy-config-main {
-    margin-left: 0;
-  }
-  
   .config-cards .ant-col {
-    margin-bottom: 16px;
-  }
-  
-  .header-breadcrumb {
-    display: none;
-  }
-}
-
-/* 暗色主题适配 */
-@media (prefers-color-scheme: dark) {
-  .proxy-config-layout {
-    background: #141414;
-  }
-  
-  .proxy-config-header {
-    background: #1f1f1f;
-    border-bottom: 1px solid #303030;
-  }
-  
-  .proxy-config-content {
-    background: #141414;
-  }
-  
-  .config-overview {
-    background: #1f1f1f;
-    border: 1px solid #303030;
-  }
-  
-  .config-card {
-    background: #1f1f1f;
-    border-color: #303030;
-  }
-  
-  .config-card:hover {
-    border-color: #1890ff;
+    margin-bottom: 12px;
   }
 }
 
@@ -420,12 +376,12 @@
 
 .loading-spinner {
   font-size: 32px;
-  color: #1890ff;
+  color: var(--retro-primary);
   margin-bottom: 16px;
 }
 
 .loading-text {
-  color: #8c8c8c;
+  color: var(--retro-muted);
   font-size: 14px;
 }
 
@@ -440,18 +396,18 @@
 
 .error-icon {
   font-size: 64px;
-  color: #ff4d4f;
+  color: var(--retro-danger);
   margin-bottom: 16px;
 }
 
 .error-title {
-  color: #262626 !important;
+  color: var(--retro-text) !important;
   margin-bottom: 8px !important;
   font-size: 20px;
 }
 
 .error-description {
-  color: #8c8c8c;
+  color: var(--retro-muted);
   font-size: 14px;
   text-align: center;
   margin-bottom: 24px;
