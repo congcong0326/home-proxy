@@ -1,4 +1,3 @@
-css
 /* Dashboard 主容器 */
 .dashboard {
   padding: 24px;
@@ -202,6 +201,96 @@ css
   .trend-chart-container {
     height: 320px;
     max-height: 50vh;
+  }
+}
+
+.mobile-status-panel {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .dashboard-desktop {
+    display: none;
+  }
+
+  .mobile-status-panel {
+    display: block;
+    padding: 10px;
+  }
+
+  .mobile-status-hero {
+    padding: 12px;
+    margin-bottom: 10px;
+    line-height: 1.6;
+  }
+
+  .mobile-status-title {
+    color: var(--retro-screen-muted);
+    font-family: var(--retro-font);
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .mobile-status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-status-card,
+  .mobile-shortcut,
+  .mobile-wol-action {
+    background: var(--retro-panel);
+    border: 2px solid var(--retro-border);
+    box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 var(--retro-panel-dark);
+    color: var(--retro-text);
+    text-decoration: none;
+  }
+
+  .mobile-status-card {
+    min-height: 70px;
+    padding: 9px;
+  }
+
+  .mobile-status-card span {
+    display: block;
+    color: var(--retro-muted);
+    font-family: var(--retro-font);
+    font-size: 11px;
+  }
+
+  .mobile-status-card strong {
+    display: block;
+    margin-top: 10px;
+    font-size: 18px;
+  }
+
+  .mobile-wol-action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 46px;
+    margin: 10px 0;
+    background: var(--retro-primary);
+    color: var(--retro-screen-muted);
+    font-family: var(--retro-font);
+    font-weight: 700;
+  }
+
+  .mobile-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-shortcut {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--retro-font);
+    font-size: 12px;
+    font-weight: 700;
   }
 }
 
