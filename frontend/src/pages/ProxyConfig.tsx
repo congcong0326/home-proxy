@@ -21,7 +21,6 @@ import {
   GlobalOutlined,
   NodeIndexOutlined,
   BranchesOutlined,
-  ThunderboltOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   AreaChartOutlined,
@@ -94,11 +93,6 @@ const ProxyConfig: React.FC = () => {
           icon: <BranchesOutlined />,
           label: '路由规则',
         },
-        {
-          key: '/config/ratelimit',
-          icon: <ThunderboltOutlined />,
-          label: '限流设置',
-        },
       ],
     },
     {
@@ -108,7 +102,6 @@ const ProxyConfig: React.FC = () => {
       children: [
         { key: '/config/overview/log-audit', icon: <LogoutOutlined />, label: '日志审计' },
         { key: '/config/overview/aggregate', icon: <AreaChartOutlined />, label: '聚合分析' },
-        { key: '/config/overview/geo', icon: <GlobalOutlined />, label: '地理位置分布' },
       ],
     },
   ];
@@ -307,14 +300,10 @@ const getCardDescription = (key: string): string => {
       return '配置入站监听与协议';
     case '/config/routing':
       return '设置路由规则与流量分发策略';
-    case '/config/ratelimit':
-      return '设置全局或指定用户的带宽与流量限制，支持时间/日期范围';
     case '/config/overview/log-audit':
       return '查看访问日志，支持查询、过滤与详情';
     case '/config/overview/aggregate':
       return '综合用户与应用TopN聚合分析';
-    case '/config/overview/geo':
-      return '访问来源地理分布与热点';
     case '/config/dashboard/mail-gateway':
       return 'SMTP网关、bizKey目标配置与发送日志';
     default:

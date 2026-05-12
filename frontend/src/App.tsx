@@ -14,7 +14,6 @@ import ProxyConfig from './pages/ProxyConfig';
 import UserManagement from './pages/UserManagement';
 import RouteManagement from './pages/RouteManagement';
 import './App.css';
-import RateLimitManagement from './pages/RateLimitManagement';
 import InboundManagement from './pages/InboundManagement';
 import LogAudit from './pages/LogAudit';
 import AggregatedAnalysis from './pages/AggregatedAnalysis';
@@ -105,26 +104,7 @@ const AppContent: React.FC = () => {
         />
         
 
-        
-        {/* 受保护的代理配置页面 */}
-        <Route 
-          path="/config" 
-          element={
-            <ProtectedRoute>
-              <ProxyConfig />
-            </ProtectedRoute>
-          }
-        >
-          {/* 用户管理子页面 */}
-          <Route path="users" element={<UserManagement />} />
-          {/* 路由管理子页面 */}
-          <Route path="routing" element={<RouteManagement />} />
-          {/* 其他配置子页面占位符 */}
-          <Route path="inbound" element={<InboundManagement />} />
-          <Route path="ratelimit" element={<RateLimitManagement />} />
-        </Route>
-
-        {/* 访问概览子页面嵌入到代理配置下，统一左侧栏 */}
+        {/* 代理配置与管理台子页面 */}
         <Route 
           path="/config"
           element={
@@ -137,11 +117,9 @@ const AppContent: React.FC = () => {
           <Route path="users" element={<UserManagement />} />
           <Route path="routing" element={<RouteManagement />} />
           <Route path="inbound" element={<InboundManagement />} />
-          <Route path="ratelimit" element={<RateLimitManagement />} />
           {/* 访问概览嵌套路由 */}
           <Route path="overview/log-audit" element={<LogAudit />} />
           <Route path="overview/aggregate" element={<AggregatedAnalysis />} />
-          <Route path="overview/geo" element={<div style={{ padding: 24 }}>地理位置分布 - 待实现</div>} />
           {/* Dashboard路由 */}
           <Route path="dashboard" element={<Dashboard />} />
           {/* Dashboard子页面路由 */}
