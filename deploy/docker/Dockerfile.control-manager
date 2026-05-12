@@ -2,6 +2,10 @@ FROM eclipse-temurin:17-jre-jammy
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend/control-manager/target/control-manager-*.jar /app/control-manager.jar
 
 ENV JAVA_OPTS=""

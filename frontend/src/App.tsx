@@ -24,6 +24,7 @@ import TrafficOverview from './pages/TrafficOverview';
 import WolManagement from './pages/WolManagement';
 import DiskMonitor from './pages/DiskMonitor';
 import MailGateway from './pages/MailGateway';
+import DatabaseBackup from './pages/DatabaseBackup';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -129,8 +130,11 @@ const AppContent: React.FC = () => {
           {/* Dashboard子页面路由 */}
           <Route path="dashboard/traffic" element={<TrafficOverview />} />
           <Route path="dashboard/wol" element={<WolManagement />} />
-          <Route path="dashboard/disk" element={<DiskMonitor />} />
+          <Route path="dashboard/disk" element={<Navigate to="/config/system-ops/disk" replace />} />
           <Route path="dashboard/mail-gateway" element={<MailGateway />} />
+          {/* 系统运维路由 */}
+          <Route path="system-ops/disk" element={<DiskMonitor />} />
+          <Route path="system-ops/backup" element={<DatabaseBackup />} />
         </Route>
         
         {/* 默认路由重定向 */}

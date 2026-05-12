@@ -77,6 +77,7 @@ import {
   MailSendLogQuery
 } from '../types/mail';
 import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
+import { MysqlRestoreResponse } from '../types/backup';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -135,10 +136,11 @@ class ApiService {
 
   private async executeRequest<T>(url: string, endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = localStorage.getItem('token');
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
     const config: RequestInit = {
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
@@ -177,6 +179,34 @@ class ApiService {
   ): Promise<T> {
     const url = endpoint; // 直接使用endpoint，不添加baseURL前缀
     return this.executeRequest<T>(url, endpoint, options);
+  }
+
+  private async download(endpoint: string): Promise<void> {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${this.baseURL}${endpoint}`, {
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+
+    if (!response.ok) {
+      const errorMessage = await this.getErrorMessage(response);
+      this.handleUnauthorized(response.status, endpoint);
+      throw new Error(errorMessage);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+    const filename = filenameMatch?.[1] || 'home-proxy-mysql-backup.sql.gz';
+    const objectUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(objectUrl);
   }
 
   // 登录
@@ -981,6 +1011,22 @@ class ApiService {
   async deleteScheduledTask(id: number): Promise<void> {
     return this.request<void>(`/scheduler/tasks/${id}`, {
       method: 'DELETE'
+    });
+  }
+
+  // ========== 系统运维：MySQL备份恢复 ==========
+  async exportMysqlBackup(): Promise<void> {
+    return this.download('/system-ops/mysql-backup/export');
+  }
+
+  async restoreMysqlBackup(file: File, confirmationPhrase: string): Promise<MysqlRestoreResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('confirmationPhrase', confirmationPhrase);
+
+    return this.request<MysqlRestoreResponse>('/system-ops/mysql-backup/restore', {
+      method: 'POST',
+      body: formData
     });
   }
 }

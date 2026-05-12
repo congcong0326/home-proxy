@@ -28,7 +28,9 @@ import {
   AreaChartOutlined,
   DashboardOutlined,
   HddOutlined,
-  MailOutlined
+  MailOutlined,
+  ToolOutlined,
+  CloudDownloadOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -64,14 +66,26 @@ const ProxyConfig: React.FC = () => {
           label: 'WOL唤醒页面',
         },
         {
-          key: '/config/dashboard/disk',
+          key: '/config/dashboard/mail-gateway',
+          icon: <MailOutlined />,
+          label: '邮件网关',
+        },
+      ],
+    },
+    {
+      key: 'system-ops',
+      icon: <ToolOutlined />,
+      label: '系统运维',
+      children: [
+        {
+          key: '/config/system-ops/disk',
           icon: <HddOutlined />,
           label: '磁盘监控',
         },
         {
-          key: '/config/dashboard/mail-gateway',
-          icon: <MailOutlined />,
-          label: '邮件网关',
+          key: '/config/system-ops/backup',
+          icon: <CloudDownloadOutlined />,
+          label: '数据备份',
         },
       ],
     },
@@ -211,7 +225,7 @@ const ProxyConfig: React.FC = () => {
           theme="dark"
           mode="inline"
           selectedKeys={[location.pathname]}
-          defaultOpenKeys={['dashboard', 'proxy-config', 'access-overview']}
+          defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview']}
           className="proxy-config-menu"
           items={menuItems}
           onClick={({ key }) => handleMenuClick(key)}
@@ -322,6 +336,10 @@ const getCardDescription = (key: string): string => {
       return '综合用户与应用TopN聚合分析';
     case '/config/dashboard/mail-gateway':
       return 'SMTP网关、bizKey目标配置与发送日志';
+    case '/config/system-ops/disk':
+      return '查看宿主机磁盘健康状态、温度与读写曲线';
+    case '/config/system-ops/backup':
+      return '导出和恢复控制端 MySQL 数据';
     default:
       return '配置项说明';
   }
