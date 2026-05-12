@@ -1,4 +1,12 @@
-import { LoginRequest, LoginResponse, ChangePasswordRequest, UserResponse, ApiResponse } from '../types/auth';
+import {
+  LoginRequest,
+  LoginResponse,
+  ChangePasswordRequest,
+  UserResponse,
+  ApiResponse,
+  SetupStatusResponse,
+  SetupAdminRequest,
+} from '../types/auth';
 import {
   UserDTO,
   CreateUserRequest,
@@ -138,6 +146,19 @@ class ApiService {
   // 登录
   async login(data: LoginRequest): Promise<LoginResponse> {
     return this.adminRequest<LoginResponse>('/admin/login', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // 获取初始化状态
+  async getSetupStatus(): Promise<SetupStatusResponse> {
+    return this.adminRequest<SetupStatusResponse>('/admin/setup-status');
+  }
+
+  // 创建首个管理员
+  async setupAdmin(data: SetupAdminRequest): Promise<LoginResponse> {
+    return this.adminRequest<LoginResponse>('/admin/setup', {
       method: 'POST',
       body: JSON.stringify(data),
     });

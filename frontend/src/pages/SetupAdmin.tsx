@@ -1,52 +1,32 @@
 import React, { useEffect } from 'react';
 import { Form, Input, Button, Alert, Typography, Card } from 'antd';
-import { UserOutlined, LockOutlined, LoginOutlined } from '@ant-design/icons';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { UserOutlined, LockOutlined, UserAddOutlined, CheckOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../hooks/redux';
-import { loginAsync, clearError } from '../store/authSlice';
-import { LoginRequest } from '../types/auth';
+import { setupAdminAsync, clearError } from '../store/authSlice';
 import './Login.css';
 
 const { Title, Text } = Typography;
 
-const Login: React.FC = () => {
+const SetupAdmin: React.FC = () => {
   const [form] = Form.useForm();
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { loading, error, isAuthenticated } = useAppSelector((state) => state.auth);
+  const { loading, error } = useAppSelector((state) => state.auth);
 
-  // 获取重定向路径
-  const from = (location.state as any)?.from?.pathname || '/config/dashboard';
-
-  // 如果已经登录，重定向到目标页面
-  useEffect(() => {
-    if (isAuthenticated) {
-      navigate(from, { replace: true });
-    }
-  }, [isAuthenticated, navigate, from]);
-
-  // 清除错误信息
   useEffect(() => {
     return () => {
       dispatch(clearError());
     };
   }, [dispatch]);
 
-  // 处理登录提交
-  const handleSubmit = async (values: LoginRequest) => {
-    try {
-      const result = await dispatch(loginAsync(values));
-      if (loginAsync.fulfilled.match(result)) {
-        // 登录成功，检查是否需要修改密码
-        if (result.payload.mustChangePassword) {
-          navigate('/change-password', { replace: true });
-        } else {
-          navigate(from, { replace: true });
-        }
-      }
-    } catch (error) {
-      console.error('Login failed:', error);
+  const handleSubmit = async (values: { username: string; password: string; confirmPassword: string }) => {
+    const result = await dispatch(setupAdminAsync({
+      username: values.username,
+      password: values.password,
+    }));
+    if (setupAdminAsync.fulfilled.match(result)) {
+      navigate('/config/dashboard', { replace: true });
     }
   };
 
@@ -57,19 +37,19 @@ const Login: React.FC = () => {
           <Card className="login-card" variant="borderless">
             <div className="login-header">
               <div className="login-logo">
-                <LoginOutlined className="logo-icon" />
+                <UserAddOutlined className="logo-icon" />
               </div>
               <Title level={2} className="login-title">
-                NAS代理管理后台
+                创建管理员账号
               </Title>
               <Text type="secondary" className="login-subtitle">
-                请输入您的管理员账号和密码
+                设置管理后台的首个超级管理员
               </Text>
             </div>
 
             {error && (
               <Alert
-                message="登录失败"
+                message="初始化失败"
                 description={error}
                 type="error"
                 showIcon
@@ -81,7 +61,7 @@ const Login: React.FC = () => {
 
             <Form
               form={form}
-              name="login"
+              name="setupAdmin"
               onFinish={handleSubmit}
               autoComplete="off"
               size="large"
@@ -97,7 +77,7 @@ const Login: React.FC = () => {
               >
                 <Input
                   prefix={<UserOutlined />}
-                  placeholder="用户名"
+                  placeholder="管理员用户名"
                   autoComplete="username"
                 />
               </Form.Item>
@@ -111,8 +91,30 @@ const Login: React.FC = () => {
               >
                 <Input.Password
                   prefix={<LockOutlined />}
-                  placeholder="密码"
-                  autoComplete="current-password"
+                  placeholder="管理员密码"
+                  autoComplete="new-password"
+                />
+              </Form.Item>
+
+              <Form.Item
+                name="confirmPassword"
+                dependencies={['password']}
+                rules={[
+                  { required: true, message: '请确认密码' },
+                  ({ getFieldValue }) => ({
+                    validator(_, value) {
+                      if (!value || getFieldValue('password') === value) {
+                        return Promise.resolve();
+                      }
+                      return Promise.reject(new Error('两次输入的密码不一致'));
+                    },
+                  }),
+                ]}
+              >
+                <Input.Password
+                  prefix={<CheckOutlined />}
+                  placeholder="确认管理员密码"
+                  autoComplete="new-password"
                 />
               </Form.Item>
 
@@ -123,18 +125,12 @@ const Login: React.FC = () => {
                   loading={loading}
                   block
                   className="login-button"
-                  icon={<LoginOutlined />}
+                  icon={<UserAddOutlined />}
                 >
-                  {loading ? '登录中...' : '登录'}
+                  {loading ? '创建中...' : '创建并进入'}
                 </Button>
               </Form.Item>
             </Form>
-
-            <div className="login-footer">
-              <Text type="secondary" className="login-footer-text">
-                © 2024 NAS代理管理系统. 保留所有权利.
-              </Text>
-            </div>
           </Card>
         </div>
       </div>
@@ -142,4 +138,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login;
+export default SetupAdmin;

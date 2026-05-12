@@ -18,3 +18,7 @@
 
 ## License
 MIT
+
+## Docker
+
+Docker 部署命令与配置说明见 [docs/development/docker-deployment.md](docs/development/docker-deployment.md)。当前镜像策略是先运行 `make package` 生成产物，再用 Docker 运行 JAR。

@@ -64,7 +64,7 @@ const ChangePassword: React.FC = () => {
       const result = await dispatch(changePasswordAsync(passwordData));
       if (changePasswordAsync.fulfilled.match(result)) {
         // 修改密码成功，跳转到仪表板
-        navigate('/dashboard', { replace: true });
+        navigate('/config/dashboard', { replace: true });
       }
     } catch (error) {
       console.error('Change password failed:', error);

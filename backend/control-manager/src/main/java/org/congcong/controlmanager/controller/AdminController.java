@@ -9,6 +9,8 @@ import org.congcong.controlmanager.dto.DeleteAdminRequest;
 import org.congcong.controlmanager.dto.DisableAdminRequest;
 import org.congcong.controlmanager.dto.LoginRequest;
 import org.congcong.controlmanager.dto.LoginResponse;
+import org.congcong.controlmanager.dto.SetupAdminRequest;
+import org.congcong.controlmanager.dto.SetupStatusResponse;
 import org.congcong.controlmanager.dto.UserResponse;
 import org.congcong.controlmanager.entity.AdminUser;
 import org.congcong.controlmanager.service.AdminAuthService;
@@ -29,6 +31,16 @@ public class AdminController {
         String ip = request.getRemoteAddr();
         String ua = request.getHeader("User-Agent");
         return ResponseEntity.ok(authService.login(req, ip, ua));
+    }
+
+    @GetMapping("/setup-status")
+    public ResponseEntity<SetupStatusResponse> setupStatus() {
+        return ResponseEntity.ok(new SetupStatusResponse(authService.isSetupRequired()));
+    }
+
+    @PostMapping("/setup")
+    public ResponseEntity<LoginResponse> setup(@Valid @RequestBody SetupAdminRequest req) {
+        return ResponseEntity.ok(authService.setupFirstAdmin(req));
     }
 
     @PostMapping("/change-password")

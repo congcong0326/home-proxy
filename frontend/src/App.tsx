@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, Spin } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { store } from './store';
 import { useAppDispatch, useAppSelector } from './hooks/redux';
-import { getCurrentUserAsync } from './store/authSlice';
+import { getCurrentUserAsync, getSetupStatusAsync } from './store/authSlice';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
+import SetupAdmin from './pages/SetupAdmin';
 import ChangePassword from './pages/ChangePassword';
 import ProxyConfig from './pages/ProxyConfig';
 import UserManagement from './pages/UserManagement';
@@ -26,24 +27,58 @@ import MailGateway from './pages/MailGateway';
 // 应用主组件
 const AppContent: React.FC = () => {
   const dispatch = useAppDispatch();
-  const { isAuthenticated, user } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, user, token, setupChecked, setupLoading, setupRequired } = useAppSelector((state) => state.auth);
 
-  // 应用启动时检查认证状态
+  // 应用启动时检查是否需要初始化管理员
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token && !user) {
+    dispatch(getSetupStatusAsync());
+  }, [dispatch]);
+
+  // 初始化状态明确后再检查认证状态
+  useEffect(() => {
+    if (setupChecked && !setupRequired && token && !user) {
       dispatch(getCurrentUserAsync());
     }
-  }, [dispatch, user]);
+  }, [dispatch, setupChecked, setupRequired, token, user]);
+
+  if (!setupChecked || setupLoading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#f0f2f5'
+      }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   return (
     <Router>
       <Routes>
+        {/* 首次初始化页面 */}
+        <Route
+          path="/setup"
+          element={
+            setupRequired ? (
+              <SetupAdmin />
+            ) : isAuthenticated ? (
+              <Navigate to="/config/dashboard" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
         {/* 登录页面 */}
         <Route 
           path="/login" 
           element={
-            isAuthenticated ? (
+            setupRequired ? (
+              <Navigate to="/setup" replace />
+            ) : isAuthenticated ? (
               user?.mustChangePassword ? (
                 <Navigate to="/change-password" replace />
               ) : (
@@ -59,7 +94,9 @@ const AppContent: React.FC = () => {
         <Route 
           path="/change-password" 
           element={
-            isAuthenticated ? (
+            setupRequired ? (
+              <Navigate to="/setup" replace />
+            ) : isAuthenticated ? (
               <ChangePassword />
             ) : (
               <Navigate to="/login" replace />
@@ -118,7 +155,7 @@ const AppContent: React.FC = () => {
         <Route 
           path="/" 
           element={
-            <Navigate to={isAuthenticated ? "/config/dashboard" : "/login"} replace />
+            <Navigate to={setupRequired ? "/setup" : isAuthenticated ? "/config/dashboard" : "/login"} replace />
           } 
         />
         
@@ -126,7 +163,7 @@ const AppContent: React.FC = () => {
         <Route 
           path="*" 
           element={
-            <Navigate to={isAuthenticated ? "/config/dashboard" : "/login"} replace />
+            <Navigate to={setupRequired ? "/setup" : isAuthenticated ? "/config/dashboard" : "/login"} replace />
           } 
         />
       </Routes>

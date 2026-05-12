@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { AuthState, LoginRequest, ChangePasswordRequest, UserResponse } from '../types/auth';
+import { AuthState, LoginRequest, ChangePasswordRequest, UserResponse, SetupAdminRequest } from '../types/auth';
 import { apiService } from '../services/api';
 
 // 初始状态
@@ -8,8 +8,38 @@ const initialState: AuthState = {
   user: null,
   token: localStorage.getItem('token'),
   loading: false,
+  setupLoading: false,
+  setupChecked: false,
+  setupRequired: false,
   error: null,
 };
+
+// 异步操作：获取初始化状态
+export const getSetupStatusAsync = createAsyncThunk(
+  'auth/getSetupStatus',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiService.getSetupStatus();
+      return response;
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : '获取初始化状态失败');
+    }
+  }
+);
+
+// 异步操作：创建首个管理员
+export const setupAdminAsync = createAsyncThunk(
+  'auth/setupAdmin',
+  async (setupData: SetupAdminRequest, { rejectWithValue }) => {
+    try {
+      const response = await apiService.setupAdmin(setupData);
+      localStorage.setItem('token', response.token);
+      return response;
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : '初始化管理员失败');
+    }
+  }
+);
 
 // 异步操作：登录
 export const loginAsync = createAsyncThunk(
@@ -94,6 +124,44 @@ const authSlice = createSlice({
     },
   },
   extraReducers: (builder) => {
+    // 获取初始化状态
+    builder
+      .addCase(getSetupStatusAsync.pending, (state) => {
+        state.setupLoading = true;
+      })
+      .addCase(getSetupStatusAsync.fulfilled, (state, action) => {
+        state.setupLoading = false;
+        state.setupChecked = true;
+        state.setupRequired = action.payload.setupRequired;
+        state.error = null;
+      })
+      .addCase(getSetupStatusAsync.rejected, (state, action) => {
+        state.setupLoading = false;
+        state.setupChecked = true;
+        state.setupRequired = false;
+        state.error = action.payload as string;
+      });
+
+    // 创建首个管理员
+    builder
+      .addCase(setupAdminAsync.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(setupAdminAsync.fulfilled, (state, action) => {
+        state.loading = false;
+        state.isAuthenticated = true;
+        state.user = action.payload.user;
+        state.token = action.payload.token;
+        state.setupChecked = true;
+        state.setupRequired = false;
+        state.error = null;
+      })
+      .addCase(setupAdminAsync.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      });
+
     // 登录
     builder
       .addCase(loginAsync.pending, (state) => {

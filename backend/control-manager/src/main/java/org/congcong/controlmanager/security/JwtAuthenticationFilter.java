@@ -43,7 +43,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         // 跳过公开端点的JWT验证
-        if ("/admin/login".equals(path) || 
+        if ("/admin/login".equals(path) ||
+            "/admin/setup-status".equals(path) ||
+            "/admin/setup".equals(path) ||
             "/api/config/aggregate".equals(path) || 
             "/api/config/hash".equals(path) ||
                 "/api/logs/access".equals(path) ||
@@ -54,7 +56,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         
         // 跳过前端静态资源和路由页面的JWT验证
         if (path.equals("/") || 
-            path.equals("/login") || 
+            path.equals("/login") ||
+            path.equals("/setup") ||
             path.equals("/dashboard") || 
             path.equals("/users") || 
             path.equals("/routes") || 
@@ -62,7 +65,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             path.equals("/ratelimit") || 
             path.equals("/logs") || 
             path.equals("/analysis") || 
-            path.equals("/config") || 
+            path.equals("/config") ||
+            path.startsWith("/config/") ||
             path.equals("/change-password") ||
             path.startsWith("/static/") ||
             path.endsWith(".js") ||

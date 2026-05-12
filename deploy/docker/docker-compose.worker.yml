@@ -1,0 +1,22 @@
+name: home-proxy-worker
+
+services:
+  proxy-worker:
+    image: home-proxy-worker:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.proxy-worker
+    container_name: home-proxy-worker
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      CONTROL_MANAGER_URL: ${CONTROL_MANAGER_URL:-http://127.0.0.1:18081}
+      PROXY_WORKER_CONFIG: ${PROXY_WORKER_CONFIG:-}
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
+      TLS_KEY_PASSWORD: ${TLS_KEY_PASSWORD:-}
+    # Optional mounts:
+    # volumes:
+    #   - ../../config/proxy-worker.properties:/app/config/proxy-worker.properties:ro
+    #   - ../../backend/GeoLite2-City.mmdb:/app/GeoLite2-City.mmdb:ro
+    #   - /etc/nas-proxy/certs:/etc/nas-proxy/certs:ro

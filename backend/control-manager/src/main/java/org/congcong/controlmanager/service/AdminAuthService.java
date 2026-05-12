@@ -9,6 +9,7 @@ import org.congcong.controlmanager.dto.DeleteAdminRequest;
 import org.congcong.controlmanager.dto.DisableAdminRequest;
 import org.congcong.controlmanager.dto.LoginRequest;
 import org.congcong.controlmanager.dto.LoginResponse;
+import org.congcong.controlmanager.dto.SetupAdminRequest;
 import org.congcong.controlmanager.dto.UserResponse;
 import org.congcong.controlmanager.entity.AdminLoginHistory;
 import org.congcong.controlmanager.entity.AdminTokenBlacklist;
@@ -21,6 +22,7 @@ import org.congcong.controlmanager.security.JwtService;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -35,6 +37,33 @@ public class AdminAuthService {
     private final PasswordEncoder encoder;
     private final JwtService jwtService;
     private final AdminAuthProperties props;
+
+    public boolean isSetupRequired() {
+        return userRepo.count() == 0;
+    }
+
+    @Transactional
+    public synchronized LoginResponse setupFirstAdmin(SetupAdminRequest req) {
+        if (!isSetupRequired()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "admin already initialized");
+        }
+
+        AdminUser admin = new AdminUser();
+        admin.setUsername(req.getUsername());
+        admin.setPasswordHash(encoder.encode(req.getPassword()));
+        admin.setRoles(AdminRole.SUPER_ADMIN.getCode());
+        admin.setMustChangePassword(false);
+        admin.setVer(1);
+        admin.setStatus(1);
+        admin.setCreatedAt(LocalDateTime.now());
+        admin.setUpdatedAt(LocalDateTime.now());
+
+        AdminUser saved = userRepo.save(admin);
+        String token = jwtService.issue(saved);
+        long expiresIn = props.getJwt().getTtlDays() * 24L * 3600L;
+        UserResponse user = new UserResponse(saved.getId(), saved.getUsername(), roles(saved), saved.isMustChangePassword());
+        return new LoginResponse(token, false, expiresIn, user);
+    }
 
     public LoginResponse login(LoginRequest req, String ip, String ua) {
         AdminUser user = userRepo.findByUsername(req.getUsername()).orElse(null);
@@ -187,32 +216,6 @@ public class AdminAuthService {
         userRepo.delete(targetUser);
     }
     
-    /**
-     * 检查并创建默认管理员账号
-     * 在应用启动时调用，如果没有管理员账号则创建默认的admin账号
-     */
-    public void ensureDefaultAdminExists() {
-        // 检查是否已存在管理员账号
-        long adminCount = userRepo.count();
-        if (adminCount > 0) {
-            return; // 已有管理员，无需创建
-        }
-        
-        // 创建默认管理员账号
-        AdminUser defaultAdmin = new AdminUser();
-        defaultAdmin.setUsername("admin");
-        // 默认密码为 "admin123"，用户首次登录时必须修改
-        defaultAdmin.setPasswordHash(encoder.encode("admin123"));
-        defaultAdmin.setRoles(AdminRole.SUPER_ADMIN.getCode());
-        defaultAdmin.setMustChangePassword(true);
-        defaultAdmin.setVer(1);
-        defaultAdmin.setStatus(1);
-        defaultAdmin.setCreatedAt(LocalDateTime.now());
-        defaultAdmin.setUpdatedAt(LocalDateTime.now());
-        
-        userRepo.save(defaultAdmin);
-    }
-
     /**
      * 检查用户是否为超级管理员
      */

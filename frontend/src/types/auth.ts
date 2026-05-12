@@ -20,6 +20,17 @@ export interface LoginResponse {
   user: UserResponse;
 }
 
+// 初始化状态响应类型
+export interface SetupStatusResponse {
+  setupRequired: boolean;
+}
+
+// 首个管理员初始化请求类型
+export interface SetupAdminRequest {
+  username: string;
+  password: string;
+}
+
 // 修改密码请求类型
 export interface ChangePasswordRequest {
   oldPassword?: string;
@@ -39,5 +50,8 @@ export interface AuthState {
   user: UserResponse | null;
   token: string | null;
   loading: boolean;
+  setupLoading: boolean;
+  setupChecked: boolean;
+  setupRequired: boolean;
   error: string | null;
 }

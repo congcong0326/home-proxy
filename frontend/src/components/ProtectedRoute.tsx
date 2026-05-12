@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, loading, user } = useAppSelector((state) => state.auth);
+  const { isAuthenticated, loading, user, setupRequired } = useAppSelector((state) => state.auth);
   const location = useLocation();
 
   // 如果正在加载认证状态，显示加载指示器
@@ -21,9 +21,13 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
         height: '100vh',
         background: '#f0f2f5'
       }}>
-        <Spin size="large" tip="正在验证身份..." />
+        <Spin size="large" />
       </div>
     );
+  }
+
+  if (setupRequired) {
+    return <Navigate to="/setup" replace />;
   }
 
   // 如果未认证，重定向到登录页面

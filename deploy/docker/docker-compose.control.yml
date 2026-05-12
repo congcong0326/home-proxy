@@ -1,0 +1,77 @@
+name: home-proxy-control
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: home-proxy-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-tpproxy}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - home-proxy-db
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: home-proxy-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --host 127.0.0.1 --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - home-proxy-db
+
+  control-manager:
+    image: home-proxy-control-manager:latest
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.control-manager
+    container_name: home-proxy-control-manager
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-tpproxy}?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
+      CLICKHOUSE_URL: jdbc:ch://clickhouse:8123/${CLICKHOUSE_DB:-default}
+      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
+      LOGS_PERSISTENCE: ${LOGS_PERSISTENCE:-clickhouse}
+      ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
+    ports:
+      - "${CONTROL_HOST_PORT:-18081}:8081"
+    networks:
+      - home-proxy-db
+
+volumes:
+  mysql-data:
+  clickhouse-data:
+  clickhouse-logs:
+
+networks:
+  home-proxy-db:
+    name: home-proxy-db
