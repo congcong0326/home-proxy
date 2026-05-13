@@ -12,7 +12,6 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.util.*;
 
@@ -291,7 +290,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         try {
             if (s.matches("^\\d{13}$")) {
                 long ms = Long.parseLong(s);
-                return LocalDateTime.ofInstant(Instant.ofEpochMilli(ms), ZoneId.systemDefault());
+                return AccessLogTimeZone.toDisplayDateTime(Instant.ofEpochMilli(ms));
             }
             if (s.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
                 int y = Integer.parseInt(s.substring(0, 4));
@@ -303,23 +302,19 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
                 return LocalDateTime.parse(s, java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             } catch (DateTimeParseException ignored) {}
             Instant instant = Instant.parse(s);
-            return LocalDateTime.ofInstant(instant, ZoneId.systemDefault());
+            return AccessLogTimeZone.toDisplayDateTime(instant);
         } catch (DateTimeParseException | NumberFormatException ex) {
             return null;
         }
     }
 
     private Timestamp toTimestamp(LocalDateTime t) {
-        if (t == null) return Timestamp.from(Instant.now());
-        return Timestamp.valueOf(t);
+        return AccessLogTimeZone.toStorageTimestamp(t);
     }
 
     private LocalDateTime toLocalDateTime(Object o) {
-        if (o == null) return LocalDateTime.now();
-        if (o instanceof Timestamp) return ((Timestamp)o).toLocalDateTime();
-        if (o instanceof java.time.OffsetDateTime) return ((java.time.OffsetDateTime)o).toLocalDateTime();
-        if (o instanceof LocalDateTime) return (LocalDateTime)o;
-        return LocalDateTime.now();
+        LocalDateTime displayTime = AccessLogTimeZone.toDisplayDateTime(o);
+        return displayTime == null ? LocalDateTime.now(AccessLogTimeZone.DISPLAY_ZONE) : displayTime;
     }
 
     private String toStr(Object o) { return o == null ? null : String.valueOf(o); }
