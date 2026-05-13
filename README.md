@@ -197,7 +197,21 @@ CONTROL_MANAGER_URL=http://<控制面服务器IP>:18081 docker compose -f docker
 
 worker 使用 `network_mode: host`，控制面下发的代理入站端口会直接监听在宿主机上。新增端口前请确认宿主机防火墙已放行，并且没有其他进程占用同一端口。
 
-### 3. 常用运维命令
+### 3. 透明代理场景（可选）
+
+如果你希望把 NasProxy 放在软路由、小主机主路由或旁路由上，让 LAN 设备不用手动配置代理也能按规则分流，需要再配置透明代理。
+
+这类部署多做三件事：
+
+- 在控制面创建 `TP_PROXY` 入站，端口通常使用 `10808`，并发布给 worker。
+- worker 继续使用 `network_mode: host`，让透明代理入站直接监听宿主机网络。
+- 在宿主机上运行 `backend/tproxy_netty.sh`，用 `iptables TPROXY`、`ip rule` 和本地路由表把 LAN TCP 流量交给 worker。
+
+透明代理不是简单的端口转发，它依赖 Linux 的 TPROXY 和 Netty `IP_TRANSPARENT`。脚本里的 `LAN_CIDR`、`LAN_IF`、`WAN_IF`、`TPORT` 必须按你的网络实际情况修改；如果这台机器直接拿公网 IP，也请先处理 SSH、控制面和公网 SOCKS 的安全边界。
+
+完整说明见 [docs/development/transparent-proxy-deployment.md](docs/development/transparent-proxy-deployment.md)。
+
+### 4. 常用运维命令
 
 查看容器状态：
 
@@ -241,7 +255,7 @@ docker compose up -d
 
 这会删除 MySQL 和 ClickHouse 数据卷，配置、管理员账号和日志都会被清空。
 
-### 4. 可选配置
+### 5. 可选配置
 
 可以在部署目录创建 `.env` 覆盖默认配置：
 
@@ -286,7 +300,7 @@ environment:
   TLS_KEY_FILE: /etc/nas-proxy/certs/s-proxy-ca.key
 ```
 
-### 5. 从源码构建镜像
+### 6. 从源码构建镜像
 
 如果需要自己修改代码并构建镜像，请使用仓库根目录的 `Makefile`：
 
