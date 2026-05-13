@@ -23,7 +23,7 @@ wire_api = "responses"
 
 ## NasProxy 现在是什么
 
-<img width="1869" height="1951" alt="家庭nas网络拓扑 drawio" src="https://github.com/user-attachments/assets/e24d2582-0979-48b3-88dd-303c7f94fd0d" />
+<img width="1479" height="781" alt="家庭nas网络拓扑 drawio (1)" src="https://github.com/user-attachments/assets/ba2423d6-ee2f-41a9-af76-bea40ac01e24" />
 
 
 NasProxy 现在更像一个给家庭网络用的代理网关和控制台：管理端负责配置、看板和日志，worker 负责真正跑在网关机器上的转发。它既可以处理 HTTP/SOCKS/Shadowsocks 这类显式代理流量，也可以配合 DNS Server 和透明代理接管局域网里的访问请求，再按域名、地区、规则集或用户配置选择直连、阻断、目标重写或上游代理。
