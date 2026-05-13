@@ -46,7 +46,7 @@ docker pull congcong0326/home-proxy-worker:latest
 
 运行时会启动这些服务：
 
-- `control-manager`：控制面、管理页面和 API，默认访问端口 `18081`
+- `control-manager`：控制面、管理页面和 API，默认绑定 `127.0.0.1:18081`；局域网访问时绑定到宿主机内网 IP
 - `mysql`：控制面配置库，仅 Docker 内部网络可访问
 - `clickhouse`：访问日志和统计库，仅 Docker 内部网络可访问
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
@@ -129,7 +129,7 @@ services:
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     ports:
-      - "${CONTROL_HOST_PORT:-18081}:8081"
+      - "${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HOST_PORT:-18081}:8081"
     networks:
       - home-proxy-db
 
@@ -144,16 +144,31 @@ networks:
 YAML
 ```
 
+如果需要让同一局域网或 VPN 内的浏览器、worker 访问控制面，先创建 `.env` 并把 `CONTROL_BIND_ADDRESS` 设置为控制面宿主机的内网 IP：
+
+```bash
+cat > .env <<'EOF'
+CONTROL_BIND_ADDRESS=192.168.1.10
+CONTROL_HOST_PORT=18081
+EOF
+```
+
 启动：
 
 ```bash
 docker compose up -d
 ```
 
-启动完成后访问：
+启动完成后访问。只在本机操作时访问：
 
 ```text
-http://<服务器IP>:18081
+http://127.0.0.1:18081
+```
+
+局域网模式访问：
+
+```text
+http://<控制面内网IP>:18081
 ```
 
 第一次进入页面时按提示创建管理员账号。
@@ -189,10 +204,10 @@ YAML
 docker compose -f docker-compose.worker.yml up -d
 ```
 
-如果 worker 部署在另一台机器，把控制面地址改成控制面服务器 IP：
+如果 worker 部署在另一台机器，把控制面地址改成控制面服务器的内网 IP：
 
 ```bash
-CONTROL_MANAGER_URL=http://<控制面服务器IP>:18081 docker compose -f docker-compose.worker.yml up -d
+CONTROL_MANAGER_URL=http://<控制面内网IP>:18081 docker compose -f docker-compose.worker.yml up -d
 ```
 
 worker 使用 `network_mode: host`，控制面下发的代理入站端口会直接监听在宿主机上。新增端口前请确认宿主机防火墙已放行，并且没有其他进程占用同一端口。
@@ -261,6 +276,7 @@ docker compose up -d
 
 ```bash
 cat > .env <<'EOF'
+CONTROL_BIND_ADDRESS=192.168.1.10
 CONTROL_HOST_PORT=18081
 MYSQL_ROOT_PASSWORD=congcong
 CLICKHOUSE_PASSWORD=congcong
@@ -271,6 +287,7 @@ EOF
 常用变量：
 
 ```text
+CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 127.0.0.1；局域网访问填写宿主机内网 IP
 CONTROL_HOST_PORT              控制面宿主机端口，默认 18081
 MYSQL_ROOT_PASSWORD            MySQL root 密码，默认 congcong
 CLICKHOUSE_PASSWORD            ClickHouse 密码，默认 congcong
@@ -282,6 +299,8 @@ TLS_CERT_FILE                  worker TLS 证书路径
 TLS_KEY_FILE                   worker TLS 私钥路径
 TLS_KEY_PASSWORD               worker TLS 私钥密码，可为空
 ```
+
+即使绑定了内网 IP，生产环境也建议在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问 `CONTROL_HOST_PORT`。
 
 如需使用或覆盖 GeoIP 数据库，可以挂载本地 `GeoLite2-City.mmdb`：
 

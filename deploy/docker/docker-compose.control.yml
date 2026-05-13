@@ -67,7 +67,7 @@ services:
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     ports:
-      - "${CONTROL_HOST_PORT:-18081}:8081"
+      - "${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HOST_PORT:-18081}:8081"
     networks:
       - home-proxy-db
 

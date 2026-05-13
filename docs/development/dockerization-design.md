@@ -92,7 +92,7 @@ home-proxy-clickhouse
 
 - `home-proxy-db`：内部网络，只连接 `control-manager`、MySQL、ClickHouse。
 - 数据库服务不配置宿主机 `ports`，只通过 Compose service name 被控制面访问。
-- `control-manager` 暴露 HTTP/API 端口给浏览器和远程 `proxy-worker` 访问。
+- `control-manager` 暴露 HTTP/API 端口给浏览器和远程 `proxy-worker` 访问；默认只绑定本机回环地址，生产部署按需绑定宿主机内网 IP。
 
 数据库连接使用内部服务名：
 
@@ -104,6 +104,7 @@ CLICKHOUSE_URL=jdbc:ch://clickhouse:8123/default
 宿主机端口建议使用可配置变量，默认避开常见开发端口：
 
 ```text
+CONTROL_BIND_ADDRESS=127.0.0.1
 CONTROL_HOST_PORT=18081
 control-manager container port=8081
 ```
@@ -111,10 +112,10 @@ control-manager container port=8081
 远程 worker 访问时使用：
 
 ```text
-http://<control-manager-host-ip>:18081
+http://<control-manager-lan-ip>:18081
 ```
 
-如果只允许本机浏览器访问，可以将端口绑定到 `127.0.0.1`。如果远程 worker 需要访问，则必须绑定到可访问网卡，并通过防火墙限制来源 IP。
+如果只允许本机浏览器访问，保持 `CONTROL_BIND_ADDRESS=127.0.0.1`。如果同一 LAN/VPN 内的浏览器或远程 worker 需要访问，则设置为宿主机内网 IP，并通过防火墙限制来源网段。
 
 ## Worker Deployment Design
 
@@ -123,14 +124,14 @@ http://<control-manager-host-ip>:18081
 远程部署时需要指定控制面地址：
 
 ```text
-CONTROL_HOST=<control-manager-host-ip>
+CONTROL_HOST=<control-manager-lan-ip>
 CONTROL_PORT=18081
 ```
 
 或等价的完整 URL：
 
 ```text
-CONTROL_MANAGER_URL=http://<control-manager-host-ip>:18081
+CONTROL_MANAGER_URL=http://<control-manager-lan-ip>:18081
 ```
 
 `ProxyWorkerConfig` 需要支持 Docker 运行时动态指定控制面地址，配置优先级为：
@@ -174,7 +175,7 @@ TLS 证书仍通过挂载提供；私有容器化部署的 GeoIP 数据推荐在
 
 - MySQL 不映射宿主机端口，避免与本机或服务器已有 MySQL 冲突。
 - ClickHouse 不映射宿主机端口，避免与已有 ClickHouse 冲突。
-- `control-manager` 只映射一个 HTTP/API 端口，例如 `18081:8081`。
+- `control-manager` 只映射一个 HTTP/API 端口，例如 `127.0.0.1:18081:8081` 或 `<lan-ip>:18081:8081`。
 - `proxy-worker` 使用 host network，按控制面下发的入站配置直接在宿主机监听代理端口，不在 compose 中重复维护 `ports`。
 - 如同一台机器运行多个部署实例，应使用不同 Compose project name、不同数据卷和不同 `CONTROL_HOST_PORT`。
 
@@ -187,7 +188,7 @@ TLS 证书仍通过挂载提供；私有容器化部署的 GeoIP 数据推荐在
 3. `control-manager` 等待数据库可用后启动。
 4. Flyway 在 MySQL 上执行迁移。
 5. `control-manager` 初始化 ClickHouse 日志表。
-6. 浏览器和远程 worker 通过宿主机 IP 与 `CONTROL_HOST_PORT` 访问控制面。
+6. 浏览器和远程 worker 通过 `CONTROL_BIND_ADDRESS` 与 `CONTROL_HOST_PORT` 访问控制面。
 
 worker 启动：
 
@@ -198,8 +199,8 @@ worker 启动：
 
 ## Security Notes
 
-- 对外暴露 `control-manager` 时必须设置强 `ADMIN_AUTH_JWT_SECRET`。
-- 远程 worker 访问控制面时，应使用防火墙限制来源 IP。
+- 对 LAN/VPN 暴露 `control-manager` 时必须设置强 `ADMIN_AUTH_JWT_SECRET`。
+- 远程 worker 访问控制面时，应绑定宿主机内网 IP，并使用防火墙限制来源 IP。
 - 生产环境建议在 `control-manager` 前放置 HTTPS 反向代理，或后续为控制面 API 增加双向认证/worker token。
 - 不提交 `.env`、数据库密码、JWT secret、证书私钥。
 - 数据库端口默认不暴露到宿主机，降低误访问风险。

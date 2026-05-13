@@ -28,18 +28,21 @@ make docker-up-control
 
 默认服务：
 
-- `control-manager`：宿主机 `18081` -> 容器 `8081`
+- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-127.0.0.1}:18081` -> 容器 `8081`
 - `mysql`：仅 Docker 网络内可见
 - `clickhouse`：仅 Docker 网络内可见
 
 开发默认密码和 JWT secret 已写在 compose 默认值里，生产部署必须用 `.env` 或宿主机环境变量覆盖：
 
 ```bash
+CONTROL_BIND_ADDRESS=192.168.1.10
 CONTROL_HOST_PORT=18081
 MYSQL_ROOT_PASSWORD=change_me
 CLICKHOUSE_PASSWORD=change_me
 ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
 ```
+
+`CONTROL_BIND_ADDRESS` 默认是 `127.0.0.1`。需要局域网访问控制面时，设置为控制面宿主机的内网 IP，并在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问该端口。
 
 磁盘监控已改为宿主机主动推送。进入控制面“磁盘监控”页面后，系统会自动生成并明文展示上报 Token；将该值写入宿主机的 `scripts/disk-monitor/disk-monitor.env` 中的 `DISK_PUSH_TOKEN`，再通过 cron 定时调用 `push-smartctl.sh`。`DISK_MONITOR_PUSH_TOKEN` 仅作为兼容旧部署的可选初始 Token；如果没有设置，页面会随机生成并持久化。
 
@@ -68,7 +71,7 @@ CONTROL_MANAGER_URL=http://127.0.0.1:18081
 如果控制面在其他机器：
 
 ```bash
-CONTROL_MANAGER_URL=http://<control-manager-host-ip>:18081 make docker-up-worker
+CONTROL_MANAGER_URL=http://<control-manager-lan-ip>:18081 make docker-up-worker
 ```
 
 使用 host network 时，新增入站端口前需要确认宿主机没有同端口进程占用。Linux 原生 Docker 对该模式支持最好；Docker Desktop 的 host network 行为可能不同。
