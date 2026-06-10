@@ -24,6 +24,8 @@ public class ProxyWorkerConfig {
     private final String controlHost;
     private final int controlPort;
     private final String controlBaseUrl;
+    private final String workerId;
+    private final long workerControlPollIntervalMs;
     // TLS certificate configuration (optional)
     private final String tlsCertFile;
     private final String tlsKeyFile;
@@ -49,6 +51,8 @@ public class ProxyWorkerConfig {
         this.tlsCertFile = props.getProperty("tls.certFile", null);
         this.tlsKeyFile = props.getProperty("tls.keyFile", null);
         this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
+        this.workerId = props.getProperty("worker.id", "default");
+        this.workerControlPollIntervalMs = Long.parseLong(props.getProperty("worker.control.pollIntervalMs", "2000"));
         
         log.info("代理工作节点配置加载完成 - 控制端地址: {}", controlBaseUrl);
     }
@@ -108,6 +112,8 @@ public class ProxyWorkerConfig {
         overrideProperty(props, "tls.certFile", "TLS_CERT_FILE");
         overrideProperty(props, "tls.keyFile", "TLS_KEY_FILE");
         overrideProperty(props, "tls.keyPassword", "TLS_KEY_PASSWORD");
+        overrideProperty(props, "worker.id", "WORKER_ID");
+        overrideProperty(props, "worker.control.pollIntervalMs", "WORKER_CONTROL_POLL_INTERVAL_MS");
     }
 
     private void overrideProperty(Properties props, String propertyName, String envName) {
@@ -182,6 +188,18 @@ public class ProxyWorkerConfig {
 
     public String getAuthLogUrl() {
         return controlBaseUrl + "/api/logs/auth";
+    }
+
+    public String getWorkerPollUrl() {
+        return controlBaseUrl + "/api/worker/poll";
+    }
+
+    public String getWorkerId() {
+        return workerId;
+    }
+
+    public long getWorkerControlPollIntervalMs() {
+        return workerControlPollIntervalMs;
     }
 
     /**

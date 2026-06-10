@@ -78,6 +78,7 @@ import {
 } from '../types/mail';
 import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
 import { MysqlRestoreResponse } from '../types/backup';
+import { ProxyGatewayStatus } from '../types/gateway';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -907,6 +908,11 @@ class ApiService {
     const param = device.replace(/^\//, '');
     const query = hostId ? `?hostId=${encodeURIComponent(hostId)}` : '';
     return this.request<DiskDetail>(`/disk/detail/${encodeURIComponent(param)}${query}`);
+  }
+
+  // ========== 代理网关监控 ==========
+  async getProxyGatewayStatus(): Promise<ProxyGatewayStatus> {
+    return this.request<ProxyGatewayStatus>('/worker/status');
   }
 
   // ========== 邮件网关 ==========

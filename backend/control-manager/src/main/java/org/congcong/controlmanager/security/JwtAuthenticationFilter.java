@@ -32,6 +32,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/api/config/aggregate",
             "/api/config/hash",
             "/api/disk/push",
+            "/api/worker/poll",
             "/api/logs/access",
             "/api/logs/auth"
     );

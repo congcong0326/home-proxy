@@ -5,6 +5,7 @@ import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.server.factory.ProxyServerFactory;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 public class ProxyContext {
@@ -12,6 +13,7 @@ public class ProxyContext {
 
     private final Map<Long, AbstractProxyServer> servers = new HashMap<>();
     private final Map<Long, InboundConfig> configs = new HashMap<>();
+    private final AtomicInteger activeConnectionCount = new AtomicInteger(0);
 
     private ProxyContext() {}
 
@@ -95,6 +97,31 @@ public class ProxyContext {
         configs.clear();
     }
 
+    public synchronized int getRunningServerCount() {
+        int count = 0;
+        for (AbstractProxyServer server : servers.values()) {
+            if (server != null && server.isRunning()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int getActiveConnectionCount() {
+        return activeConnectionCount.get();
+    }
+
+    public void incrementActiveConnectionCount() {
+        activeConnectionCount.incrementAndGet();
+    }
+
+    public void decrementActiveConnectionCount() {
+        activeConnectionCount.updateAndGet(current -> current > 0 ? current - 1 : 0);
+    }
+
+    void resetActiveConnectionCountForTest() {
+        activeConnectionCount.set(0);
+    }
 
 
 

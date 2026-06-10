@@ -28,4 +28,20 @@ class JwtAuthenticationFilterTest {
         assertEquals(200, response.getStatus());
         assertNotNull(chain.getRequest());
     }
+
+    @Test
+    void workerPollEndpointBypassesAdminJwtAuthentication() throws Exception {
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                mock(JwtService.class),
+                mock(AdminUserRepository.class),
+                mock(AdminTokenBlacklistRepository.class));
+        MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/worker/poll");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertEquals(200, response.getStatus());
+        assertNotNull(chain.getRequest());
+    }
 }
