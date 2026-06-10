@@ -29,6 +29,7 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
 
     @Override
     protected void initChannel(Channel ch) throws Exception {
+        trackTcpConnection(ch);
         pipeLineContextInit(ch);
         // 在最前面处理 TLS（如启用）
         processSSL(ch);
@@ -44,6 +45,16 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         ch.pipeline().addLast(ProxyTunnelConnectorHandler.getInstance());
         // 兜底异常消费
         ch.pipeline().addLast(TerminalExceptionHandler.getInstance());
+    }
+
+    private void trackTcpConnection(Channel ch) {
+        if (inboundConfig == null || inboundConfig.getProtocol() == ProtocolType.DNS_SERVER) {
+            return;
+        }
+        org.congcong.proxyworker.server.ProxyContext proxyContext =
+                org.congcong.proxyworker.server.ProxyContext.getInstance();
+        proxyContext.incrementActiveConnectionCount();
+        ch.closeFuture().addListener(future -> proxyContext.decrementActiveConnectionCount());
     }
 
     protected abstract void init(Channel socketChannel);

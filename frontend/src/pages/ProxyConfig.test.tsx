@@ -11,6 +11,7 @@ const renderProxyConfig = (initialPath = '/config') => {
       <MemoryRouter initialEntries={[initialPath]}>
         <Routes>
           <Route path="/config" element={<ProxyConfig />}>
+            <Route path="system-ops/gateway" element={<div>Gateway Page</div>} />
             <Route path="system-ops/disk" element={<div>Disk Page</div>} />
             <Route path="system-ops/backup" element={<div>Backup Page</div>} />
           </Route>
@@ -39,6 +40,15 @@ test('shows disk monitor under the system operations menu', async () => {
 
   expect(screen.getAllByText('磁盘监控')).toHaveLength(2);
   expect(screen.getByText('Disk Page')).toBeInTheDocument();
+});
+
+test('shows proxy gateway monitor under the system operations menu', async () => {
+  renderProxyConfig('/config/system-ops/gateway');
+
+  await waitFor(() => expect(screen.getByText('系统运维')).toBeInTheDocument());
+
+  expect(screen.getAllByText('代理网关监控')).toHaveLength(2);
+  expect(screen.getByText('Gateway Page')).toBeInTheDocument();
 });
 
 test('shows data backup under the system operations menu', async () => {

@@ -1,22 +1,12 @@
 package org.congcong.controlmanager.service;
 
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.WolWakeTaskPayload;
 import org.congcong.controlmanager.config.WolConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-
-import io.netty.bootstrap.Bootstrap;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.DatagramPacket;
-import io.netty.channel.socket.nio.NioDatagramChannel;
-
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
 
 @Slf4j
 @Service
@@ -25,16 +15,12 @@ public class WolService {
     private static final String LIMITED_BROADCAST_ADDRESS = "255.255.255.255";
 
     private final WolConfigService wolConfigService;
-    private final WolPacketSender wolPacketSender;
+    private final WorkerControlService workerControlService;
 
     @Autowired
-    public WolService(WolConfigService wolConfigService) {
-        this(wolConfigService, WolService::sendUdpWolPacket);
-    }
-
-    WolService(WolConfigService wolConfigService, WolPacketSender wolPacketSender) {
+    public WolService(WolConfigService wolConfigService, WorkerControlService workerControlService) {
         this.wolConfigService = wolConfigService;
-        this.wolPacketSender = wolPacketSender;
+        this.workerControlService = workerControlService;
     }
 
     /**
@@ -97,22 +83,21 @@ public class WolService {
      * 发送WOL魔术包的核心实现
      */
     private String sendWolPacket(String macAddress, String broadcastIp, int port, String deviceName) {
-        String result;
-        
         try {
-            log.info("准备发送WOL魔术包到设备: {} (MAC: {}, 广播地址: {}, 端口: {})", 
+            log.info("准备派发WOL唤醒任务到设备: {} (MAC: {}, 广播地址: {}, 端口: {})",
                     deviceName, macAddress, broadcastIp, port);
-            wolPacketSender.send(macAddress, broadcastIp, port);
 
-            result = String.format("WOL魔术包发送成功到设备: %s", deviceName);
-            log.info("WOL魔术包发送成功到设备: {} (MAC: {})", deviceName, macAddress);
+            WolWakeTaskPayload payload = new WolWakeTaskPayload(deviceName, macAddress, broadcastIp, port);
+            workerControlService.createTask(WorkerControlService.TASK_TYPE_WOL_WAKE, payload);
 
-        } catch (Exception e) {
-            result = String.format("发送WOL魔术包到设备 %s 失败: %s", deviceName, e.getMessage());
-            log.error("发送WOL魔术包到设备 {} 失败", deviceName, e);
+            log.info("WOL唤醒任务已派发到设备: {} (MAC: {})", deviceName, macAddress);
+            return String.format("WOL唤醒请求已提交: %s", deviceName);
+
+        } catch (RuntimeException e) {
+            String result = String.format("提交WOL唤醒请求失败，设备 %s: %s", deviceName, e.getMessage());
+            log.error("派发WOL唤醒任务到设备 {} 失败", deviceName, e);
             throw new RuntimeException(result, e);
         }
-        return result;
     }
 
     static String resolveBroadcastAddress(String ipAddress, String subnetMask) {
@@ -160,74 +145,4 @@ public class WolService {
                 value & 0xFF);
     }
 
-    private static void sendUdpWolPacket(String macAddress, String broadcastIp, int port) throws Exception {
-        EventLoopGroup group = new NioEventLoopGroup();
-        Channel channel = null;
-
-        try {
-            Bootstrap bootstrap = new Bootstrap();
-            bootstrap.group(group)
-                    .channel(NioDatagramChannel.class)
-                    .option(ChannelOption.SO_BROADCAST, true) // 启用广播
-                    .handler(new SimpleChannelInboundHandler<DatagramPacket>() {
-                        @Override
-                        protected void channelRead0(ChannelHandlerContext ctx, DatagramPacket msg) {
-                            // 不需要处理响应
-                        }
-                    });
-
-            channel = bootstrap.bind(0).sync().channel();
-            ByteBuf wolBuffer = buildWolPacket(macAddress);
-            InetAddress address = InetAddress.getByName(broadcastIp);
-            channel.writeAndFlush(new DatagramPacket(wolBuffer, new InetSocketAddress(address, port))).sync();
-        } finally {
-            if (channel != null) {
-                try {
-                    channel.close().sync();
-                } catch (InterruptedException e) {
-                    log.warn("关闭WOL通道时发生异常", e);
-                    Thread.currentThread().interrupt();
-                }
-            }
-            group.shutdownGracefully();
-        }
-    }
-
-    private static ByteBuf buildWolPacket(String macAddress) {
-        // 将MAC地址转换为字节数组
-        byte[] macBytes = parseMacAddress(macAddress);
-
-        // 构建魔术包: 6x0xFF + 16*MAC
-        ByteBuf buffer = Unpooled.buffer(6 + 16 * macBytes.length);
-        for (int i = 0; i < 6; i++) {
-            buffer.writeByte(0xFF);
-        }
-        for (int i = 0; i < 16; i++) {
-            buffer.writeBytes(macBytes);
-        }
-        return buffer;
-    }
-
-    private static byte[] parseMacAddress(String macAddress) {
-        // 处理MAC地址格式（支持XX:XX:XX:XX:XX:XX或XX-XX-XX-XX-XX-XX）
-        String[] hex = macAddress.split("[:\\-]");
-        if (hex.length != 6) {
-            throw new IllegalArgumentException("无效的MAC地址格式: " + macAddress);
-        }
-
-        byte[] bytes = new byte[6];
-        for (int i = 0; i < 6; i++) {
-            try {
-                bytes[i] = (byte) Integer.parseInt(hex[i], 16);
-            } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("无效的MAC地址格式: " + macAddress, e);
-            }
-        }
-        return bytes;
-    }
-
-    @FunctionalInterface
-    interface WolPacketSender {
-        void send(String macAddress, String broadcastIp, int port) throws Exception;
-    }
 }

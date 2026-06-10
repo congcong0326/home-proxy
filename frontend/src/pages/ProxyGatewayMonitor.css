@@ -1,0 +1,66 @@
+.proxy-gateway-monitor {
+  padding: 0;
+}
+
+.gateway-alert,
+.gateway-status-card,
+.gateway-metric-card {
+  margin-bottom: 16px;
+}
+
+.gateway-status-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.gateway-status-header h4 {
+  margin: 0 0 4px;
+}
+
+.gateway-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.gateway-details > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 6px;
+}
+
+.memory-header,
+.memory-values {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.memory-header {
+  margin-bottom: 12px;
+}
+
+.memory-values {
+  margin-top: 8px;
+  color: #64748b;
+}
+
+@media (max-width: 768px) {
+  .gateway-status-header,
+  .memory-header,
+  .memory-values {
+    flex-direction: column;
+  }
+
+  .gateway-details {
+    grid-template-columns: 1fr;
+  }
+}

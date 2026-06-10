@@ -12,6 +12,7 @@ import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.service.AggregateConfigService;
+import org.congcong.proxyworker.service.WorkerControlService;
 
 import java.util.*;
 
@@ -27,17 +28,20 @@ public class ProxyWorkerApplication {
         log.info("启动代理工作节点应用程序");
         // 创建配置服务
         AggregateConfigService configService = new AggregateConfigService();
+        WorkerControlService workerControlService = WorkerControlService.forAggregateConfigService(configService);
         
         // 设置配置变更监听器
         configService.setConfigChangeListener(new ConfigChangeListener());
         // 日志服务启动
         AccessLogUtil.start();
+        workerControlService.start();
         // 启动配置服务
         configService.start();
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("应用程序正在关闭...");
             configService.stop();
+            workerControlService.stop();
             PROXY_CONTEXT.closeAll();
             AccessLogUtil.stop();
         }));

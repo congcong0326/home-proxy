@@ -31,7 +31,8 @@ import {
   HddOutlined,
   MailOutlined,
   ToolOutlined,
-  CloudDownloadOutlined
+  CloudDownloadOutlined,
+  ApiOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -81,6 +82,11 @@ const ProxyConfig: React.FC = () => {
       icon: <ToolOutlined />,
       label: '系统运维',
       children: [
+        {
+          key: '/config/system-ops/gateway',
+          icon: <ApiOutlined />,
+          label: '代理网关监控',
+        },
         {
           key: '/config/system-ops/disk',
           icon: <HddOutlined />,

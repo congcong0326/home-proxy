@@ -170,6 +170,7 @@ const WolManagement: React.FC = () => {
   const [pcStatuses, setPcStatuses] = useState<PcStatus[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingDevice, setEditingDevice] = useState<WolConfig | undefined>();
   const [searchTerm, setSearchTerm] = useState('');
@@ -266,13 +267,16 @@ const WolManagement: React.FC = () => {
 
   const handleWakeDevice = async (id: number) => {
     try {
-      await apiService.wakeById(id);
+      const response = await apiService.wakeById(id);
+      setError(null);
+      setMessage(response.message || 'WOL唤醒请求已提交，代理网关将尽快执行');
       // 刷新设备状态
       setTimeout(() => {
         fetchDevices();
       }, 2000);
     } catch (err) {
       console.error('Error waking device:', err);
+      setMessage(null);
       setError('唤醒设备失败');
     }
   };
@@ -320,6 +324,13 @@ const WolManagement: React.FC = () => {
         <div className="error">
           {error}
           <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
+      {message && (
+        <div className="success-message">
+          {message}
+          <button onClick={() => setMessage(null)}>×</button>
         </div>
       )}
 
