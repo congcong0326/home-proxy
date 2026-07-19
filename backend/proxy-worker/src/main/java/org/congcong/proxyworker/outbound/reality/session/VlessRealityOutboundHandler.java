@@ -16,7 +16,6 @@ import org.congcong.proxyworker.outbound.reality.tls.TlsApplicationDataWriter;
 import org.congcong.proxyworker.outbound.reality.tls.TlsRecord;
 import org.congcong.proxyworker.outbound.reality.tls.TlsRecordDecoder;
 import org.congcong.proxyworker.outbound.reality.tls.TlsRecordType;
-import org.congcong.proxyworker.outbound.reality.trace.ConnectionTrace;
 import org.congcong.proxyworker.outbound.reality.vision.SecureVisionPaddingSource;
 import org.congcong.proxyworker.outbound.reality.vision.TlsRecordSniffer;
 import org.congcong.proxyworker.outbound.reality.vision.VisionCodec;
@@ -30,7 +29,6 @@ import org.congcong.proxyworker.outbound.reality.vless.VlessResponseHeaderDecode
 
 public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
     private final VlessRequest request;
-    private final ConnectionTrace trace;
     private final TlsApplicationDataWriter tlsWriter;
     private final TlsApplicationDataReader tlsReader;
     private final Promise<Channel> relayPromise;
@@ -47,12 +45,10 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
 
     public VlessRealityOutboundHandler(
             VlessRequest request,
-            ConnectionTrace trace,
             TlsApplicationDataWriter tlsWriter,
             TlsApplicationDataReader tlsReader,
             Promise<Channel> relayPromise) {
         this.request = request;
-        this.trace = trace;
         this.tlsWriter = tlsWriter;
         this.tlsReader = tlsReader;
         this.relayPromise = relayPromise;
@@ -74,7 +70,6 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
                 }
             });
             ctx.flush();
-            trace.event("vless.request.sent", request.host() + ":" + request.port());
             return;
         }
         super.userEventTriggered(ctx, evt);
@@ -112,7 +107,6 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-        trace.event("vless.reality.exception", cause.getClass().getSimpleName() + ":" + cause.getMessage());
         if (!relayPromise.isDone()) {
             relayPromise.setFailure(cause);
         }
@@ -130,21 +124,18 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
     private void handleApplicationData(ChannelHandlerContext ctx, TlsRecord record) {
         Tls13Plaintext plaintext = tlsReader.decryptApplicationPlaintext(record);
         if (plaintext.contentType() != TlsRecordType.APPLICATION_DATA) {
-            trace.event("tls.post_handshake.ignored", plaintext.contentType().name());
             return;
         }
         if (!responseHeaderComplete) {
             RealityPostHandshakeClassifier.Result classification =
                     postHandshakeClassifier.classify(plaintext.payload());
             if (classification == RealityPostHandshakeClassifier.Result.CAMOUFLAGE) {
-                trace.event("tls.post_handshake.camouflage", String.valueOf(plaintext.payload().length));
                 return;
             }
         }
         VlessResponseHeader response = responseHeaderDecoder.decode(plaintext.payload());
         if (response.complete() && !responseHeaderComplete) {
             responseHeaderComplete = true;
-            trace.event("vless.response.header.complete", request.host() + ":" + request.port());
             if (!relayPromise.isDone()) {
                 relayPromise.setSuccess(ctx.channel());
             }
@@ -164,12 +155,10 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
 
     private void writeUplinkBytes(ChannelHandlerContext ctx, byte[] bytes, ChannelPromise promise) {
         if (directUplink) {
-            trace.event("vision.direct.uplink.raw", String.valueOf(bytes.length));
             ctx.write(Unpooled.wrappedBuffer(bytes), promise);
             return;
         }
         if (rawUplinkInTls) {
-            trace.event("vision.padding.uplink.raw", String.valueOf(bytes.length));
             ctx.write(tlsWriter.encryptApplicationData(bytes), promise);
             return;
         }
@@ -178,7 +167,6 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
         trafficState.observeUplink(sniff);
         List<byte[]> frames = VisionCodec.reshapeForPadding(bytes);
         boolean directEligibleWrite = sniff.applicationData() && sniff.completeRecord();
-        trace.event("local.relay.uplink", String.valueOf(bytes.length));
         for (int i = 0; i < frames.size(); i++) {
             boolean lastFrame = i == frames.size() - 1;
             VisionCommand command = trafficState.commandForUplinkFrame(directEligibleWrite, lastFrame);
@@ -189,10 +177,8 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
         if (trafficState.uplinkDirectAfterCurrentWrite()) {
             directUplink = true;
             trafficState.clearUplinkDirectAfterCurrentWrite();
-            trace.event("vision.direct.uplink", "enabled");
         } else if (!trafficState.uplinkPaddingActive()) {
             rawUplinkInTls = true;
-            trace.event("vision.padding.uplink", "ended");
         }
     }
 
@@ -204,7 +190,6 @@ public final class VlessRealityOutboundHandler extends ChannelDuplexHandler {
         if (ctx.pipeline().get(TlsRecordDecoder.class) != null) {
             ctx.pipeline().remove(TlsRecordDecoder.class);
         }
-        trace.event("vision.direct.downlink", "enabled");
     }
 
     private ByteBuf rawRecord(ChannelHandlerContext ctx, TlsRecord record) {

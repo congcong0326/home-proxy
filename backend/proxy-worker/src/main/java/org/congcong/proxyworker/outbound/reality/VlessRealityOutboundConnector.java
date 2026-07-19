@@ -16,7 +16,6 @@ import org.congcong.proxyworker.outbound.reality.tls.RealityClientHelloFactory;
 import org.congcong.proxyworker.outbound.reality.tls.RealityHandshakeEngine;
 import org.congcong.proxyworker.outbound.reality.tls.TlsRecordDecoder;
 import org.congcong.proxyworker.outbound.reality.tls.TlsRecordEncoder;
-import org.congcong.proxyworker.outbound.reality.trace.ConnectionTrace;
 import org.congcong.proxyworker.outbound.reality.vless.VlessRequest;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -37,8 +36,6 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                 request.getTargetHost(),
                 request.getTargetPort(),
                 outboundConfig.flow());
-        ConnectionTrace trace = new ConnectionTrace();
-
         Bootstrap bootstrap = new Bootstrap()
                 .group(inboundChannel.eventLoop())
                 .channel(getSocketChannel())
@@ -52,10 +49,9 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                                 new RealityClientHelloFactory());
                         ch.pipeline().addLast(new TlsRecordEncoder());
                         ch.pipeline().addLast(new TlsRecordDecoder());
-                        ch.pipeline().addLast(new RealityHandshakeHandler(handshakeEngine, trace));
+                        ch.pipeline().addLast(new RealityHandshakeHandler(handshakeEngine));
                         ch.pipeline().addLast(new VlessRealityOutboundHandler(
                                 vlessRequest,
-                                trace,
                                 handshakeEngine,
                                 handshakeEngine,
                                 relayPromise));
