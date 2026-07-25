@@ -24,6 +24,9 @@ public class UserService {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private WorkerConfigDependencyResolver workerConfigDependencyResolver;
+
     /**
      * 分页查询用户列表
      * @param pageable 分页参数
@@ -172,9 +175,9 @@ public class UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在: " + id));
 
-        // TODO: 检查用户是否被入站配置引用
-        // 这里需要查询 inbound_configs 表的 inbound_route_bindings 字段
-        // 如果被引用，应该抛出 ResponseStatusException(HttpStatus.CONFLICT, "用户被入站配置引用，无法删除")
+        if (workerConfigDependencyResolver.isUserReferenced(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "用户被入站配置引用，无法删除");
+        }
 
         userRepository.delete(user);
     }
@@ -188,6 +191,9 @@ public class UserService {
         List<User> users = userRepository.findAllById(ids);
         if (users.size() != ids.stream().distinct().count()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "部分用户不存在");
+        }
+        if (ids.stream().anyMatch(workerConfigDependencyResolver::isUserReferenced)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "存在被入站配置引用的用户，无法删除");
         }
         userRepository.deleteAll(users);
     }

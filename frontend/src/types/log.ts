@@ -3,6 +3,7 @@ export interface AccessLogListItem {
   id?: number;
   ts: string; // 时间戳 ISO 字符串
   requestId: string;
+  workerId?: string;
   userId?: number;
   username?: string;
   proxyName?: string;
@@ -28,6 +29,7 @@ export interface AccessLogDetail {
   id?: number;
   ts: string;
   requestId: string;
+  workerId?: string;
   userId?: number;
   username?: string;
   proxyName?: string;
@@ -61,6 +63,7 @@ export interface AccessLogDetail {
 
 // 日志查询参数（与 LogController.queryAccessLogs 请求参数一致）
 export interface AccessLogQueryParams {
+  workerId?: string;
   from?: string;
   to?: string;
   userId?: number;

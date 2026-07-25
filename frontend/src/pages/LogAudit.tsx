@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import type { Dayjs } from 'dayjs';
-import { Card, Form, Row, Col, Input, DatePicker, Button, Table, Tag, Drawer, Space, Typography } from 'antd';
+import { Card, Form, Row, Col, Input, DatePicker, Button, Table, Tag, Drawer, Space, Typography, Select } from 'antd';
 import apiService from '../services/api';
 import { AccessLogListItem, AccessLogDetail, AccessLogQueryParams, PageResponse } from '../types/log';
 import { formatBytes } from '../utils/format';
+import { ProxyWorkerDTO } from '../types/worker';
 import './LogAudit.css';
 
 const { RangePicker } = DatePicker;
@@ -21,6 +22,9 @@ const LogAudit: React.FC = () => {
   const [pageInfo, setPageInfo] = useState<{ total: number; page: number; pageSize: number }>({ total: 0, page: 1, pageSize: 10 });
   const [detail, setDetail] = useState<AccessLogDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [workers, setWorkers] = useState<ProxyWorkerDTO[]>([]);
+
+  useEffect(() => { apiService.getWorkers().then(setWorkers).catch(() => setWorkers([])); }, []);
 
   // 人性化格式化耗时（ms/s/m/h）
   const formatDuration = (value?: number) => {
@@ -101,6 +105,7 @@ const LogAudit: React.FC = () => {
 
   const columns = [
     { title: '时间', dataIndex: 'ts', key: 'ts', render: (v: string) => new Date(v).toLocaleString() },
+    { title: '节点', dataIndex: 'workerId', key: 'workerId', render: (v?: string) => v || '-' },
     { title: '代理名称', dataIndex: 'proxyName', key: 'proxyName' },
     { title: '路由策略', dataIndex: 'routePolicyName', key: 'routePolicyName' },
     { title: '用户', dataIndex: 'username', key: 'username' },
@@ -128,6 +133,9 @@ const LogAudit: React.FC = () => {
       <Card className="log-audit-card" title="日志审计" bordered={false} style={{ marginBottom: 16 }}>
         <Form form={form} layout="vertical" initialValues={{ range: getTodayRange() }}>
           <Row gutter={16}>
+            <Col xs={24} sm={12} md={8}>
+              <Form.Item label="代理节点" name="workerId"><Select allowClear options={workers.map((worker) => ({ value: worker.workerId, label: worker.displayName }))} /></Form.Item>
+            </Col>
             <Col xs={24} sm={12} md={8}>
               <Form.Item label="时间范围" name="range">
                 <RangePicker

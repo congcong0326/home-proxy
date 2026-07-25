@@ -18,6 +18,9 @@ public class InboundConfig {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "worker_id", nullable = false, length = 128)
+    private String workerId;
+
     @Column(nullable = false, length = 64)
     private String name;
 
@@ -44,6 +47,12 @@ public class InboundConfig {
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "inbound_route_bindings", nullable = false, columnDefinition = "JSON")
     private List<InboundRouteBinding>  inboundRouteBindings;
+
+    @Column(name = "fallback_route_id")
+    private Long fallbackRouteId;
+
+    @Column(name = "anonymous_user_id")
+    private Long anonymousUserId;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

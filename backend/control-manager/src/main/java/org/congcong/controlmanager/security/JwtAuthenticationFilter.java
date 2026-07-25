@@ -29,12 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             "/admin/login",
             "/admin/setup-status",
             "/admin/setup",
-            "/api/config/aggregate",
-            "/api/config/hash",
-            "/api/disk/push",
-            "/api/worker/poll",
-            "/api/logs/access",
-            "/api/logs/auth"
+            "/api/disk/push"
     );
 
     private static final Set<String> PUBLIC_FRONTEND_ROUTES = Set.of(
@@ -83,6 +78,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
+        if (isWorkerRuntimePath(path)) {
+            chain.doFilter(request, response);
+            return;
+        }
         // 跳过 CORS 预检请求（OPTIONS），否则浏览器不会继续发送真实请求
         if (CorsUtils.isPreFlightRequest(request)) {
             chain.doFilter(request, response);
@@ -152,5 +151,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         return STATIC_RESOURCE_SUFFIXES.stream().anyMatch(path::endsWith);
+    }
+
+    private boolean isWorkerRuntimePath(String path) {
+        return "/api/config/aggregate".equals(path)
+                || "/api/worker/poll".equals(path)
+                || "/api/logs/access".equals(path)
+                || "/api/logs/auth".equals(path);
     }
 }

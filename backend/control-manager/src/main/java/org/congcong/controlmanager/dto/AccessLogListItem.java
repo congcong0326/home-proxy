@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 public class AccessLogListItem {
     private LocalDateTime ts;
     private String requestId;
+    private String workerId;
     private Long userId;
     private String username;
     private String proxyName;

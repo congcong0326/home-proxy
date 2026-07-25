@@ -3,7 +3,10 @@ export interface ProxyGatewayStatus {
   hostname?: string;
   startedAt?: string;
   lastSeenAt?: string;
-  lastConfigHash?: string;
+  fetchedConfigHash?: string;
+  appliedConfigHash?: string;
+  applySuccess?: boolean;
+  applyError?: string;
   uptimeSeconds?: number;
   heapUsedBytes?: number;
   heapMaxBytes?: number;

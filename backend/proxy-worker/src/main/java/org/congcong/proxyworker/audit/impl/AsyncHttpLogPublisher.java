@@ -6,6 +6,7 @@ import org.congcong.proxyworker.audit.LogPublisher;
 import org.congcong.common.dto.AccessLog;
 import org.congcong.common.dto.AuthLog;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.congcong.proxyworker.http.ControlPlaneHttpClientFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +42,7 @@ public class AsyncHttpLogPublisher implements LogPublisher {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final ProxyWorkerConfig config;
+    private final ControlPlaneHttpClientFactory controlPlaneClient;
 
     // 调度线程
     private final ScheduledExecutorService scheduler;
@@ -51,9 +53,8 @@ public class AsyncHttpLogPublisher implements LogPublisher {
         this.batchSize = Math.max(1, batchSize);
         this.flushIntervalMs = Math.max(200, flushIntervalMs);
 
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(5000))
-                .build();
+        this.controlPlaneClient = ControlPlaneHttpClientFactory.getInstance();
+        this.httpClient = controlPlaneClient.getHttpClient();
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.config = ProxyWorkerConfig.getInstance();
@@ -121,8 +122,7 @@ public class AsyncHttpLogPublisher implements LogPublisher {
     private <T> void sendBatch(List<T> batch, String url) {
         try {
             String body = objectMapper.writeValueAsString(batch);
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
+            HttpRequest request = controlPlaneClient.requestBuilder(URI.create(url))
                     .timeout(Duration.ofMillis(5000))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body))

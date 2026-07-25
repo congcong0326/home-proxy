@@ -14,9 +14,19 @@ import org.congcong.proxyworker.router.RouterService;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.junit.jupiter.api.AfterEach;
+import org.congcong.proxyworker.config.ProxyWorkerConfig;
+
+import java.lang.reflect.Field;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
 
 class SocksServerInitializerTest {
+
+    @AfterEach
+    void clearSelfSignedFlag() {
+        System.clearProperty("TLS_ALLOW_SELF_SIGNED");
+        resetWorkerConfig();
+    }
     @AfterEach
     void tearDown() {
         resetActiveConnectionCount();
@@ -24,6 +34,8 @@ class SocksServerInitializerTest {
 
     @Test
     void tlsEnabledSocksInboundInstallsSslBeforeProtocolAndRoutingHandlers() {
+        System.setProperty("TLS_ALLOW_SELF_SIGNED", "true");
+        resetWorkerConfig();
         UserConfig user = ProxyWorkerTestFixtures.user(1L, "alice", "secret", null);
         InboundConfig inbound = ProxyWorkerTestFixtures.socksInbound(user);
         inbound.setTlsEnabled(true);
@@ -38,6 +50,16 @@ class SocksServerInitializerTest {
         assertSame(inbound, ChannelAttributes.getInboundConfig(channel));
 
         channel.finishAndReleaseAll();
+    }
+
+    private void resetWorkerConfig() {
+        try {
+            Field field = ProxyWorkerConfig.class.getDeclaredField("instance");
+            field.setAccessible(true);
+            field.set(null, null);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
     }
 
     @Test

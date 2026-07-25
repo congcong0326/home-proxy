@@ -25,6 +25,7 @@ public class HttpClientManager {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final ProxyWorkerConfig config;
+    private final ControlPlaneHttpClientFactory controlPlaneClient;
     
     // 缓存相关
     private String lastETag;
@@ -33,10 +34,8 @@ public class HttpClientManager {
     public HttpClientManager() {
         this.config = ProxyWorkerConfig.getInstance();
         
-        // 创建HTTP客户端
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(5000))
-                .build();
+        this.controlPlaneClient = ControlPlaneHttpClientFactory.getInstance();
+        this.httpClient = controlPlaneClient.getHttpClient();
         
         // 配置JSON序列化器
         this.objectMapper = new ObjectMapper();
@@ -56,8 +55,7 @@ public class HttpClientManager {
             log.debug("请求聚合配置: {}", url);
             
             // 构建HTTP请求
-            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
+            HttpRequest.Builder requestBuilder = controlPlaneClient.requestBuilder(URI.create(url))
                     .timeout(Duration.ofMillis(10000))
                     .GET();
             
@@ -100,6 +98,9 @@ public class HttpClientManager {
         try {
             // 解析JSON响应
             AggregateConfigResponse config = objectMapper.readValue(response.body(), AggregateConfigResponse.class);
+            if (!this.config.getWorkerId().equals(config.getWorkerId())) {
+                throw new IOException("控制端返回了其他节点的配置");
+            }
             
             // 更新缓存
             this.cachedConfig = config;

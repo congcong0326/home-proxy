@@ -6,9 +6,11 @@ import org.congcong.common.dto.AccessLog;
 import org.congcong.common.dto.AuthLog;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.service.LogService;
+import org.congcong.controlmanager.security.WorkerPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -30,23 +32,20 @@ public class LogController {
      * 接收访问日志批量
      */
     @PostMapping("/access")
-    public ResponseEntity<Map<String, Object>> ingestAccessLogs(@RequestBody List<AccessLog> logs) {
-        int saved = logService.saveAccessLogs(logs);
+    public ResponseEntity<Map<String, Object>> ingestAccessLogs(@AuthenticationPrincipal WorkerPrincipal principal,
+                                                                 @RequestBody List<AccessLog> logs) {
+        int saved = logService.saveAccessLogs(principal.workerId(), logs);
         Map<String, Object> resp = new HashMap<>();
         resp.put("saved", saved);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
     }
 
-//    /**
-//     * 接收认证日志批量
-//     */
-//    @PostMapping("/auth")
-//    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@RequestBody List<AuthLog> logs) {
-//        int saved = logService.saveAuthLogs(logs);
-//        Map<String, Object> resp = new HashMap<>();
-//        resp.put("saved", saved);
-//        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
-//    }
+    @PostMapping("/auth")
+    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@AuthenticationPrincipal WorkerPrincipal principal,
+                                                               @RequestBody List<AuthLog> logs) {
+        int saved = logService.saveAuthLogs(principal.workerId(), logs);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("saved", saved));
+    }
 
     /**
      * 分页检索访问日志
@@ -54,6 +53,7 @@ public class LogController {
     @GetMapping("/access")
     public ResponseEntity<PageResponse<AccessLogListItem>> queryAccessLogs(
             @RequestParam(value = "from", required = false) String from,
+            @RequestParam(value = "workerId", required = false) String workerId,
             @RequestParam(value = "to", required = false) String to,
             @RequestParam(value = "userId", required = false) Long userId,
             @RequestParam(value = "username", required = false) String username,
@@ -76,7 +76,7 @@ public class LogController {
             @RequestParam(value = "pageSize", required = false) Integer pageSize,
             @RequestParam(value = "sort", required = false) String sort
     ) {
-        AccessLogQueryRequest req = new AccessLogQueryRequest(from, to, userId, username, proxyName, inboundId, clientIp, status,
+        AccessLogQueryRequest req = new AccessLogQueryRequest(workerId, from, to, userId, username, proxyName, inboundId, clientIp, status,
                 protocol, routePolicyId, routePolicyName, srcGeoCountry, srcGeoCity, dstGeoCountry, dstGeoCity, host, originalTargetHost, rewriteTargetHost, q,
                 page, pageSize, sort);
         PageResponse<AccessLogListItem> resp = logService.queryAccessLogs(req);

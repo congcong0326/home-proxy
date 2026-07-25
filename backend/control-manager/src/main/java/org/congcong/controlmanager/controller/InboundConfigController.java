@@ -43,14 +43,15 @@ public class InboundConfigController {
             @RequestParam(required = false) ProtocolType protocol,
             @RequestParam(required = false) Integer port,
             @RequestParam(required = false) Boolean tlsEnabled,
-            @RequestParam(required = false) Integer status) {
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) String workerId) {
 
         pageSize = Math.min(pageSize, 200);
         Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(direction, sortBy));
 
         PageResponse<InboundConfigDTO> response = inboundConfigService.getInboundConfigs(
-                pageable, protocol, port, tlsEnabled, status);
+                pageable, protocol, port, tlsEnabled, status, workerId);
         return ResponseEntity.ok(response);
     }
 

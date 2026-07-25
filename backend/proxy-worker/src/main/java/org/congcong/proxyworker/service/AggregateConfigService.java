@@ -2,6 +2,8 @@ package org.congcong.proxyworker.service;
 
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.proxyworker.http.HttpClientManager;
+import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.congcong.proxyworker.server.ConfigApplyResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,9 +28,13 @@ public class AggregateConfigService {
     
     // 配置变更监听器
     private ConfigChangeListener configChangeListener;
+    private final LastKnownGoodConfigStore lastKnownGoodConfigStore;
+    private volatile WorkerControlService.ConfigApplicationStatus applicationStatus = WorkerControlService.ConfigApplicationStatus.empty();
+    private volatile String fetchedConfigHash;
     
     public AggregateConfigService() {
         this.httpClientManager = new HttpClientManager();
+        this.lastKnownGoodConfigStore = new LastKnownGoodConfigStore(ProxyWorkerConfig.getInstance().getLastKnownGoodConfig());
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "config-fetcher");
             t.setDaemon(true);
@@ -42,6 +48,7 @@ public class AggregateConfigService {
     public void start() {
         if (isRunning.compareAndSet(false, true)) {
             log.info("启动聚合配置服务");
+            applyLastKnownGoodConfig();
             
             // 立即获取一次配置
             fetchConfigNow();
@@ -87,14 +94,29 @@ public class AggregateConfigService {
             HttpClientManager.ConfigFetchResult result = httpClientManager.fetchAggregateConfig();
             
             if (result.isSuccess()) {
+                if (result.getConfig() != null) {
+                    fetchedConfigHash = result.getConfig().getConfigHash();
+                }
                 if (result.isUpdated()) {
                     log.info("配置已更新，版本: {}", result.getConfig().getVersion());
                     
                     // 通知配置变更监听器
                     if (configChangeListener != null) {
                         try {
-                            configChangeListener.onConfigChanged(result.getConfig());
+                            ConfigApplyResult applyResult = configChangeListener.onConfigChanged(result.getConfig());
+                            if (!applyResult.success()) {
+                                applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
+                                        applyResult.errorSummary(), null);
+                                httpClientManager.clearCache();
+                                return;
+                            }
+                            applicationStatus = new WorkerControlService.ConfigApplicationStatus(result.getConfig().getConfigHash(), true,
+                                    null, java.time.LocalDateTime.now());
+                            lastKnownGoodConfigStore.write(result.getConfig());
                         } catch (Exception e) {
+                            applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
+                                    summarize(e), null);
+                            httpClientManager.clearCache();
                             log.error("通知配置变更监听器时发生异常", e);
                         }
                     }
@@ -138,6 +160,35 @@ public class AggregateConfigService {
     public void setConfigChangeListener(ConfigChangeListener listener) {
         this.configChangeListener = listener;
     }
+
+    public WorkerControlService.ConfigApplicationStatus getApplicationStatus() { return applicationStatus; }
+
+    public String getFetchedConfigHash() { return fetchedConfigHash; }
+
+    private void applyLastKnownGoodConfig() {
+        if (configChangeListener == null) return;
+        lastKnownGoodConfigStore.read().ifPresent(config -> {
+            if (!ProxyWorkerConfig.getInstance().getWorkerId().equals(config.getWorkerId())) return;
+            try {
+                ConfigApplyResult result = configChangeListener.onConfigChanged(config);
+                if (result.success()) {
+                    applicationStatus = new WorkerControlService.ConfigApplicationStatus(config.getConfigHash(), true, null,
+                            java.time.LocalDateTime.now());
+                    log.info("已从最后成功配置恢复 {} 个入站", config.getInbounds() == null ? 0 : config.getInbounds().size());
+                } else {
+                    applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false, result.errorSummary(), null);
+                }
+            } catch (Exception e) {
+                applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false, summarize(e), null);
+                log.warn("最后成功配置应用失败: {}", e.toString());
+            }
+        });
+    }
+
+    private String summarize(Exception error) {
+        String text = error.getClass().getSimpleName() + ": " + error.getMessage();
+        return text.substring(0, Math.min(text.length(), 1024));
+    }
     
     /**
      * 配置变更监听器接口
@@ -148,7 +199,7 @@ public class AggregateConfigService {
          * 
          * @param newConfig 新的配置
          */
-        void onConfigChanged(AggregateConfigResponse newConfig);
+        ConfigApplyResult onConfigChanged(AggregateConfigResponse newConfig);
     }
     
     /**

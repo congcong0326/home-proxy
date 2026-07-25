@@ -8,6 +8,9 @@ export interface InboundRouteBinding {
 
 export interface InboundConfigDTO {
   id: number;
+  workerId: string;
+  fallbackRouteId?: number;
+  anonymousUserId?: number;
   name: string;
   protocol: ProtocolType;
   listenIp: string;
@@ -25,6 +28,9 @@ export interface InboundConfigDTO {
 }
 
 export interface InboundConfigCreateRequest {
+  workerId: string;
+  fallbackRouteId?: number;
+  anonymousUserId?: number;
   name: string;
   protocol: ProtocolType;
   listenIp: string;
@@ -38,6 +44,9 @@ export interface InboundConfigCreateRequest {
 }
 
 export interface InboundConfigUpdateRequest {
+  workerId: string;
+  fallbackRouteId?: number;
+  anonymousUserId?: number;
   name: string;
   protocol: ProtocolType;
   listenIp: string;
@@ -67,6 +76,7 @@ export interface InboundQueryParams {
   port?: number;
   tlsEnabled?: boolean;
   status?: number;
+  workerId?: string;
 }
 
 export interface PageResponse<T> {

@@ -19,7 +19,8 @@ beforeEach(() => {
     hostname: 'nas-proxy',
     startedAt: '2026-05-16T10:00:00',
     lastSeenAt: '2026-05-16T10:01:00',
-    lastConfigHash: 'abcdef123456',
+    fetchedConfigHash: 'abcdef123456',
+    appliedConfigHash: 'abcdef123456',
     uptimeSeconds: 3660,
     heapUsedBytes: 128 * 1024 * 1024,
     heapMaxBytes: 512 * 1024 * 1024,
@@ -35,7 +36,7 @@ test('renders proxy gateway metrics without exposing internal task records', asy
   expect(await screen.findByText('gateway-main')).toBeInTheDocument();
   expect(screen.getByText('代理网关监控')).toBeInTheDocument();
   expect(screen.getByText('网关标识')).toBeInTheDocument();
-  expect(screen.getByText('当前配置 Hash')).toBeInTheDocument();
+  expect(screen.getByText('已应用配置 Hash')).toBeInTheDocument();
   expect(screen.getByText('abcdef12')).toBeInTheDocument();
 
   await waitFor(() => expect(mockedApi.getProxyGatewayStatus).toHaveBeenCalled());

@@ -27,7 +27,19 @@ public class WorkerStatus {
     private LocalDateTime lastSeenAt;
 
     @Column(name = "last_config_hash", length = 128)
-    private String lastConfigHash;
+    private String fetchedConfigHash;
+
+    @Column(name = "applied_config_hash", length = 128)
+    private String appliedConfigHash;
+
+    @Column(name = "apply_success")
+    private Boolean applySuccess;
+
+    @Column(name = "apply_error", length = 1024)
+    private String applyError;
+
+    @Column(name = "applied_at")
+    private LocalDateTime appliedAt;
 
     @Column(name = "uptime_seconds")
     private Long uptimeSeconds;

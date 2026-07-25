@@ -60,6 +60,7 @@ class ProxyWorkerApplicationTest {
     private static AggregateConfigResponse aggregateConfig() {
         AggregateConfigResponse response = new AggregateConfigResponse();
         response.setVersion("v-test");
+        response.setWorkerId("default");
         response.setGeneratedAt(LocalDateTime.of(2026, 6, 28, 12, 0));
         response.setInbounds(List.of());
         response.setRoutes(List.of());

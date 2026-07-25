@@ -114,6 +114,7 @@ public class RuleSetService {
     private final RuleSetRepository ruleSetRepository;
     private final RuleSetPayloadRepository ruleSetPayloadRepository;
     private final RuleSetSourceSyncService ruleSetSourceSyncService;
+    private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
 
     public PageResponse<RuleSetSummaryDTO> getRuleSets(Pageable pageable, String name, RuleSetCategory category,
                                                        Boolean enabled, Boolean published) {
@@ -249,6 +250,9 @@ public class RuleSetService {
     public void deleteRuleSet(Long id) {
         RuleSetEntity entity = ruleSetRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "规则集不存在"));
+        if (workerConfigDependencyResolver.isRuleSetReferenced(entity.getRuleKey())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "规则集被路由引用，无法删除");
+        }
         ruleSetRepository.delete(entity);
     }
 

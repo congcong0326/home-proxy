@@ -10,6 +10,9 @@ import org.congcong.proxyworker.config.ProxyWorkerConfig;
 
 import javax.net.ssl.SSLException;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.security.cert.CertificateException;
 import java.util.Map;
@@ -42,36 +45,38 @@ public class TlsContextManager {
     }
 
     /**
-     * 优先尝试加载外部证书，如果不可用则回退到自签证书。
+     * 生产模式必须加载外部证书；临时自签只允许显式开发开关。
      */
     private SslContext createServerContextWithFallback() {
-        SslContext external = tryCreateExternalContext();
-        if (external != null) {
+        ProxyWorkerConfig cfg = ProxyWorkerConfig.getInstance();
+        try {
+            SslContext external = createExternalContext(cfg);
             log.info("External SSL Context created");
             return external;
+        } catch (RuntimeException error) {
+            if (!cfg.isTlsAllowSelfSigned()) throw error;
+            log.warn("External inbound TLS unavailable; using explicitly enabled development self-signed certificate: {}", error.toString());
+            return createSelfSignedContext();
         }
-        log.warn("Self SSL Context created");
-        return createSelfSignedContext();
     }
 
     /**
      * 从配置中读取证书与私钥路径，尝试创建 SslContext。
      * 仅当证书链文件与私钥文件同时存在且可读时返回非空；否则返回 null。
      */
-    private SslContext tryCreateExternalContext() {
-        ProxyWorkerConfig cfg = ProxyWorkerConfig.getInstance();
+    private SslContext createExternalContext(ProxyWorkerConfig cfg) {
         String certPath = cfg.getTlsCertFile();
         String keyPath = cfg.getTlsKeyFile();
-        String keyPassword = cfg.getTlsKeyPassword();
+        String keyPassword = loadKeyPassword(cfg);
 
         if (isBlank(certPath) || isBlank(keyPath)) {
-            return null;
+            throw new IllegalStateException("TLS 入站缺少证书或私钥路径");
         }
 
         File certFile = new File(certPath);
         File keyFile = new File(keyPath);
         if (!certFile.isFile() || !keyFile.isFile()) {
-            return null;
+            throw new IllegalStateException("TLS 入站证书或私钥文件不可读");
         }
 
         try {
@@ -86,9 +91,19 @@ public class TlsContextManager {
                     .ciphers(null, SupportedCipherSuiteFilter.INSTANCE)
                     .build();
         } catch (SSLException e) {
-            // 加载失败时回退到自签逻辑，由上层处理
-            return null;
+            throw new IllegalStateException("无法加载 TLS 入站证书", e);
         }
+    }
+
+    private String loadKeyPassword(ProxyWorkerConfig cfg) {
+        if (!isBlank(cfg.getTlsKeyPasswordFile())) {
+            try {
+                return Files.readString(Path.of(cfg.getTlsKeyPasswordFile()), StandardCharsets.UTF_8).trim();
+            } catch (Exception e) {
+                throw new IllegalStateException("无法读取 TLS 私钥口令文件", e);
+            }
+        }
+        return cfg.getTlsKeyPassword();
     }
 
     private boolean isBlank(String s) {

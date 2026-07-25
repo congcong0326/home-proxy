@@ -176,8 +176,21 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         if (proxyContext != null) {
             proxyContext.setBytesOut(DnsMessageUtil.estimateMessageSize(clientResp));
         }
-        AccessLogUtil.logDns(proxyContext, entry.timeContext(), dnsCtx, clientResp.code(), answerIps);
         inbound.writeAndFlush(clientResp);
+        logDnsResponse(proxyContext, entry.timeContext(), dnsCtx, clientResp.code(), answerIps);
+    }
+
+    private void logDnsResponse(ProxyContext proxyContext,
+                                ProxyTimeContext timeContext,
+                                DnsProxyContext dnsCtx,
+                                DnsResponseCode responseCode,
+                                List<String> answerIps) {
+        try {
+            AccessLogUtil.logDns(proxyContext, timeContext, dnsCtx, responseCode, answerIps);
+        } catch (RuntimeException | LinkageError e) {
+            // Auditing must not prevent a valid upstream DNS response from reaching the client.
+            log.warn("DNS response audit failed for qname={}: {}", dnsCtx.getQName(), e.toString());
+        }
     }
 
     protected void copySection(DnsMessage from, DatagramDnsResponse to, DnsSection section) {

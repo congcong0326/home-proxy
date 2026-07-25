@@ -26,7 +26,8 @@ class RouteServiceTest {
 
     private final RouteRepository routeRepository = mock(RouteRepository.class);
     private final RuleSetRepository ruleSetRepository = mock(RuleSetRepository.class);
-    private final RouteService routeService = new RouteService(routeRepository, ruleSetRepository);
+    private final WorkerConfigDependencyResolver dependencyResolver = mock(WorkerConfigDependencyResolver.class);
+    private final RouteService routeService = new RouteService(routeRepository, ruleSetRepository, dependencyResolver);
 
     @Test
     void rejectsVlessRealityRouteWhenRequiredConfigIsMissing() {

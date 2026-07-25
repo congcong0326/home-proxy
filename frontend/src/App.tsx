@@ -25,6 +25,7 @@ import DiskMonitor from './pages/DiskMonitor';
 import MailGateway from './pages/MailGateway';
 import DatabaseBackup from './pages/DatabaseBackup';
 import ProxyGatewayMonitor from './pages/ProxyGatewayMonitor';
+import WorkerManagement from './pages/WorkerManagement';
 
 // 应用主组件
 const AppContent: React.FC = () => {
@@ -133,6 +134,7 @@ const AppContent: React.FC = () => {
           <Route path="dashboard/mail-gateway" element={<MailGateway />} />
           {/* 系统运维路由 */}
           <Route path="system-ops/gateway" element={<ProxyGatewayMonitor />} />
+          <Route path="system-ops/workers" element={<WorkerManagement />} />
           <Route path="system-ops/disk" element={<DiskMonitor />} />
           <Route path="system-ops/backup" element={<DatabaseBackup />} />
         </Route>

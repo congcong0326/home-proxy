@@ -113,8 +113,8 @@ const ProxyGatewayMonitor: React.FC = () => {
             <strong>{formatDateTime(status?.startedAt)}</strong>
           </div>
           <div>
-            <Text type="secondary">当前配置 Hash</Text>
-            <strong>{status?.lastConfigHash ? status.lastConfigHash.slice(0, 8) : '-'}</strong>
+            <Text type="secondary">已应用配置 Hash</Text>
+            <strong>{status?.appliedConfigHash ? status.appliedConfigHash.slice(0, 8) : '-'}</strong>
           </div>
         </div>
       </Card>

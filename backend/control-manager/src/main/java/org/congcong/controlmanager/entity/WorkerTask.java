@@ -14,6 +14,9 @@ public class WorkerTask {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "worker_id", nullable = false, length = 128)
+    private String workerId;
+
     @Column(name = "task_type", nullable = false, length = 64)
     private String taskType;
 

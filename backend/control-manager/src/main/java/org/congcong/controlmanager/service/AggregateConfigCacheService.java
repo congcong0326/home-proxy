@@ -11,9 +11,13 @@ public class AggregateConfigCacheService {
 
     private final AggregateConfigService aggregateConfigService;
 
-    @Cacheable(value = "aggregateConfig", key = "'config'")
-    public AggregateConfigResponse getAggregateConfig() {
-        return aggregateConfigService.getAggregateConfig();
+    @Cacheable(value = "aggregateConfig", key = "#workerId")
+    public AggregateConfigResponse getAggregateConfig(String workerId) {
+        return aggregateConfigService.getAggregateConfig(workerId);
+    }
+
+    public AggregateConfigResponse getRedactedAggregateConfig(String workerId) {
+        return aggregateConfigService.getRedactedAggregateConfig(workerId);
     }
 
 }

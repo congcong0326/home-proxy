@@ -92,7 +92,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         StringBuilder sb = new StringBuilder();
         List<Object> params = new ArrayList<>();
         sb.append("SELECT ");
-        sb.append("ts, request_id, user_id, username, proxy_name, inbound_id, client_ip, status, bytes_in, bytes_out, request_duration_ms, original_target_host, rewrite_target_host, src_geo_country, dst_geo_country ,route_policy_name,route_policy_id ");
+        sb.append("ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, client_ip, status, bytes_in, bytes_out, request_duration_ms, original_target_host, rewrite_target_host, src_geo_country, dst_geo_country ,route_policy_name,route_policy_id ");
         sb.append("FROM default.access_log WHERE 1=1 ");
         buildWhere(req, sb, params);
         String orderBy = parseOrder(req.getSort());
@@ -108,6 +108,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
             items.add(new AccessLogListItem(
                     toLocalDateTime(r.get("ts")),
                     toStr(r.get("request_id")),
+                    toStr(r.get("worker_id")),
                     toLong(r.get("user_id")),
                     toStr(r.get("username")),
                     toStr(r.get("proxy_name")),
@@ -135,13 +136,14 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
 
     @Override
     public Optional<AccessLogDetail> getAccessLogDetail(String id) {
-        String sql = "SELECT ts, request_id, user_id, username, proxy_name, inbound_id, client_ip, client_port, src_geo_country, src_geo_city, original_target_host, original_target_ip, original_target_port, rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms FROM default.access_log WHERE  request_id = ? LIMIT 1";
+        String sql = "SELECT ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, client_ip, client_port, src_geo_country, src_geo_city, original_target_host, original_target_ip, original_target_port, rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms FROM default.access_log WHERE request_id = ? LIMIT 1";
         List<Map<String,Object>> rows = client.query(sql, id);
         if (rows.isEmpty()) return Optional.empty();
         Map<String,Object> r = rows.get(0);
         AccessLogDetail d = new AccessLogDetail(
                 toLocalDateTime(r.get("ts")),
                 toStr(r.get("request_id")),
+                toStr(r.get("worker_id")),
                 toLong(r.get("user_id")),
                 toStr(r.get("username")),
                 toStr(r.get("proxy_name")),
@@ -243,6 +245,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     private void buildWhere(AccessLogQueryRequest req, StringBuilder sb, List<Object> params) {
+        if (notBlank(req.getWorkerId())) { sb.append(" AND worker_id = ?"); params.add(req.getWorkerId()); }
         if (req.getFrom() != null && !req.getFrom().isBlank()) { sb.append(" AND ts >= ?"); params.add(toTimestamp(parseDate(req.getFrom()))); }
         if (req.getTo() != null && !req.getTo().isBlank()) { sb.append(" AND ts <= ?"); params.add(toTimestamp(parseDate(req.getTo()))); }
         if (req.getUserId() != null) { sb.append(" AND user_id = ?"); params.add(req.getUserId()); }

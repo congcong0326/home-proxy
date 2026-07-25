@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AccessLogQueryRequest {
+    private String workerId;
     private String from; // ISO8601或毫秒时间戳
     private String to;   // ISO8601或毫秒时间戳
     private Long userId;

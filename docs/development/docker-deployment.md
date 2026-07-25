@@ -26,9 +26,17 @@ make docker-save-offline   # 导出应用镜像以及 MySQL/ClickHouse 镜像
 make docker-up-control
 ```
 
+生产部署使用管理面 HTTPS 和每节点独立 Token。准备好 `data/tls/control-manager.p12`、
+`data/tls/control-manager.crt` 与 `data/tls/control-manager-keystore.password` 后，以独立环境文件展开 Compose：
+
+```bash
+docker compose --env-file /opt/home-proxy/control.env \
+  -f deploy/docker/docker-compose.control.yml up -d
+```
+
 默认服务：
 
-- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-127.0.0.1}:18081` -> 容器 `8081`
+- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HTTPS_HOST_PORT:-18443}` -> 容器 `8443`
 - `mysql`：仅 Docker 网络内可见
 - `clickhouse`：仅 Docker 网络内可见
 
@@ -36,7 +44,7 @@ make docker-up-control
 
 ```bash
 CONTROL_BIND_ADDRESS=192.168.1.10
-CONTROL_HOST_PORT=18081
+CONTROL_HTTPS_HOST_PORT=18443
 MYSQL_ROOT_PASSWORD=change_me
 CLICKHOUSE_PASSWORD=change_me
 ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
@@ -62,23 +70,31 @@ make docker-up-worker
 
 worker 使用 `network_mode: host`，因此控制面下发的入站端口会直接监听在宿主机网络栈，不需要在 compose 里重复配置 `ports`。
 
-默认 worker 连接本机控制面：
+每台 worker 必须有独立的 Token 文件，且只读挂载管理端公开证书，不能挂载 P12 或其口令：
 
 ```bash
-CONTROL_MANAGER_URL=http://127.0.0.1:18081
+WORKER_ID=shanghai-01
+CONTROL_MANAGER_HOST_IP=192.168.1.10
+CONTROL_HTTPS_HOST_PORT=18443
+WORKER_TOKEN_HOST_FILE=/opt/home-proxy/secrets/shanghai-01.token
 ```
 
-如果控制面在其他机器：
+启动前通过管理台创建节点并仅展示一次 Token，将其写入 `WORKER_TOKEN_HOST_FILE` 指向的 `0600` 文件。然后运行：
 
 ```bash
-CONTROL_MANAGER_URL=http://<control-manager-lan-ip>:18081 make docker-up-worker
+docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
+  -f deploy/docker/docker-compose.worker.yml up -d
 ```
+
+本地临时节点可在 `deploy/docker/worker.env.local` 配置节点 ID、控制端地址和 Token
+文件路径，然后执行 `make docker-up-worker`。该文件不会提交；要使用其他环境文件时执行
+`make docker-up-worker WORKER_ENV_FILE=/opt/home-proxy/workers/shanghai-01.env`。
 
 使用 host network 时，新增入站端口前需要确认宿主机没有同端口进程占用。Linux 原生 Docker 对该模式支持最好；Docker Desktop 的 host network 行为可能不同。
 
 worker 配置优先级为：
 
-1. 环境变量或 JVM system properties，例如 `CONTROL_MANAGER_URL`、`CONTROL_HOST`、`CONTROL_PORT`。
+1. 环境变量或 JVM system properties，例如 `CONTROL_MANAGER_URL`、`CONTROL_MANAGER_TRUSTED_CERT_FILES`、`WORKER_ID`、`WORKER_TOKEN_FILE`。
 2. `PROXY_WORKER_CONFIG` 指向的外部 `proxy-worker.properties`。
 3. JAR 内置的 `proxy-worker.properties`。
 

@@ -3,12 +3,16 @@ FRONTEND_DIR ?= frontend
 BACKEND_STATIC_DIR ?= $(BACKEND_DIR)/control-manager/src/main/resources/static
 CONTROL_COMPOSE ?= deploy/docker/docker-compose.control.yml
 WORKER_COMPOSE ?= deploy/docker/docker-compose.worker.yml
+WORKER_ENV_FILE ?= $(CURDIR)/deploy/docker/worker.env.local
 DOCKER_COMPOSE ?= docker compose
 DOCKER_BUILD_ARGS ?=
 DOCKER_UP_ARGS ?= -d --force-recreate
 DOCKER_IMAGE_TAR ?= home-proxy-images.tar
 CONTROL_IMAGE ?= home-proxy-control-manager:latest
 WORKER_IMAGE ?= home-proxy-worker:latest
+WORKER_BUILD_ID ?= image-build
+WORKER_BUILD_CONTROL_MANAGER_HOST_IP ?= 127.0.0.1
+WORKER_BUILD_TOKEN_HOST_FILE ?= /dev/null
 MYSQL_IMAGE ?= mysql:8.4
 CLICKHOUSE_IMAGE ?= clickhouse/clickhouse-server:24.8
 MVN ?= mvn
@@ -59,19 +63,20 @@ frontend-sync-static: frontend-build
 
 docker-build: package
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) build $(DOCKER_BUILD_ARGS) control-manager
-	$(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
+	WORKER_ID="$(WORKER_BUILD_ID)" CONTROL_MANAGER_HOST_IP="$(WORKER_BUILD_CONTROL_MANAGER_HOST_IP)" WORKER_TOKEN_HOST_FILE="$(WORKER_BUILD_TOKEN_HOST_FILE)" $(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
 
 docker-build-control: package
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) build $(DOCKER_BUILD_ARGS) control-manager
 
 docker-build-worker: worker-build
-	$(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
+	WORKER_ID="$(WORKER_BUILD_ID)" CONTROL_MANAGER_HOST_IP="$(WORKER_BUILD_CONTROL_MANAGER_HOST_IP)" WORKER_TOKEN_HOST_FILE="$(WORKER_BUILD_TOKEN_HOST_FILE)" $(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
 
 docker-up-control: docker-build-control
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) up $(DOCKER_UP_ARGS)
 
 docker-up-worker: docker-build-worker
-	$(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) up $(DOCKER_UP_ARGS)
+	@test -f "$(WORKER_ENV_FILE)" || (echo "Worker environment file not found: $(WORKER_ENV_FILE)"; exit 1)
+	$(DOCKER_COMPOSE) --env-file "$(WORKER_ENV_FILE)" -f $(WORKER_COMPOSE) up $(DOCKER_UP_ARGS)
 
 docker-reset-control:
 	@test "$(CONFIRM)" = "1" || (echo "This removes control-plane containers and volumes. Re-run with CONFIRM=1 to continue."; exit 1)

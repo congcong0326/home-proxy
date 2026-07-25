@@ -9,6 +9,8 @@ import java.time.Instant;
  */
 @Data
 public class AuthLog {
+    /** Set by the control plane from the authenticated worker, never trusted from the request. */
+    private String workerId;
     // 基本信息
     private Instant ts = Instant.now();
     private String proxyName; // 代理服务名称

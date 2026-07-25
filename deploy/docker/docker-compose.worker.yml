@@ -6,19 +6,34 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.proxy-worker
-    container_name: home-proxy-worker
+    container_name: home-proxy-worker-${WORKER_ID:?WORKER_ID is required}
     restart: unless-stopped
     network_mode: host
     environment:
-      CONTROL_MANAGER_URL: ${CONTROL_MANAGER_URL:-http://127.0.0.1:18081}
-      PROXY_WORKER_CONFIG: ${PROXY_WORKER_CONFIG:-}
+      CONTROL_MANAGER_URL: https://proxy-manager.internal:${CONTROL_HTTPS_HOST_PORT:-18443}
+      CONTROL_MANAGER_TRUSTED_CERT_FILES: /data/tls/control-manager.crt
+      WORKER_ID: ${WORKER_ID:?WORKER_ID is required}
+      WORKER_TOKEN_FILE: /run/secrets/worker-token
+      LAST_KNOWN_GOOD_CONFIG: /data/proxy-worker/last-known-good-config.json
       TLS_CERT_FILE: ${TLS_CERT_FILE:-}
       TLS_KEY_FILE: ${TLS_KEY_FILE:-}
-      TLS_KEY_PASSWORD: ${TLS_KEY_PASSWORD:-}
+      TLS_KEY_PASSWORD_FILE: ${TLS_KEY_PASSWORD_FILE:-}
+      TLS_ALLOW_SELF_SIGNED: ${TLS_ALLOW_SELF_SIGNED:-false}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
-    # Optional mounts:
-    # volumes:
-    #   - ../../config/proxy-worker.properties:/app/config/proxy-worker.properties:ro
-    #   - ../../data/geoip/GeoLite2-City.mmdb:/app/data/geoip/GeoLite2-City.mmdb:ro
-    #   - /etc/nas-proxy/certs:/etc/nas-proxy/certs:ro
+    volumes:
+      - ../../data/tls/control-manager.crt:/data/tls/control-manager.crt:ro
+      - proxy-worker-data:/data/proxy-worker
+    secrets:
+      - source: worker_token
+        target: worker-token
+        mode: 0400
+    extra_hosts:
+      - "proxy-manager.internal:${CONTROL_MANAGER_HOST_IP:?CONTROL_MANAGER_HOST_IP is required}"
+
+secrets:
+  worker_token:
+    file: ${WORKER_TOKEN_HOST_FILE:?WORKER_TOKEN_HOST_FILE is required}
+
+volumes:
+  proxy-worker-data:

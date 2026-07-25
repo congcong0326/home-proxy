@@ -5,8 +5,10 @@ import org.congcong.common.dto.WorkerPollRequest;
 import org.congcong.common.dto.WorkerPollResponse;
 import org.congcong.controlmanager.dto.WorkerStatusDTO;
 import org.congcong.controlmanager.service.WorkerControlService;
+import org.congcong.controlmanager.security.WorkerPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,8 +23,9 @@ public class WorkerController {
     private final WorkerControlService workerControlService;
 
     @PostMapping("/poll")
-    public ResponseEntity<WorkerPollResponse> poll(@RequestBody(required = false) WorkerPollRequest request) {
-        return ResponseEntity.ok(workerControlService.poll(request));
+    public ResponseEntity<WorkerPollResponse> poll(@AuthenticationPrincipal WorkerPrincipal principal,
+                                                    @RequestBody(required = false) WorkerPollRequest request) {
+        return ResponseEntity.ok(workerControlService.poll(principal.workerId(), request));
     }
 
     @GetMapping("/status")

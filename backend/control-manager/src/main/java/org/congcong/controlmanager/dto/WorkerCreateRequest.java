@@ -1,0 +1,20 @@
+package org.congcong.controlmanager.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
+@Data
+public class WorkerCreateRequest {
+    @NotBlank
+    @Pattern(regexp = "^[a-z0-9][a-z0-9._-]{0,127}$", message = "workerId 格式不正确")
+    private String workerId;
+
+    @NotBlank
+    @Size(max = 128)
+    private String displayName;
+
+    @Size(max = 255)
+    private String description;
+}

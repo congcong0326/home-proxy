@@ -30,6 +30,11 @@ public class ProxyWorkerConfig {
     private final String tlsCertFile;
     private final String tlsKeyFile;
     private final String tlsKeyPassword;
+    private final String tlsKeyPasswordFile;
+    private final boolean tlsAllowSelfSigned;
+    private final String controlManagerTrustedCertFiles;
+    private final String workerTokenFile;
+    private final String lastKnownGoodConfig;
     
     private static ProxyWorkerConfig instance;
     
@@ -37,7 +42,10 @@ public class ProxyWorkerConfig {
         Properties props = loadProperties();
 
         String configuredBaseUrl = trimToNull(props.getProperty("control.manager.url"));
-        if (configuredBaseUrl != null) {
+        boolean explicitLegacyAddress = firstNonBlank(
+                System.getProperty("CONTROL_HOST"), System.getProperty("control.host"), System.getenv("CONTROL_HOST"),
+                System.getProperty("CONTROL_PORT"), System.getProperty("control.port"), System.getenv("CONTROL_PORT")) != null;
+        if (configuredBaseUrl != null && !explicitLegacyAddress) {
             URI controlUri = URI.create(trimTrailingSlash(configuredBaseUrl));
             this.controlHost = controlUri.getHost();
             this.controlPort = resolvePort(controlUri);
@@ -51,6 +59,11 @@ public class ProxyWorkerConfig {
         this.tlsCertFile = props.getProperty("tls.certFile", null);
         this.tlsKeyFile = props.getProperty("tls.keyFile", null);
         this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
+        this.tlsKeyPasswordFile = trimToNull(props.getProperty("tls.keyPasswordFile"));
+        this.tlsAllowSelfSigned = Boolean.parseBoolean(props.getProperty("tls.allowSelfSigned", "false"));
+        this.controlManagerTrustedCertFiles = trimToNull(props.getProperty("control.manager.trustedCertFiles"));
+        this.workerTokenFile = trimToNull(props.getProperty("worker.tokenFile"));
+        this.lastKnownGoodConfig = props.getProperty("worker.lastKnownGoodConfig", "/data/proxy-worker/last-known-good-config.json");
         this.workerId = props.getProperty("worker.id", "default");
         this.workerControlPollIntervalMs = Long.parseLong(props.getProperty("worker.control.pollIntervalMs", "2000"));
         
@@ -112,7 +125,12 @@ public class ProxyWorkerConfig {
         overrideProperty(props, "tls.certFile", "TLS_CERT_FILE");
         overrideProperty(props, "tls.keyFile", "TLS_KEY_FILE");
         overrideProperty(props, "tls.keyPassword", "TLS_KEY_PASSWORD");
+        overrideProperty(props, "tls.keyPasswordFile", "TLS_KEY_PASSWORD_FILE");
+        overrideProperty(props, "tls.allowSelfSigned", "TLS_ALLOW_SELF_SIGNED");
+        overrideProperty(props, "control.manager.trustedCertFiles", "CONTROL_MANAGER_TRUSTED_CERT_FILES");
         overrideProperty(props, "worker.id", "WORKER_ID");
+        overrideProperty(props, "worker.tokenFile", "WORKER_TOKEN_FILE");
+        overrideProperty(props, "worker.lastKnownGoodConfig", "LAST_KNOWN_GOOD_CONFIG");
         overrideProperty(props, "worker.control.pollIntervalMs", "WORKER_CONTROL_POLL_INTERVAL_MS");
     }
 
@@ -217,4 +235,10 @@ public class ProxyWorkerConfig {
     public String getTlsKeyPassword() {
         return tlsKeyPassword;
     }
+
+    public String getTlsKeyPasswordFile() { return tlsKeyPasswordFile; }
+    public boolean isTlsAllowSelfSigned() { return tlsAllowSelfSigned; }
+    public String getControlManagerTrustedCertFiles() { return controlManagerTrustedCertFiles; }
+    public String getWorkerTokenFile() { return workerTokenFile; }
+    public String getLastKnownGoodConfig() { return lastKnownGoodConfig; }
 }

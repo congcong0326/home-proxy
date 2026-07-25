@@ -38,11 +38,12 @@ class WorkerControlServiceTest {
     void pollConsumesPendingTasksSoTheyAreNotReturnedAgain() {
         WorkerTask task = new WorkerTask();
         task.setId(1002L);
+        task.setWorkerId("default");
         task.setTaskType("WOL_WAKE");
         task.setPayloadJson("{\"deviceName\":\"NAS\",\"macAddress\":\"AA:BB:CC:DD:EE:FF\",\"broadcastIp\":\"192.168.1.255\",\"port\":9}");
 
         when(statusRepository.findById("default")).thenReturn(Optional.empty());
-        when(taskRepository.findByConsumedAtIsNullOrderByCreatedAtAsc(any(Pageable.class)))
+        when(taskRepository.findByWorkerIdAndConsumedAtIsNullOrderByCreatedAtAsc(org.mockito.Mockito.eq("default"), any(Pageable.class)))
                 .thenReturn(List.of(task))
                 .thenReturn(List.of());
         when(statusRepository.save(any(WorkerStatus.class))).thenAnswer(invocation -> invocation.getArgument(0));
@@ -61,9 +62,10 @@ class WorkerControlServiceTest {
     void pollStoresReportedTaskResults() {
         WorkerTask task = new WorkerTask();
         task.setId(1001L);
+        task.setWorkerId("default");
         when(statusRepository.findById("default")).thenReturn(Optional.empty());
         when(taskRepository.findById(1001L)).thenReturn(Optional.of(task));
-        when(taskRepository.findByConsumedAtIsNullOrderByCreatedAtAsc(any(Pageable.class))).thenReturn(List.of());
+        when(taskRepository.findByWorkerIdAndConsumedAtIsNullOrderByCreatedAtAsc(org.mockito.Mockito.eq("default"), any(Pageable.class))).thenReturn(List.of());
         when(statusRepository.save(any(WorkerStatus.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         WorkerTaskResultDTO result = new WorkerTaskResultDTO();
@@ -83,7 +85,7 @@ class WorkerControlServiceTest {
     @Test
     void pollUpdatesLatestWorkerMetrics() {
         when(statusRepository.findById("default")).thenReturn(Optional.empty());
-        when(taskRepository.findByConsumedAtIsNullOrderByCreatedAtAsc(any(Pageable.class))).thenReturn(List.of());
+        when(taskRepository.findByWorkerIdAndConsumedAtIsNullOrderByCreatedAtAsc(org.mockito.Mockito.eq("default"), any(Pageable.class))).thenReturn(List.of());
         when(statusRepository.save(any(WorkerStatus.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.poll(pollRequest(List.of()));

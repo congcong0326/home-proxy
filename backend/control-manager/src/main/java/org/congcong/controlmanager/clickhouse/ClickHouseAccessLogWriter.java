@@ -94,7 +94,7 @@ public class ClickHouseAccessLogWriter {
             bufferSize.set(0);
             firstBufferedAt = 0L;
             String sql = "INSERT INTO default.access_log (" +
-                    "ts, request_id, user_id, username, proxy_name, inbound_id, " +
+                    "ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, " +
                     "client_ip, client_port, src_geo_country, src_geo_city, " +
                     "original_target_host, original_target_ip, original_target_port, " +
                     "rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, " +
@@ -102,7 +102,7 @@ public class ClickHouseAccessLogWriter {
                     "bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, " +
                     "request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms" +
                     ") VALUES (" +
-                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
                     ")";
             client.batchExecute(sql, params);
             return params.size();
@@ -113,9 +113,10 @@ public class ClickHouseAccessLogWriter {
     }
 
     private List<Object> toParams(AccessLog l) {
-        List<Object> p = new ArrayList<>(31);
+        List<Object> p = new ArrayList<>(32);
         p.add(toTimestamp(l.getTs()));
         p.add(l.getRequestId());
+        p.add(nullToEmpty(l.getWorkerId()));
         p.add(nullToZero(l.getUserId()));
         p.add(nullToEmpty(l.getUsername()));
         p.add(nullToEmpty(l.getProxyName()));

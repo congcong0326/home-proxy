@@ -25,7 +25,26 @@ public class ProxyContext {
         return Holder.INSTANCE;
     }
 
-    public synchronized void refresh(List<InboundConfig> inboundConfigs) {
+    public synchronized ConfigApplyResult refresh(List<InboundConfig> inboundConfigs) {
+        List<InboundConfig> previous = new ArrayList<>(configs.values());
+        java.util.concurrent.atomic.AtomicReference<Long> activeInboundId = new java.util.concurrent.atomic.AtomicReference<>();
+        try {
+            apply(inboundConfigs, activeInboundId::set);
+            return ConfigApplyResult.applied();
+        } catch (Exception error) {
+            log.error("代理配置应用失败，正在恢复上一份运行配置", error);
+            closeAll();
+            try {
+                apply(previous, ignored -> { });
+            } catch (Exception rollbackError) {
+                log.error("代理配置回滚失败", rollbackError);
+                error.addSuppressed(rollbackError);
+            }
+            return ConfigApplyResult.failure(activeInboundId.get(), error);
+        }
+    }
+
+    private void apply(List<InboundConfig> inboundConfigs, java.util.function.Consumer<Long> activeInboundConsumer) throws Exception {
         Map<Long, InboundConfig> newConfigs = new HashMap<>();
         if (inboundConfigs != null) {
             for (InboundConfig cfg : inboundConfigs) {
@@ -60,6 +79,7 @@ public class ProxyContext {
 
             boolean needsRestart = (oldCfg == null) || !Objects.equals(oldCfg, newCfg);
             if (needsRestart) {
+                activeInboundConsumer.accept(id);
                 // 关闭旧服务
                 if (existing != null && existing.isRunning()) {
                     try {
@@ -71,12 +91,7 @@ public class ProxyContext {
 
                 // 启动新服务
                 AbstractProxyServer newServer = ProxyServerFactory.create(newCfg);
-                try {
-                    newServer.start();
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    continue;
-                }
+                newServer.start();
                 servers.put(id, newServer);
                 configs.put(id, newCfg);
             } else {

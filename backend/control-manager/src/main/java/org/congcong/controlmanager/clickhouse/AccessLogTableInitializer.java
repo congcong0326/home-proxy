@@ -19,6 +19,7 @@ public class AccessLogTableInitializer implements ApplicationRunner {
                 (
                     ts                         DateTime64(3, 'UTC'),
                     request_id                 String,
+                    worker_id                  LowCardinality(String),
                     user_id                    UInt64,
                     username                   LowCardinality(String),
                     proxy_name                 LowCardinality(String),
@@ -60,6 +61,15 @@ public class AccessLogTableInitializer implements ApplicationRunner {
                 SETTINGS index_granularity = 8192
                 """;
         client.execute(createTable);
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS worker_id LowCardinality(String) AFTER request_id");
         client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS dns_answer_ips Array(String)");
+        client.execute("""
+                CREATE TABLE IF NOT EXISTS default.auth_log
+                (
+                    ts DateTime64(3, 'UTC'), worker_id LowCardinality(String), proxy_name LowCardinality(String),
+                    inbound_id UInt64, user_id UInt64, username LowCardinality(String), client_ip String,
+                    client_port UInt16, success UInt8, fail_reason Nullable(String), protocol LowCardinality(String)
+                ) ENGINE = MergeTree PARTITION BY toYYYYMM(ts) ORDER BY (ts, worker_id, inbound_id, user_id)
+                """);
     }
 }

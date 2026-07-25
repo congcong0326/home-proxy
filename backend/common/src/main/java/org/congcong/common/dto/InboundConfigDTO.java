@@ -13,6 +13,9 @@ import java.util.List;
 @Data
 public class InboundConfigDTO {
     private Long id;
+    private String workerId;
+    private Long fallbackRouteId;
+    private Long anonymousUserId;
     private String name;
     private ProtocolType protocol;
     private String listenIp;

@@ -14,7 +14,13 @@ public class WorkerPollRequest {
     private String workerId;
     private String hostname;
     private LocalDateTime startedAt;
+    /** Deprecated compatibility field. The control plane uses the authenticated worker id. */
     private String lastConfigHash;
+    private String fetchedConfigHash;
+    private String appliedConfigHash;
+    private Boolean applySuccess;
+    private String applyError;
+    private LocalDateTime appliedAt;
     private WorkerMetricsDTO metrics;
     private List<WorkerTaskResultDTO> taskResults;
 }

@@ -11,6 +11,8 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.ProxyContext;
+import org.congcong.proxyworker.server.ConfigApplyResult;
+import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.service.AggregateConfigService;
 import org.congcong.proxyworker.service.WorkerControlService;
 
@@ -60,7 +62,10 @@ public class ProxyWorkerApplication {
      */
     private static class ConfigChangeListener implements AggregateConfigService.ConfigChangeListener {
         @Override
-        public void onConfigChanged(AggregateConfigResponse newConfig) {
+        public ConfigApplyResult onConfigChanged(AggregateConfigResponse newConfig) {
+            if (!ProxyWorkerConfig.getInstance().getWorkerId().equals(newConfig.getWorkerId())) {
+                return ConfigApplyResult.failure(null, new IllegalArgumentException("配置 workerId 与本节点不一致"));
+            }
             log.info("收到配置变更通知:");
             log.info("  版本: {}", newConfig.getVersion());
             log.info("  生成时间: {}", newConfig.getGeneratedAt());
@@ -74,8 +79,6 @@ public class ProxyWorkerApplication {
             mapper.registerModule(new JavaTimeModule());
             // 忽略来源对象中在目标类中不存在的管理端展示字段。
             mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            UserConfig anonymousUser = null;
-            RouteConfig defaultRouteConfig = null;
             // 获取所有用户配置
             Map<Long, UserDtoWithCredential> userMap = new HashMap<>();
             Map<Long, RouteDTO> routeMap = new HashMap<>();
@@ -83,9 +86,6 @@ public class ProxyWorkerApplication {
                 for (UserDtoWithCredential user : newConfig.getUsers()) {
                     if (user != null && user.getId() != null) {
                         userMap.put(user.getId(), user);
-                        if ("Anonymous user".equals(user.getUsername())) {
-                            anonymousUser = mapper.convertValue(user, UserConfig.class);
-                        }
                     }
                 }
             }
@@ -94,9 +94,6 @@ public class ProxyWorkerApplication {
                 for (RouteDTO route : newConfig.getRoutes()) {
                     if (route != null && route.getId() != null) {
                         routeMap.put(route.getId(), route);
-                        if ("兜底直连路由规则".equals(route.getName())) {
-                            defaultRouteConfig =  mapper.convertValue(route, RouteConfig.class);
-                        }
                     }
                 }
             }
@@ -128,16 +125,12 @@ public class ProxyWorkerApplication {
                         List<RouteConfig> userBelongRoutes = new ArrayList<>();
                         for (Long routeId : routeIds) {
                             RouteDTO routeDTO = routeMap.get(routeId);
-                            if (routeDTO == null) {
-                                continue;
-                            }
+                            if (routeDTO == null) throw new IllegalStateException("入站引用的路由未下发: " + routeId);
                             userBelongRoutes.add(mapper.convertValue(routeDTO, RouteConfig.class));
                         }
                         for (Long userId : userIds) {
                             UserDtoWithCredential userDtoWithCredential = userMap.get(userId);
-                            if (userDtoWithCredential == null) {
-                                continue;
-                            }
+                            if (userDtoWithCredential == null) throw new IllegalStateException("入站引用的用户未下发: " + userId);
                             userToRoutesMap.put(userId, userBelongRoutes);
                             UserConfig userConfig = mapper.convertValue(userDtoWithCredential, UserConfig.class);
                             userNameMap.put(userConfig.getUsername(), userConfig);
@@ -150,15 +143,23 @@ public class ProxyWorkerApplication {
                     inboundConfig.setUsersMap(userNameMap);
                     inboundConfig.setDeviceIpMapUser(deviceIpMapUser);
                     inboundConfig.setRoutesMap(userToRoutesMap);
-                    inboundConfig.setAnonymousUser(anonymousUser);
-                    inboundConfig.setDefaultRouteConfig(defaultRouteConfig);
+                    UserDtoWithCredential anonymous = userMap.get(inbound.getAnonymousUserId());
+                    RouteDTO fallback = routeMap.get(inbound.getFallbackRouteId());
+                    if (inbound.getAnonymousUserId() != null && anonymous == null) {
+                        throw new IllegalStateException("匿名用户未下发: " + inbound.getAnonymousUserId());
+                    }
+                    if (inbound.getFallbackRouteId() != null && fallback == null) {
+                        throw new IllegalStateException("兜底路由未下发: " + inbound.getFallbackRouteId());
+                    }
+                    inboundConfig.setAnonymousUser(anonymous == null ? null : mapper.convertValue(anonymous, UserConfig.class));
+                    inboundConfig.setDefaultRouteConfig(fallback == null ? null : mapper.convertValue(fallback, RouteConfig.class));
                     inboundConfigs.add(inboundConfig);
                 }
             }
             RuleSetRegistry.refresh(newConfig.getRuleSets());
             log.info("已构建入站配置数量: {}", inboundConfigs.size());
             // 刷新代理服务
-            PROXY_CONTEXT.refresh(inboundConfigs);
+            return PROXY_CONTEXT.refresh(inboundConfigs);
         }
     }
 }

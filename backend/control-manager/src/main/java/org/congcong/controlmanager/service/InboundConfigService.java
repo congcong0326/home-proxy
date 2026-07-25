@@ -29,13 +29,14 @@ import java.util.stream.Collectors;
 public class InboundConfigService {
 
     private final InboundConfigRepository inboundConfigRepository;
+    private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
 
     /**
      * 分页查询入站配置列表
      */
     public PageResponse<InboundConfigDTO> getInboundConfigs(Pageable pageable, ProtocolType protocol,
-                                                            Integer port, Boolean tlsEnabled, Integer status) {
-        Page<InboundConfig> inboundPage = inboundConfigRepository.findByConditions(protocol, port, tlsEnabled, status, pageable);
+                                                            Integer port, Boolean tlsEnabled, Integer status, String workerId) {
+        Page<InboundConfig> inboundPage = inboundConfigRepository.findByConditions(protocol, port, tlsEnabled, status, workerId, pageable);
         return convertToPageResponse(inboundPage);
     }
 
@@ -59,6 +60,7 @@ public class InboundConfigService {
         
         // 业务校验
         validateInboundConfigEntity(inboundConfig);
+        workerConfigDependencyResolver.validateInboundReferences(inboundConfig);
         
         InboundConfig savedInboundConfig = inboundConfigRepository.save(inboundConfig);
 
@@ -78,6 +80,7 @@ public class InboundConfigService {
         
         // 业务校验
         validateInboundConfigEntity(existingInboundConfig);
+        workerConfigDependencyResolver.validateInboundReferences(existingInboundConfig);
 
         InboundConfig savedInboundConfig = inboundConfigRepository.save(existingInboundConfig);
 
@@ -115,14 +118,20 @@ public class InboundConfigService {
                 .toList();
     }
 
+    public List<InboundConfigDTO> getEnabledInboundConfigsForWorker(String workerId) {
+        return inboundConfigRepository.findByWorkerIdAndStatusOrderByIdAsc(workerId, 1).stream()
+                .map(this::convertToDTO)
+                .toList();
+    }
+
     /**
      * 业务校验 - 创建请求
      */
     private void validateInboundConfig(InboundConfigCreateRequest request) {
         // 检查端口是否已被占用
-        if (inboundConfigRepository.existsByListenIpAndPort(request.getListenIp(), request.getPort())) {
+        if (inboundConfigRepository.existsByWorkerIdAndListenIpAndPort(request.getWorkerId(), request.getListenIp(), request.getPort())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, 
-                    "端口已被占用: " + request.getListenIp() + ":" + request.getPort());
+                    "节点内端口已被占用: " + request.getListenIp() + ":" + request.getPort());
         }
     }
 
@@ -151,8 +160,8 @@ public class InboundConfigService {
 
         // 校验端口冲突（更新时）
         if (inboundConfig.getId() != null) {
-            if (inboundConfigRepository.existsByListenIpAndPortAndIdNot(
-                    inboundConfig.getListenIp(), inboundConfig.getPort(), inboundConfig.getId())) {
+            if (inboundConfigRepository.existsByWorkerIdAndListenIpAndPortAndIdNot(
+                    inboundConfig.getWorkerId(), inboundConfig.getListenIp(), inboundConfig.getPort(), inboundConfig.getId())) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, 
                         "端口已被其他配置占用: " + inboundConfig.getListenIp() + ":" + inboundConfig.getPort());
             }
@@ -173,6 +182,9 @@ public class InboundConfigService {
      */
     private void updateInboundConfigFromRequest(InboundConfig inboundConfig, InboundConfigUpdateRequest request) {
         inboundConfig.setName(request.getName());
+        inboundConfig.setWorkerId(request.getWorkerId());
+        inboundConfig.setFallbackRouteId(request.getFallbackRouteId());
+        inboundConfig.setAnonymousUserId(request.getAnonymousUserId());
         inboundConfig.setProtocol(request.getProtocol());
         inboundConfig.setListenIp(request.getListenIp());
         inboundConfig.setPort(request.getPort());
@@ -182,6 +194,22 @@ public class InboundConfigService {
         inboundConfig.setStatus(request.getStatus());
         inboundConfig.setNotes(request.getNotes());
         inboundConfig.setInboundRouteBindings(request.getInboundRouteBindings());
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void backfillLegacyDefaultReferences(Long fallbackRouteId, Long anonymousUserId) {
+        for (InboundConfig inbound : inboundConfigRepository.findAll()) {
+            boolean changed = false;
+            if (inbound.getFallbackRouteId() == null) {
+                inbound.setFallbackRouteId(fallbackRouteId);
+                changed = true;
+            }
+            if (inbound.getAnonymousUserId() == null) {
+                inbound.setAnonymousUserId(anonymousUserId);
+                changed = true;
+            }
+            if (changed) inboundConfigRepository.save(inbound);
+        }
     }
 
     /**

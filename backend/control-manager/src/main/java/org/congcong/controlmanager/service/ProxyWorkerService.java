@@ -1,0 +1,164 @@
+package org.congcong.controlmanager.service;
+
+import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.ProxyWorkerDTO;
+import org.congcong.common.dto.WorkerStatusSnapshot;
+import org.congcong.common.dto.WorkerTokenResponse;
+import org.congcong.controlmanager.dto.WorkerCreateRequest;
+import org.congcong.controlmanager.dto.WorkerUpdateRequest;
+import org.congcong.controlmanager.entity.ProxyWorker;
+import org.congcong.controlmanager.entity.WorkerStatus;
+import org.congcong.controlmanager.repository.InboundConfigRepository;
+import org.congcong.controlmanager.repository.ProxyWorkerRepository;
+import org.congcong.controlmanager.repository.WorkerStatusRepository;
+import org.congcong.controlmanager.repository.WorkerTaskRepository;
+import org.congcong.controlmanager.security.WorkerTokenAuthenticationService;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.Base64;
+import java.util.List;
+
+@Service
+@RequiredArgsConstructor
+public class ProxyWorkerService {
+    private static final SecureRandom RANDOM = new SecureRandom();
+    private static final String TOKEN_PREFIX = "hpw_";
+    private static final long ONLINE_THRESHOLD_SECONDS = 10L;
+
+    private final ProxyWorkerRepository proxyWorkerRepository;
+    private final WorkerStatusRepository workerStatusRepository;
+    private final WorkerTaskRepository workerTaskRepository;
+    private final InboundConfigRepository inboundConfigRepository;
+
+    @Transactional(readOnly = true)
+    public List<ProxyWorkerDTO> list() {
+        return proxyWorkerRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(ProxyWorker::getWorkerId))
+                .map(this::toDto)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public ProxyWorkerDTO get(String workerId) {
+        return toDto(requireWorker(workerId));
+    }
+
+    @Transactional
+    public WorkerTokenResponse create(WorkerCreateRequest request) {
+        if (proxyWorkerRepository.existsById(request.getWorkerId())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "节点已存在: " + request.getWorkerId());
+        }
+        ProxyWorker worker = new ProxyWorker();
+        worker.setWorkerId(request.getWorkerId());
+        worker.setDisplayName(request.getDisplayName());
+        worker.setDescription(request.getDescription());
+        worker.setEnabled(true);
+        String token = generateToken();
+        worker.setTokenHash(WorkerTokenAuthenticationService.hash(token));
+        ProxyWorker saved = proxyWorkerRepository.save(worker);
+        return tokenResponse(saved, token);
+    }
+
+    @Transactional
+    public ProxyWorkerDTO update(String workerId, WorkerUpdateRequest request) {
+        ProxyWorker worker = requireWorker(workerId);
+        worker.setDisplayName(request.getDisplayName());
+        worker.setDescription(request.getDescription());
+        if (request.getEnabled() != null) worker.setEnabled(request.getEnabled());
+        return toDto(proxyWorkerRepository.save(worker));
+    }
+
+    @Transactional
+    public ProxyWorkerDTO disable(String workerId) {
+        ProxyWorker worker = requireWorker(workerId);
+        worker.setEnabled(false);
+        return toDto(proxyWorkerRepository.save(worker));
+    }
+
+    @Transactional
+    public WorkerTokenResponse createToken(String workerId) {
+        ProxyWorker worker = requireWorker(workerId);
+        if (worker.getTokenHash() != null) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "节点已有有效 Token");
+        }
+        String token = generateToken();
+        worker.setTokenHash(WorkerTokenAuthenticationService.hash(token));
+        return tokenResponse(proxyWorkerRepository.save(worker), token);
+    }
+
+    @Transactional
+    public void deleteToken(String workerId) {
+        ProxyWorker worker = requireWorker(workerId);
+        worker.setTokenHash(null);
+        proxyWorkerRepository.save(worker);
+    }
+
+    @Transactional
+    public void delete(String workerId) {
+        requireWorker(workerId);
+        long inbounds = inboundConfigRepository.countByWorkerId(workerId);
+        long tasks = workerTaskRepository.countByWorkerId(workerId);
+        long statuses = workerStatusRepository.countByWorkerId(workerId);
+        if (inbounds + tasks + statuses > 0) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "节点仍被引用: inbounds=" + inbounds + ", tasks=" + tasks + ", statuses=" + statuses);
+        }
+        proxyWorkerRepository.deleteById(workerId);
+    }
+
+    private ProxyWorker requireWorker(String workerId) {
+        return proxyWorkerRepository.findById(workerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "节点不存在: " + workerId));
+    }
+
+    private WorkerTokenResponse tokenResponse(ProxyWorker worker, String token) {
+        WorkerTokenResponse response = new WorkerTokenResponse();
+        response.setWorker(toDto(worker));
+        response.setToken(token);
+        return response;
+    }
+
+    private String generateToken() {
+        byte[] bytes = new byte[32];
+        RANDOM.nextBytes(bytes);
+        return TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    }
+
+    private ProxyWorkerDTO toDto(ProxyWorker worker) {
+        ProxyWorkerDTO dto = new ProxyWorkerDTO();
+        dto.setWorkerId(worker.getWorkerId());
+        dto.setDisplayName(worker.getDisplayName());
+        dto.setEnabled(worker.getEnabled());
+        dto.setDescription(worker.getDescription());
+        dto.setTokenPresent(worker.getTokenHash() != null);
+        dto.setCreatedAt(worker.getCreatedAt());
+        dto.setUpdatedAt(worker.getUpdatedAt());
+        workerStatusRepository.findById(worker.getWorkerId()).ifPresent(status -> dto.setStatus(toStatus(status)));
+        return dto;
+    }
+
+    private WorkerStatusSnapshot toStatus(WorkerStatus status) {
+        WorkerStatusSnapshot dto = new WorkerStatusSnapshot();
+        dto.setWorkerId(status.getWorkerId());
+        dto.setHostname(status.getHostname());
+        dto.setStartedAt(status.getStartedAt());
+        dto.setLastSeenAt(status.getLastSeenAt());
+        dto.setFetchedConfigHash(status.getFetchedConfigHash());
+        dto.setAppliedConfigHash(status.getAppliedConfigHash());
+        dto.setApplySuccess(status.getApplySuccess());
+        dto.setApplyError(status.getApplyError());
+        dto.setAppliedAt(status.getAppliedAt());
+        dto.setUptimeSeconds(status.getUptimeSeconds());
+        dto.setHeapUsedBytes(status.getHeapUsedBytes());
+        dto.setHeapMaxBytes(status.getHeapMaxBytes());
+        dto.setRunningInboundCount(status.getRunningInboundCount());
+        dto.setActiveConnectionCount(status.getActiveConnectionCount());
+        dto.setOnline(status.getLastSeenAt() != null && status.getLastSeenAt().isAfter(LocalDateTime.now().minusSeconds(ONLINE_THRESHOLD_SECONDS)));
+        return dto;
+    }
+}

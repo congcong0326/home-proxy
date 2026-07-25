@@ -32,6 +32,7 @@ import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateReques
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO } from '../types/user';
 import { RouteDTO } from '../types/route';
+import { ProxyWorkerDTO } from '../types/worker';
 import { PROXY_ENC_ALGO_OPTIONS } from '../types/proxyEncAlgo';
 import { formatBytes } from '../utils/format';
 import RouteOrderEditor from '../components/RouteOrderEditor';
@@ -51,6 +52,7 @@ interface PageState {
   statusFilter?: number;
   tlsFilter?: boolean;
   searchPort?: number;
+  workerFilter?: string;
   selectedRowKeys: React.Key[];
 }
 
@@ -132,6 +134,7 @@ const InboundManagement: React.FC = () => {
   // 下拉数据
   const [userOptions, setUserOptions] = useState<UserDTO[]>([]);
   const [routeOptions, setRouteOptions] = useState<RouteDTO[]>([]);
+  const [workerOptions, setWorkerOptions] = useState<ProxyWorkerDTO[]>([]);
 
   // 选择器选项映射（AntD v5 推荐使用 options 属性）
   const protocolSelectOptions = useMemo(() => ([
@@ -168,6 +171,12 @@ const InboundManagement: React.FC = () => {
     }))
   ), [routeOptions]);
 
+  const workerSelectOptions = useMemo(() => workerOptions.map((worker) => ({
+    value: worker.workerId,
+    label: worker.enabled ? worker.displayName : `${worker.displayName}（已禁用）`,
+    disabled: !worker.enabled,
+  })), [workerOptions]);
+
   // Shadowsocks 加密算法选项
   const ssMethodSelectOptions = useMemo(() => PROXY_ENC_ALGO_OPTIONS, []);
 
@@ -199,6 +208,12 @@ const InboundManagement: React.FC = () => {
     } catch (e) {
       console.warn('加载用户失败，可能后端未启动，使用空列表');
       setUserOptions([]);
+    }
+    try {
+      setWorkerOptions(await apiService.getWorkers());
+    } catch (e) {
+      console.warn('加载代理节点失败', e);
+      setWorkerOptions([]);
     }
     try {
       const routesPage = await apiService.getRoutes({ page: 1, pageSize: 1000, sortBy: 'updatedAt', sortDir: 'desc' });
@@ -280,6 +295,9 @@ const InboundManagement: React.FC = () => {
     const normalizedRecord = normalizeInboundConfig(record);
     await ensureBindingOptionsLoaded(normalizedRecord.inboundRouteBindings ?? []);
     editForm.setFieldsValue({
+      workerId: normalizedRecord.workerId,
+      fallbackRouteId: normalizedRecord.fallbackRouteId,
+      anonymousUserId: normalizedRecord.anonymousUserId,
       name: normalizedRecord.name,
       protocol: normalizedRecord.protocol,
       listenIp: normalizedRecord.listenIp,
@@ -306,6 +324,7 @@ const InboundManagement: React.FC = () => {
         status: state.statusFilter,
         tlsEnabled: state.tlsFilter,
         port: state.searchPort,
+        workerId: state.workerFilter,
       });
       const normalizedInbounds = (res.items || []).map(normalizeInboundConfig);
       setState(prev => ({
@@ -319,7 +338,7 @@ const InboundManagement: React.FC = () => {
       console.error('加载入站配置失败:', error);
       setState(prev => ({ ...prev, loading: false }));
     }
-  }, [fetchInboundTraffic, state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort]);
+  }, [fetchInboundTraffic, state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort, state.workerFilter]);
 
   useEffect(() => {
     loadUsersAndRoutes();
@@ -375,6 +394,7 @@ const InboundManagement: React.FC = () => {
 
   const desktopColumns = [
     { title: '名称', dataIndex: 'name', key: 'name' },
+    { title: '节点', dataIndex: 'workerId', key: 'workerId' },
     { 
       title: '协议', 
       dataIndex: 'protocol', 
@@ -482,6 +502,14 @@ const InboundManagement: React.FC = () => {
           <Col flex="auto">
             <Space>
               <Select
+                placeholder="节点过滤"
+                allowClear
+                style={{ width: 180 }}
+                suffixIcon={<FilterOutlined />}
+                options={workerSelectOptions}
+                onChange={(v) => setState(prev => ({ ...prev, workerFilter: v as string, currentPage: 1 }))}
+              />
+              <Select
                 placeholder="协议过滤"
                 allowClear
                 style={{ width: 180 }}
@@ -548,10 +576,15 @@ const InboundManagement: React.FC = () => {
           >
         <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
           <Row gutter={16}>
+            <Col span={12}><Form.Item name="workerId" label="代理节点" rules={[{ required: true }]}><Select options={workerSelectOptions} /></Form.Item></Col>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="配置名称" /></Form.Item></Col>
             <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
               <Select placeholder="选择协议" options={protocolSelectOptions} />
             </Form.Item></Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item name="anonymousUserId" label="匿名用户"><Select allowClear options={userSelectOptions} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={routeSelectOptions} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="listenIp" label="监听IP" rules={[{ required: true }]}><Input placeholder="0.0.0.0" /></Form.Item></Col>
@@ -627,10 +660,15 @@ const InboundManagement: React.FC = () => {
       >
         <Form form={editForm} layout="vertical">
           <Row gutter={16}>
+            <Col span={12}><Form.Item name="workerId" label="代理节点" rules={[{ required: true }]}><Select options={workerSelectOptions} /></Form.Item></Col>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item></Col>
             <Col span={12}><Form.Item name="protocol" label="协议" rules={[{ required: true }]}> 
               <Select disabled options={protocolSelectOptions} />
             </Form.Item></Col>
+          </Row>
+          <Row gutter={16}>
+            <Col span={12}><Form.Item name="anonymousUserId" label="匿名用户"><Select allowClear options={userSelectOptions} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={routeSelectOptions} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="listenIp" label="监听IP" rules={[{ required: true }]}><Input /></Form.Item></Col>

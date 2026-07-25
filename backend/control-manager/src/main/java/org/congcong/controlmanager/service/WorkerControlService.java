@@ -42,14 +42,19 @@ public class WorkerControlService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public WorkerPollResponse poll(WorkerPollRequest request) {
+    public WorkerPollResponse poll(String authenticatedWorkerId, WorkerPollRequest request) {
         LocalDateTime now = LocalDateTime.now();
         WorkerPollRequest safeRequest = request == null ? new WorkerPollRequest() : request;
+        if (safeRequest.getWorkerId() != null && !safeRequest.getWorkerId().isBlank()
+                && !authenticatedWorkerId.equals(safeRequest.getWorkerId().trim())) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.FORBIDDEN,
+                    "请求 workerId 与认证节点不一致");
+        }
 
-        updateWorkerStatus(safeRequest, now);
-        storeTaskResults(safeRequest.getTaskResults(), now);
+        updateWorkerStatus(authenticatedWorkerId, safeRequest, now);
+        storeTaskResults(authenticatedWorkerId, safeRequest.getTaskResults(), now);
 
-        List<WorkerTask> pendingTasks = workerTaskRepository.findByConsumedAtIsNullOrderByCreatedAtAsc(
+        List<WorkerTask> pendingTasks = workerTaskRepository.findByWorkerIdAndConsumedAtIsNullOrderByCreatedAtAsc(authenticatedWorkerId,
                 PageRequest.of(0, MAX_TASKS_PER_POLL));
         List<WorkerTaskDTO> taskDtos = pendingTasks.stream()
                 .map(task -> toDto(task, now))
@@ -61,9 +66,16 @@ public class WorkerControlService {
         return new WorkerPollResponse(now, DEFAULT_NEXT_POLL_INTERVAL_MILLIS, taskDtos);
     }
 
+    /** Compatibility entry point for internal callers during migration. */
     @Transactional
-    public WorkerTask createTask(String taskType, Object payload) {
+    public WorkerPollResponse poll(WorkerPollRequest request) {
+        return poll(DEFAULT_WORKER_ID, request);
+    }
+
+    @Transactional
+    public WorkerTask createTask(String workerId, String taskType, Object payload) {
         WorkerTask task = new WorkerTask();
+        task.setWorkerId(workerId);
         task.setTaskType(taskType);
         try {
             task.setPayloadJson(objectMapper.writeValueAsString(payload));
@@ -71,6 +83,10 @@ public class WorkerControlService {
             throw new IllegalArgumentException("任务负载无法序列化: " + taskType, e);
         }
         return workerTaskRepository.save(task);
+    }
+
+    public WorkerTask createTask(String taskType, Object payload) {
+        return createTask(DEFAULT_WORKER_ID, taskType, payload);
     }
 
     public WorkerStatusDTO getLatestStatus() {
@@ -81,14 +97,17 @@ public class WorkerControlService {
         return toStatusDto(status, LocalDateTime.now());
     }
 
-    private void updateWorkerStatus(WorkerPollRequest request, LocalDateTime now) {
-        String workerId = normalizeWorkerId(request.getWorkerId());
+    private void updateWorkerStatus(String workerId, WorkerPollRequest request, LocalDateTime now) {
         WorkerStatus status = workerStatusRepository.findById(workerId).orElseGet(WorkerStatus::new);
         status.setWorkerId(workerId);
         status.setHostname(request.getHostname());
         status.setStartedAt(request.getStartedAt());
         status.setLastSeenAt(now);
-        status.setLastConfigHash(request.getLastConfigHash());
+        status.setFetchedConfigHash(firstNonBlank(request.getFetchedConfigHash(), request.getLastConfigHash()));
+        status.setAppliedConfigHash(request.getAppliedConfigHash());
+        status.setApplySuccess(request.getApplySuccess());
+        status.setApplyError(truncate(request.getApplyError(), 1024));
+        status.setAppliedAt(request.getAppliedAt());
 
         WorkerMetricsDTO metrics = request.getMetrics();
         if (metrics != null) {
@@ -102,13 +121,13 @@ public class WorkerControlService {
         workerStatusRepository.save(status);
     }
 
-    private void storeTaskResults(List<WorkerTaskResultDTO> taskResults, LocalDateTime now) {
+    private void storeTaskResults(String workerId, List<WorkerTaskResultDTO> taskResults, LocalDateTime now) {
         List<WorkerTaskResultDTO> safeResults = taskResults == null ? Collections.emptyList() : taskResults;
         for (WorkerTaskResultDTO result : safeResults) {
             if (result == null || result.getTaskId() == null) {
                 continue;
             }
-            workerTaskRepository.findById(result.getTaskId()).ifPresent(task -> {
+            workerTaskRepository.findById(result.getTaskId()).filter(task -> workerId.equals(task.getWorkerId())).ifPresent(task -> {
                 task.setResultSuccess(Boolean.TRUE.equals(result.getSuccess()));
                 task.setResultMessage(result.getMessage());
                 task.setResultReportedAt(result.getFinishedAt() == null ? now : result.getFinishedAt());
@@ -139,7 +158,11 @@ public class WorkerControlService {
                 status.getHostname(),
                 status.getStartedAt(),
                 status.getLastSeenAt(),
-                status.getLastConfigHash(),
+                status.getFetchedConfigHash(),
+                status.getAppliedConfigHash(),
+                status.getApplySuccess(),
+                status.getApplyError(),
+                status.getAppliedAt(),
                 status.getUptimeSeconds(),
                 status.getHeapUsedBytes(),
                 status.getHeapMaxBytes(),
@@ -149,10 +172,13 @@ public class WorkerControlService {
         );
     }
 
-    private String normalizeWorkerId(String workerId) {
-        if (workerId == null || workerId.trim().isEmpty()) {
-            return DEFAULT_WORKER_ID;
-        }
-        return workerId.trim();
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) return primary;
+        return fallback;
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null) return null;
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 }

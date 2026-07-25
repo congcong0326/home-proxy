@@ -13,15 +13,19 @@ import java.util.Optional;
 
 public interface InboundConfigRepository extends JpaRepository<InboundConfig, Long> {
     
-    Optional<InboundConfig> findByListenIpAndPort(String listenIp, Integer port);
+    Optional<InboundConfig> findByWorkerIdAndListenIpAndPort(String workerId, String listenIp, Integer port);
     
     List<InboundConfig> findByStatus(Integer status);
     
     List<InboundConfig> findByProtocol(ProtocolType protocol);
     
-    boolean existsByListenIpAndPortAndIdNot(String listenIp, Integer port, Long id);
+    boolean existsByWorkerIdAndListenIpAndPortAndIdNot(String workerId, String listenIp, Integer port, Long id);
     
-    boolean existsByListenIpAndPort(String listenIp, Integer port);
+    boolean existsByWorkerIdAndListenIpAndPort(String workerId, String listenIp, Integer port);
+
+    List<InboundConfig> findByWorkerIdAndStatusOrderByIdAsc(String workerId, Integer status);
+    List<InboundConfig> findByWorkerIdOrderByIdAsc(String workerId);
+    long countByWorkerId(String workerId);
 
     /**
      * 根据协议类型查询（分页）
@@ -45,10 +49,12 @@ public interface InboundConfigRepository extends JpaRepository<InboundConfig, Lo
            "(:protocol IS NULL OR i.protocol = :protocol) AND " +
            "(:port IS NULL OR i.port = :port) AND " +
            "(:tlsEnabled IS NULL OR i.tlsEnabled = :tlsEnabled) AND " +
-           "(:status IS NULL OR i.status = :status)")
+           "(:status IS NULL OR i.status = :status) AND " +
+           "(:workerId IS NULL OR i.workerId = :workerId)")
     Page<InboundConfig> findByConditions(@Param("protocol") ProtocolType protocol,
                                        @Param("port") Integer port,
                                        @Param("tlsEnabled") Boolean tlsEnabled,
                                        @Param("status") Integer status,
+                                       @Param("workerId") String workerId,
                                        Pageable pageable);
 }

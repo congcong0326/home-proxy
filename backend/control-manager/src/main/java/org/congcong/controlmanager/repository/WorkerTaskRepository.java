@@ -8,4 +8,6 @@ import java.util.List;
 
 public interface WorkerTaskRepository extends JpaRepository<WorkerTask, Long> {
     List<WorkerTask> findByConsumedAtIsNullOrderByCreatedAtAsc(Pageable pageable);
+    List<WorkerTask> findByWorkerIdAndConsumedAtIsNullOrderByCreatedAtAsc(String workerId, Pageable pageable);
+    long countByWorkerId(String workerId);
 }

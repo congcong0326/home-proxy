@@ -88,6 +88,11 @@ const ProxyConfig: React.FC = () => {
           label: '代理网关监控',
         },
         {
+          key: '/config/system-ops/workers',
+          icon: <NodeIndexOutlined />,
+          label: '代理节点',
+        },
+        {
           key: '/config/system-ops/disk',
           icon: <HddOutlined />,
           label: '磁盘监控',

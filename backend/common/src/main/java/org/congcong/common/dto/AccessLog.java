@@ -10,6 +10,8 @@ import java.util.List;
  */
 @Data
 public class AccessLog {
+    /** Set by the control plane from the authenticated worker, never trusted from the request. */
+    private String workerId;
     // 时间戳与请求标识
     private Instant ts = Instant.now();
     private String requestId; // 可选：便于去重与追踪

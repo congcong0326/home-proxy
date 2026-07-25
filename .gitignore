@@ -54,6 +54,11 @@ mvnw.cmd
 /data/geoip/*.mmdb
 /data/geoip/*.mmdb.gz
 
+# Local TLS certificates and private key stores
+/data/tls/
+/data/secrets/
+/deploy/docker/worker.env.local
+
 # Dist artifacts outside target (optional)
 # /dist/
 # **/*.zip

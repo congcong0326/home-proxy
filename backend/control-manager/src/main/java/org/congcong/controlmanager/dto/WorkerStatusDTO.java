@@ -14,7 +14,11 @@ public class WorkerStatusDTO {
     private String hostname;
     private LocalDateTime startedAt;
     private LocalDateTime lastSeenAt;
-    private String lastConfigHash;
+    private String fetchedConfigHash;
+    private String appliedConfigHash;
+    private Boolean applySuccess;
+    private String applyError;
+    private LocalDateTime appliedAt;
     private Long uptimeSeconds;
     private Long heapUsedBytes;
     private Long heapMaxBytes;

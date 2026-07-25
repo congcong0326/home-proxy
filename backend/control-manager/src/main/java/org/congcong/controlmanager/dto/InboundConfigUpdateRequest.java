@@ -2,6 +2,7 @@ package org.congcong.controlmanager.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import lombok.Data;
 import org.congcong.common.dto.InboundRouteBinding;
@@ -15,6 +16,11 @@ import java.util.List;
  */
 @Data
 public class InboundConfigUpdateRequest {
+    @NotBlank(message = "节点不能为空")
+    @Pattern(regexp = "^[a-z0-9][a-z0-9._-]{0,127}$", message = "节点标识格式不正确")
+    private String workerId;
+    private Long fallbackRouteId;
+    private Long anonymousUserId;
 
     /**
      * 配置名称

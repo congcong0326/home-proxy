@@ -79,6 +79,7 @@ import {
 import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
 import { MysqlRestoreResponse } from '../types/backup';
 import { ProxyGatewayStatus } from '../types/gateway';
+import { ProxyWorkerDTO, WorkerCreateRequest, WorkerTokenResponse, WorkerUpdateRequest } from '../types/worker';
 
 // API基础URL配置
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
@@ -384,6 +385,7 @@ class ApiService {
     if (params.port !== undefined) searchParams.append('port', params.port.toString());
     if (params.tlsEnabled !== undefined) searchParams.append('tlsEnabled', params.tlsEnabled.toString());
     if (params.status !== undefined) searchParams.append('status', params.status.toString());
+    if (params.workerId) searchParams.append('workerId', params.workerId);
     const endpoint = searchParams.toString() ? `/inbounds?${searchParams.toString()}` : '/inbounds';
 
     const raw: any = await this.request<any>(endpoint);
@@ -438,6 +440,35 @@ class ApiService {
   async getInboundMonthlyTraffic(inboundId: number, month?: string): Promise<InboundTrafficStats> {
     const query = month ? `?month=${encodeURIComponent(month)}` : '';
     return this.request<InboundTrafficStats>(`/logs/traffic/inbound/${inboundId}/month${query}`);
+  }
+
+  // ========== 代理节点 ==========
+  async getWorkers(): Promise<ProxyWorkerDTO[]> {
+    return this.request<ProxyWorkerDTO[]>('/workers');
+  }
+
+  async createWorker(data: WorkerCreateRequest): Promise<WorkerTokenResponse> {
+    return this.request<WorkerTokenResponse>('/workers', { method: 'POST', body: JSON.stringify(data) });
+  }
+
+  async updateWorker(workerId: string, data: WorkerUpdateRequest): Promise<ProxyWorkerDTO> {
+    return this.request<ProxyWorkerDTO>(`/workers/${encodeURIComponent(workerId)}`, { method: 'PUT', body: JSON.stringify(data) });
+  }
+
+  async disableWorker(workerId: string): Promise<ProxyWorkerDTO> {
+    return this.request<ProxyWorkerDTO>(`/workers/${encodeURIComponent(workerId)}/disable`, { method: 'POST' });
+  }
+
+  async deleteWorker(workerId: string): Promise<void> {
+    return this.request<void>(`/workers/${encodeURIComponent(workerId)}`, { method: 'DELETE' });
+  }
+
+  async createWorkerToken(workerId: string): Promise<WorkerTokenResponse> {
+    return this.request<WorkerTokenResponse>(`/workers/${encodeURIComponent(workerId)}/token`, { method: 'POST' });
+  }
+
+  async deleteWorkerToken(workerId: string): Promise<void> {
+    return this.request<void>(`/workers/${encodeURIComponent(workerId)}/token`, { method: 'DELETE' });
   }
   
   // 根据ID查询路由详情
@@ -583,6 +614,7 @@ class ApiService {
   async getAccessLogs(params: AccessLogQueryParams = {}): Promise<PageResponse<AccessLogListItem>> {
     const searchParams = new URLSearchParams();
     if (params.from) searchParams.append('from', params.from);
+    if (params.workerId) searchParams.append('workerId', params.workerId);
     if (params.to) searchParams.append('to', params.to);
     if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
     if (params.username) searchParams.append('username', params.username);

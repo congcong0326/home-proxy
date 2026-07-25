@@ -15,6 +15,8 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class AggregateConfigResponse {
+    /** Worker that is authorized to consume this response. */
+    private String workerId;
     /**
      * 配置版本
      */
@@ -63,14 +65,16 @@ public class AggregateConfigResponse {
     /**
      * 创建聚合配置响应
      */
-    public static AggregateConfigResponse of(List<InboundConfigDTO> inbounds,
+    public static AggregateConfigResponse of(String workerId,
+                                           List<InboundConfigDTO> inbounds,
                                            List<RouteDTO> routes,
                                            List<RateLimitDTO> rateLimits,
                                            List<UserDtoWithCredential> users,
                                            List<RuleSetDTO> ruleSets,
                                            String configHash) {
         AggregateConfigResponse response = new AggregateConfigResponse();
-        response.setVersion("1.0");
+        response.setWorkerId(workerId);
+        response.setVersion("2.0");
         response.setGeneratedAt(LocalDateTime.now());
         response.setInbounds(inbounds);
         response.setRoutes(routes);
@@ -79,5 +83,15 @@ public class AggregateConfigResponse {
         response.setRuleSets(ruleSets);
         response.setConfigHash(configHash);
         return response;
+    }
+
+    /** Compatibility helper for callers that are upgraded independently. */
+    public static AggregateConfigResponse of(List<InboundConfigDTO> inbounds,
+                                           List<RouteDTO> routes,
+                                           List<RateLimitDTO> rateLimits,
+                                           List<UserDtoWithCredential> users,
+                                           List<RuleSetDTO> ruleSets,
+                                           String configHash) {
+        return of(null, inbounds, routes, rateLimits, users, ruleSets, configHash);
     }
 }

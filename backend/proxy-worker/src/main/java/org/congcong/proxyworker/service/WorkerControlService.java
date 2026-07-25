@@ -10,10 +10,10 @@ import org.congcong.common.dto.WorkerTaskDTO;
 import org.congcong.common.dto.WorkerTaskResultDTO;
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.congcong.proxyworker.http.ControlPlaneHttpClientFactory;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -39,6 +39,7 @@ public class WorkerControlService {
     private final ConcurrentLinkedQueue<WorkerTaskResultDTO> pendingResults = new ConcurrentLinkedQueue<>();
     private final ScheduledExecutorService scheduler;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final java.util.function.Supplier<ConfigApplicationStatus> applicationStatusSupplier;
 
     private volatile long currentPollIntervalMs;
 
@@ -52,22 +53,21 @@ public class WorkerControlService {
                 config.getWorkerControlPollIntervalMs(),
                 new HttpPollTransport(config.getWorkerPollUrl()),
                 new WorkerMetricsCollector(),
-                new WolTaskExecutor()
+                new WolTaskExecutor(),
+                ConfigApplicationStatus::empty
         );
     }
 
     public static WorkerControlService forAggregateConfigService(AggregateConfigService configService) {
         ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
-        WorkerMetricsCollector metricsCollector = new WorkerMetricsCollector(() -> {
-            AggregateConfigResponse currentConfig = configService.getCurrentConfig();
-            return currentConfig == null ? null : currentConfig.getConfigHash();
-        });
+        WorkerMetricsCollector metricsCollector = new WorkerMetricsCollector(configService::getFetchedConfigHash);
         return new WorkerControlService(
                 config.getWorkerId(),
                 config.getWorkerControlPollIntervalMs(),
                 new HttpPollTransport(config.getWorkerPollUrl()),
                 metricsCollector,
-                new WolTaskExecutor()
+                new WolTaskExecutor(),
+                configService::getApplicationStatus
         );
     }
 
@@ -76,12 +76,22 @@ public class WorkerControlService {
                          PollTransport pollTransport,
                          WorkerMetricsCollector metricsCollector,
                          WorkerTaskExecutor taskExecutor) {
+        this(workerId, defaultPollIntervalMs, pollTransport, metricsCollector, taskExecutor, ConfigApplicationStatus::empty);
+    }
+
+    WorkerControlService(String workerId,
+                         long defaultPollIntervalMs,
+                         PollTransport pollTransport,
+                         WorkerMetricsCollector metricsCollector,
+                         WorkerTaskExecutor taskExecutor,
+                         java.util.function.Supplier<ConfigApplicationStatus> applicationStatusSupplier) {
         this.workerId = workerId == null || workerId.isBlank() ? "default" : workerId.trim();
         this.defaultPollIntervalMs = Math.max(500L, defaultPollIntervalMs);
         this.currentPollIntervalMs = this.defaultPollIntervalMs;
         this.pollTransport = pollTransport;
         this.metricsCollector = metricsCollector;
         this.taskExecutor = taskExecutor;
+        this.applicationStatusSupplier = applicationStatusSupplier;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "worker-control-poller");
             thread.setDaemon(true);
@@ -117,6 +127,12 @@ public class WorkerControlService {
         request.setHostname(metricsCollector.getHostname());
         request.setStartedAt(metricsCollector.getStartedAt());
         request.setLastConfigHash(metricsCollector.getLastConfigHash());
+        ConfigApplicationStatus applicationStatus = applicationStatusSupplier.get();
+        request.setFetchedConfigHash(metricsCollector.getLastConfigHash());
+        request.setAppliedConfigHash(applicationStatus.appliedConfigHash());
+        request.setApplySuccess(applicationStatus.success());
+        request.setApplyError(applicationStatus.errorSummary());
+        request.setAppliedAt(applicationStatus.appliedAt());
         request.setMetrics(metricsCollector.collect());
         request.setTaskResults(resultsToReport);
 
@@ -159,14 +175,12 @@ public class WorkerControlService {
 
     private static class HttpPollTransport implements PollTransport {
         private final String url;
-        private final HttpClient httpClient;
+        private final ControlPlaneHttpClientFactory controlPlaneClient;
         private final ObjectMapper objectMapper;
 
         private HttpPollTransport(String url) {
             this.url = url;
-            this.httpClient = HttpClient.newBuilder()
-                    .connectTimeout(Duration.ofMillis(5000))
-                    .build();
+            this.controlPlaneClient = ControlPlaneHttpClientFactory.getInstance();
             this.objectMapper = new ObjectMapper();
             this.objectMapper.registerModule(new JavaTimeModule());
             this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -176,13 +190,12 @@ public class WorkerControlService {
         public WorkerPollResponse poll(WorkerPollRequest request) {
             try {
                 String body = objectMapper.writeValueAsString(request);
-                HttpRequest httpRequest = HttpRequest.newBuilder()
-                        .uri(URI.create(url))
+                HttpRequest httpRequest = controlPlaneClient.requestBuilder(URI.create(url))
                         .timeout(Duration.ofMillis(5000))
                         .header("Content-Type", "application/json")
                         .POST(HttpRequest.BodyPublishers.ofString(body))
                         .build();
-                HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+                HttpResponse<String> response = controlPlaneClient.getHttpClient().send(httpRequest, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() < 200 || response.statusCode() >= 300) {
                     throw new IllegalStateException("worker poll failed, status=" + response.statusCode());
                 }
@@ -194,5 +207,10 @@ public class WorkerControlService {
                 throw new IllegalStateException("worker poll interrupted", e);
             }
         }
+    }
+
+    public record ConfigApplicationStatus(String appliedConfigHash, Boolean success, String errorSummary,
+                                          java.time.LocalDateTime appliedAt) {
+        static ConfigApplicationStatus empty() { return new ConfigApplicationStatus(null, null, null, null); }
     }
 }

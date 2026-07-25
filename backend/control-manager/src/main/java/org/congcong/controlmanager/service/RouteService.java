@@ -36,6 +36,7 @@ public class RouteService {
 
     private final RouteRepository routeRepository;
     private final RuleSetRepository ruleSetRepository;
+    private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
 
     /**
      * 分页查询路由列表
@@ -188,10 +189,9 @@ public class RouteService {
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
 
-        // TODO: 检查是否被入站配置引用，如果被引用则不能删除
-        // if (isRouteReferenced(id)) {
-        //     throw new ResponseStatusException(HttpStatus.CONFLICT, "路由正在被使用，无法删除");
-        // }
+        if (workerConfigDependencyResolver.isRouteReferenced(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "路由正在被入站配置引用，无法删除");
+        }
 
         routeRepository.delete(route);
     }

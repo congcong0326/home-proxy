@@ -2,6 +2,7 @@ package org.congcong.proxyworker.protocol.dns;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.netty.buffer.Unpooled;
@@ -72,6 +73,7 @@ class DnsForwardProtocolStrategyTest {
             outbound.writeInbound(upstreamResponse(secondQuery.id(), "two.example.", DnsRecordType.A, 10, 0, 0, 2));
             DatagramDnsResponse secondClientResponse = inbound.readOutbound();
             try {
+                assertNotNull(secondClientResponse);
                 assertEquals(0x2222, secondClientResponse.id());
                 assertEquals("192.168.1.31", secondClientResponse.recipient().getAddress().getHostAddress());
                 assertEquals(5354, secondClientResponse.recipient().getPort());
@@ -82,6 +84,7 @@ class DnsForwardProtocolStrategyTest {
             outbound.writeInbound(upstreamResponse(firstQuery.id(), "one.example.", DnsRecordType.A, 10, 0, 0, 1));
             DatagramDnsResponse firstClientResponse = inbound.readOutbound();
             try {
+                assertNotNull(firstClientResponse);
                 assertEquals(0x1111, firstClientResponse.id());
                 assertEquals("192.168.1.30", firstClientResponse.recipient().getAddress().getHostAddress());
                 assertEquals(5353, firstClientResponse.recipient().getPort());

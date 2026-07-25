@@ -4,7 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.controlmanager.service.AggregateConfigCacheService;
-import org.congcong.controlmanager.service.AggregateConfigService;
+import org.congcong.controlmanager.security.WorkerPrincipal;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -32,13 +33,14 @@ public class AggregateConfigController {
      */
     @GetMapping("/aggregate")
     public ResponseEntity<AggregateConfigResponse> getAggregateConfig(
-            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch) {
+            @RequestHeader(value = HttpHeaders.IF_NONE_MATCH, required = false) String ifNoneMatch,
+            @AuthenticationPrincipal WorkerPrincipal principal) {
         
         try {
             log.debug("获取聚合配置请求，If-None-Match: {}", ifNoneMatch);
             
             // 获取当前配置哈希值
-            AggregateConfigResponse aggregateConfig = aggregateConfigCacheService.getAggregateConfig();
+            AggregateConfigResponse aggregateConfig = aggregateConfigCacheService.getAggregateConfig(principal.workerId());
 
 
             String currentConfigHash = aggregateConfig.getConfigHash();
