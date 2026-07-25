@@ -22,6 +22,9 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -37,9 +40,15 @@ public class ProxyWorkerService {
 
     @Transactional(readOnly = true)
     public List<ProxyWorkerDTO> list() {
-        return proxyWorkerRepository.findAll().stream()
+        List<ProxyWorker> workers = proxyWorkerRepository.findAll().stream()
                 .sorted(java.util.Comparator.comparing(ProxyWorker::getWorkerId))
-                .map(this::toDto)
+                .toList();
+        Map<String, WorkerStatus> statuses = workerStatusRepository.findAllById(
+                        workers.stream().map(ProxyWorker::getWorkerId).toList())
+                .stream()
+                .collect(Collectors.toMap(WorkerStatus::getWorkerId, Function.identity()));
+        return workers.stream()
+                .map(worker -> toDto(worker, statuses.get(worker.getWorkerId())))
                 .toList();
     }
 
@@ -130,6 +139,10 @@ public class ProxyWorkerService {
     }
 
     private ProxyWorkerDTO toDto(ProxyWorker worker) {
+        return toDto(worker, workerStatusRepository.findById(worker.getWorkerId()).orElse(null));
+    }
+
+    private ProxyWorkerDTO toDto(ProxyWorker worker, WorkerStatus status) {
         ProxyWorkerDTO dto = new ProxyWorkerDTO();
         dto.setWorkerId(worker.getWorkerId());
         dto.setDisplayName(worker.getDisplayName());
@@ -138,7 +151,7 @@ public class ProxyWorkerService {
         dto.setTokenPresent(worker.getTokenHash() != null);
         dto.setCreatedAt(worker.getCreatedAt());
         dto.setUpdatedAt(worker.getUpdatedAt());
-        workerStatusRepository.findById(worker.getWorkerId()).ifPresent(status -> dto.setStatus(toStatus(status)));
+        if (status != null) dto.setStatus(toStatus(status));
         return dto;
     }
 

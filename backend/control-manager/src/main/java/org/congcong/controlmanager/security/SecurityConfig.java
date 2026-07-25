@@ -38,7 +38,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/logs/access", "/api/logs/auth").hasRole("WORKER")
                     .requestMatchers(HttpMethod.GET, "/api/logs/**").hasRole("ADMIN")
                     .requestMatchers("/api/config/hash").hasRole("ADMIN")
-                    .requestMatchers("/api/worker/status").hasRole("ADMIN")
+                    .requestMatchers("/api/worker/status").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers("/api/workers/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/disk/push").permitAll()
                     .requestMatchers("/error").permitAll()
