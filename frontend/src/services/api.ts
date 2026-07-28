@@ -797,6 +797,9 @@ class ApiService {
   // 用户流量统计相关API
   async getDailyUserTrafficStats(params: TrafficStatsParams = {}): Promise<UserTrafficStats[]> {
     const queryParams = new URLSearchParams();
+    if (params.workerId) {
+      queryParams.append('workerId', params.workerId);
+    }
     if (params.date) {
       queryParams.append('date', params.date);
     }
@@ -806,6 +809,9 @@ class ApiService {
 
   async getMonthlyUserTrafficStats(params: TrafficStatsParams = {}): Promise<UserTrafficStats[]> {
     const queryParams = new URLSearchParams();
+    if (params.workerId) {
+      queryParams.append('workerId', params.workerId);
+    }
     if (params.yearMonth) {
       queryParams.append('yearMonth', params.yearMonth);
     }
@@ -816,6 +822,7 @@ class ApiService {
   // 流量趋势相关API
   async getGlobalTrafficTrend(params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
     const queryParams = new URLSearchParams({
+      workerId: params.workerId,
       startTime: params.startTime,
       endTime: params.endTime
     });
@@ -824,6 +831,7 @@ class ApiService {
 
   async getUserTrafficTrend(userId: number, params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
     const queryParams = new URLSearchParams({
+      workerId: params.workerId,
       startTime: params.startTime,
       endTime: params.endTime
     });

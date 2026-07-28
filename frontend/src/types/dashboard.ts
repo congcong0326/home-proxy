@@ -58,6 +58,7 @@ export interface WolResponse {
 
 // 流量趋势查询参数
 export interface TrafficTrendParams {
+  workerId: string;
   startTime: string;
   endTime: string;
   userId?: number;
@@ -65,6 +66,7 @@ export interface TrafficTrendParams {
 
 // 流量统计查询参数
 export interface TrafficStatsParams {
+  workerId?: string;
   date?: string; // yyyy-MM-dd 格式
   yearMonth?: string; // yyyy-MM 格式
 }

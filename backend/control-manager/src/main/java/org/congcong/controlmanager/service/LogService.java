@@ -66,15 +66,15 @@ public class LogService {
     /**
      * 获取全局流量趋势（分钟级）
      */
-    public List<TimeSeriesPoint> getGlobalTrafficTrend(LocalDateTime from, LocalDateTime to) {
-        return accessLogStoreFactory.current().getGlobalTrafficTrend(from, to);
+    public List<TimeSeriesPoint> getGlobalTrafficTrend(String workerId, LocalDateTime from, LocalDateTime to) {
+        return accessLogStoreFactory.current().getGlobalTrafficTrend(normalizeWorkerId(workerId), from, to);
     }
 
     /**
      * 获取指定用户的流量趋势（分钟级）
      */
-    public List<TimeSeriesPoint> getUserTrafficTrend(Long userId, LocalDateTime from, LocalDateTime to) {
-        return accessLogStoreFactory.current().getUserTrafficTrend(userId, from, to);
+    public List<TimeSeriesPoint> getUserTrafficTrend(String workerId, Long userId, LocalDateTime from, LocalDateTime to) {
+        return accessLogStoreFactory.current().getUserTrafficTrend(normalizeWorkerId(workerId), userId, from, to);
     }
 
     /**
@@ -118,5 +118,9 @@ public class LogService {
     private void validateBatch(List<?> logs) {
         if (logs == null || logs.isEmpty()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "日志批次不能为空");
         if (logs.size() > 1000) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, "日志批次过大");
+    }
+
+    private String normalizeWorkerId(String workerId) {
+        return workerId == null || workerId.isBlank() ? WorkerControlService.DEFAULT_WORKER_ID : workerId;
     }
 }

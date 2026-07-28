@@ -6,6 +6,7 @@ import org.congcong.common.dto.AccessLog;
 import org.congcong.common.dto.AuthLog;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.service.LogService;
+import org.congcong.controlmanager.service.WorkerControlService;
 import org.congcong.controlmanager.security.WorkerPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -132,9 +133,10 @@ public class LogController {
      */
     @GetMapping("/traffic/minute/global")
     public ResponseEntity<List<TimeSeriesPoint>> getGlobalMinuteTrafficTrend(
+            @RequestParam(value = "workerId", defaultValue = WorkerControlService.DEFAULT_WORKER_ID) String workerId,
             @RequestParam("startTime") LocalDateTime startTime,
             @RequestParam("endTime") LocalDateTime endTime) {
-        List<TimeSeriesPoint> trend = logService.getGlobalTrafficTrend(startTime, endTime);
+        List<TimeSeriesPoint> trend = logService.getGlobalTrafficTrend(workerId, startTime, endTime);
         return ResponseEntity.ok(trend);
     }
 
@@ -144,9 +146,10 @@ public class LogController {
     @GetMapping("/traffic/minute/user/{userId}")
     public ResponseEntity<List<TimeSeriesPoint>> getUserMinuteTrafficTrend(
             @PathVariable Long userId,
+            @RequestParam(value = "workerId", defaultValue = WorkerControlService.DEFAULT_WORKER_ID) String workerId,
             @RequestParam("startTime") LocalDateTime startTime,
             @RequestParam("endTime") LocalDateTime endTime) {
-        List<TimeSeriesPoint> trend = logService.getUserTrafficTrend(userId, startTime, endTime);
+        List<TimeSeriesPoint> trend = logService.getUserTrafficTrend(workerId, userId, startTime, endTime);
         return ResponseEntity.ok(trend);
     }
 

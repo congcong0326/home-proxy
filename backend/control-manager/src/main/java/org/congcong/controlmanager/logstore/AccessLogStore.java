@@ -11,8 +11,8 @@ public interface AccessLogStore {
     PageResponse<AccessLogListItem> queryAccessLogs(AccessLogQueryRequest req);
     Optional<AccessLogDetail> getAccessLogDetail(String id);
     List<TopItem> aggregateDailyTopRange(String from, String to, String dimension, String metric, int limit, Long userId);
-    List<TimeSeriesPoint> getGlobalTrafficTrend(java.time.LocalDateTime from, java.time.LocalDateTime to);
-    List<TimeSeriesPoint> getUserTrafficTrend(Long userId, java.time.LocalDateTime from, java.time.LocalDateTime to);
+    List<TimeSeriesPoint> getGlobalTrafficTrend(String workerId, java.time.LocalDateTime from, java.time.LocalDateTime to);
+    List<TimeSeriesPoint> getUserTrafficTrend(String workerId, Long userId, java.time.LocalDateTime from, java.time.LocalDateTime to);
     int cleanupExpiredMinuteTrafficStats();
     long countExpiredMinuteTrafficStats();
     /**

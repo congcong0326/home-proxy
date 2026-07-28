@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -20,7 +20,10 @@ import {
   TrafficTrendParams,
 } from '../types/dashboard';
 import { UserDTO } from '../types/user';
+import { ProxyWorkerDTO } from '../types/worker';
 import './Dashboard.css';
+
+const DEFAULT_WORKER_ID = 'default';
 
 // 注册Chart.js组件
 ChartJS.register(
@@ -43,31 +46,49 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
+interface WorkerScopedProps {
+  workerId: string;
+}
+
 // 流量统计卡片组件
-const TrafficStatsCard: React.FC = () => {
+const TrafficStatsCard: React.FC<WorkerScopedProps> = ({ workerId }) => {
   const [dailyStats, setDailyStats] = useState<UserTrafficStats[]>([]);
   const [monthlyStats, setMonthlyStats] = useState<UserTrafficStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     const fetchStats = async () => {
       try {
         setLoading(true);
         const [daily, monthly] = await Promise.all([
-          apiService.getDailyUserTrafficStats(),
-          apiService.getMonthlyUserTrafficStats()
+          apiService.getDailyUserTrafficStats({ workerId }),
+          apiService.getMonthlyUserTrafficStats({ workerId })
         ]);
-        setDailyStats(daily);
-        setMonthlyStats(monthly);
+        if (active) {
+          setDailyStats(daily);
+          setMonthlyStats(monthly);
+        }
       } catch (error) {
         console.error('Error fetching traffic stats:', error);
+        if (active) {
+          setDailyStats([]);
+          setMonthlyStats([]);
+        }
       } finally {
-        setLoading(false);
+        if (active) {
+          setLoading(false);
+        }
       }
     };
 
     fetchStats();
-  }, []);
+
+    return () => {
+      active = false;
+    };
+  }, [workerId]);
 
   if (loading) {
     return <div className="loading">加载中...</div>;
@@ -130,7 +151,7 @@ const TrafficStatsCard: React.FC = () => {
 };
 
 // 流量趋势图表组件
-const TrafficTrendChart: React.FC = () => {
+const TrafficTrendChart: React.FC<WorkerScopedProps> = ({ workerId }) => {
   const [trendData, setTrendData] = useState<TimeSeriesPoint[]>([]);
   const [selectedUser, setSelectedUser] = useState<number | null>(null);
   const [users, setUsers] = useState<UserDTO[]>([]);
@@ -139,11 +160,14 @@ const TrafficTrendChart: React.FC = () => {
     endTime: format(new Date(), "yyyy-MM-dd'T'HH:mm:ss"),
   });
   const [loading, setLoading] = useState(false);
+  const requestIdRef = useRef(0);
 
-  const fetchTrendData = async () => {
+  const fetchTrendData = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     try {
       setLoading(true);
       const params: TrafficTrendParams = {
+        workerId,
         startTime: dateRange.startTime,
         endTime: dateRange.endTime
       };
@@ -155,17 +179,27 @@ const TrafficTrendChart: React.FC = () => {
         data = await apiService.getGlobalTrafficTrend(params);
       }
       
-      setTrendData(data);
+      if (requestId === requestIdRef.current) {
+        setTrendData(data);
+      }
     } catch (error) {
       console.error('Error fetching trend data:', error);
+      if (requestId === requestIdRef.current) {
+        setTrendData([]);
+      }
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, [dateRange, selectedUser, workerId]);
 
   useEffect(() => {
     fetchTrendData();
-  }, [selectedUser, dateRange]);
+    return () => {
+      requestIdRef.current += 1;
+    };
+  }, [fetchTrendData]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -321,16 +355,58 @@ const TrafficTrendChart: React.FC = () => {
 
 // 流量概览主组件
 const TrafficOverview: React.FC = () => {
+  const [workers, setWorkers] = useState<ProxyWorkerDTO[]>([]);
+  const [selectedWorkerId, setSelectedWorkerId] = useState(DEFAULT_WORKER_ID);
+
+  useEffect(() => {
+    apiService.getWorkers()
+      .then(setWorkers)
+      .catch((error) => {
+        console.error('Error fetching workers:', error);
+        setWorkers([]);
+      });
+  }, []);
+
+  const workerOptions = workers.some(worker => worker.workerId === DEFAULT_WORKER_ID)
+    ? workers
+    : [{
+        workerId: DEFAULT_WORKER_ID,
+        displayName: DEFAULT_WORKER_ID,
+        enabled: true,
+        tokenPresent: false,
+      }, ...workers];
+
   return (
     <div className="traffic-overview">
       <div className="page-header">
-        <h2>流量概览</h2>
-        <p>查看用户流量统计和趋势分析</p>
+        <div className="traffic-page-header-content">
+          <div>
+            <h2>流量概览</h2>
+            <p>查看指定代理节点的用户流量统计和趋势分析</p>
+          </div>
+          <div className="traffic-worker-filter">
+            <label htmlFor="traffic-worker-select">代理节点</label>
+            <select
+              id="traffic-worker-select"
+              className="traffic-worker-select"
+              value={selectedWorkerId}
+              onChange={(event) => setSelectedWorkerId(event.target.value)}
+            >
+              {workerOptions.map(worker => (
+                <option key={worker.workerId} value={worker.workerId}>
+                  {worker.displayName === worker.workerId
+                    ? worker.workerId
+                    : `${worker.displayName} (${worker.workerId})`}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
       
       <div className="dashboard-grid">
-        <TrafficStatsCard />
-        <TrafficTrendChart />
+        <TrafficStatsCard workerId={selectedWorkerId} />
+        <TrafficTrendChart workerId={selectedWorkerId} />
       </div>
     </div>
   );

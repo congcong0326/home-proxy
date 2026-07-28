@@ -14,6 +14,36 @@
   margin: 0;
 }
 
+.traffic-page-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.traffic-worker-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.traffic-worker-filter label {
+  color: #374151;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.traffic-worker-select {
+  min-width: 220px;
+  padding: 7px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #374151;
+  font-size: 14px;
+}
+
 .dashboard-header {
   display: flex;
   justify-content: space-between;
@@ -676,6 +706,7 @@
 }
 
 .trend-select,
+.traffic-worker-select,
 .trend-date-input,
 .wol-form input,
 .wol-form textarea {
@@ -732,6 +763,8 @@
   }
 
   .trend-controls,
+  .traffic-page-header-content,
+  .traffic-worker-filter,
   .wol-controls,
   .device-actions,
   .form-actions {
@@ -740,6 +773,7 @@
   }
 
   .trend-select,
+  .traffic-worker-select,
   .trend-date-input,
   .wol-button,
   .device-action-btn,
@@ -747,6 +781,10 @@
   .btn-secondary {
     width: 100%;
     min-height: 40px;
+  }
+
+  .traffic-worker-filter {
+    align-items: stretch;
   }
 
   .modal-content {

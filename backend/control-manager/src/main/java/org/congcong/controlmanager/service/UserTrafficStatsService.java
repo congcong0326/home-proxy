@@ -1,10 +1,8 @@
 package org.congcong.controlmanager.service;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.congcong.controlmanager.dto.UserTrafficStatsDTO;
-import org.congcong.controlmanager.repository.agg.MinuteTrafficStatsRepository;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
@@ -31,7 +29,7 @@ public class UserTrafficStatsService {
     }
 
     /** 获取用户当日流量统计，按总流量倒序 */
-    public List<UserTrafficStatsDTO> getDailyUserTrafficStats(LocalDate date) {
+    public List<UserTrafficStatsDTO> getDailyUserTrafficStats(String workerId, LocalDate date) {
         if (date == null) {
             date = LocalDate.now();
         }
@@ -39,12 +37,13 @@ public class UserTrafficStatsService {
         LocalDateTime end = date.plusDays(1).atStartOfDay();
         String period = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         String sql = "SELECT user_id, any(username) AS username, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-        "FROM default.access_log WHERE ts >= ? AND ts < ? GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
-        return mapRows(client.query(sql, toTs(start), toTs(end)), period);
+                "FROM default.access_log WHERE worker_id = ? AND ts >= ? AND ts < ? " +
+                "GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
+        return mapRows(client.query(sql, normalizeWorkerId(workerId), toTs(start), toTs(end)), period);
     }
 
     /** 获取用户本月流量统计，按总流量倒序 */
-    public List<UserTrafficStatsDTO> getMonthlyUserTrafficStats(YearMonth yearMonth) {
+    public List<UserTrafficStatsDTO> getMonthlyUserTrafficStats(String workerId, YearMonth yearMonth) {
         if (yearMonth == null) {
             yearMonth = YearMonth.now();
         }
@@ -52,8 +51,13 @@ public class UserTrafficStatsService {
         LocalDateTime end = yearMonth.plusMonths(1).atDay(1).atStartOfDay();
         String period = yearMonth.format(DateTimeFormatter.ofPattern("yyyy-MM"));
         String sql = "SELECT user_id, any(username) AS username, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-        "FROM default.access_log WHERE ts >= ? AND ts < ? GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
-        return mapRows(client.query(sql, toTs(start), toTs(end)), period);
+                "FROM default.access_log WHERE worker_id = ? AND ts >= ? AND ts < ? " +
+                "GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
+        return mapRows(client.query(sql, normalizeWorkerId(workerId), toTs(start), toTs(end)), period);
+    }
+
+    private String normalizeWorkerId(String workerId) {
+        return workerId == null || workerId.isBlank() ? WorkerControlService.DEFAULT_WORKER_ID : workerId;
     }
 
     private List<UserTrafficStatsDTO> mapRows(List<Map<String, Object>> rows, String period) {

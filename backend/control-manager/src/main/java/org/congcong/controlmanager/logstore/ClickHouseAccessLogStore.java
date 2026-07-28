@@ -27,10 +27,11 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     @Override
-    public List<TimeSeriesPoint> getGlobalTrafficTrend(LocalDateTime from, LocalDateTime to) {
+    public List<TimeSeriesPoint> getGlobalTrafficTrend(String workerId, LocalDateTime from, LocalDateTime to) {
         String sql = "SELECT toStartOfMinute(ts) AS minute_time, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-                "FROM default.access_log WHERE ts >= ? AND ts <= ? GROUP BY minute_time ORDER BY minute_time";
-        List<Map<String,Object>> rows = client.query(sql, toTimestamp(from), toTimestamp(to));
+                "FROM default.access_log WHERE worker_id = ? AND ts >= ? AND ts <= ? " +
+                "GROUP BY minute_time ORDER BY minute_time";
+        List<Map<String,Object>> rows = client.query(sql, workerId, toTimestamp(from), toTimestamp(to));
         List<TimeSeriesPoint> list = new ArrayList<>();
         for (Map<String,Object> r : rows) {
             list.add(new TimeSeriesPoint(toLocalDateTime(r.get("minute_time")), toLong(r.get("byte_in")), toLong(r.get("byte_out"))));
@@ -39,10 +40,11 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     @Override
-    public List<TimeSeriesPoint> getUserTrafficTrend(Long userId, LocalDateTime from, LocalDateTime to) {
+    public List<TimeSeriesPoint> getUserTrafficTrend(String workerId, Long userId, LocalDateTime from, LocalDateTime to) {
         String sql = "SELECT toStartOfMinute(ts) AS minute_time, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-                "FROM default.access_log WHERE user_id = ? AND ts >= ? AND ts <= ? GROUP BY minute_time ORDER BY minute_time";
-        List<Map<String,Object>> rows = client.query(sql, userId, toTimestamp(from), toTimestamp(to));
+                "FROM default.access_log WHERE worker_id = ? AND user_id = ? AND ts >= ? AND ts <= ? " +
+                "GROUP BY minute_time ORDER BY minute_time";
+        List<Map<String,Object>> rows = client.query(sql, workerId, userId, toTimestamp(from), toTimestamp(to));
         List<TimeSeriesPoint> list = new ArrayList<>();
         for (Map<String,Object> r : rows) {
             list.add(new TimeSeriesPoint(toLocalDateTime(r.get("minute_time")), toLong(r.get("byte_in")), toLong(r.get("byte_out"))));
