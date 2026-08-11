@@ -12,17 +12,22 @@ import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.FindUser;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
-import org.congcong.proxyworker.config.UserQueryService;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
-
-import java.util.Map;
 
 @ChannelHandler.Sharable
 @Slf4j
 public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage>  {
 
-    private SocksServerHandler() {}
+    private final SocksAuthBruteForceProtector bruteForceProtector;
+
+    private SocksServerHandler() {
+        this(new SocksAuthBruteForceProtector());
+    }
+
+    SocksServerHandler(SocksAuthBruteForceProtector bruteForceProtector) {
+        this.bruteForceProtector = bruteForceProtector;
+    }
 
     private static class Holder {
         private static final SocksServerHandler INSTANCE = new SocksServerHandler();
@@ -36,7 +41,6 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, SocksMessage socksMessage) throws Exception {
         InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(channelHandlerContext.channel());
-        Map<String, UserConfig> usersMap = inboundConfig.getUsersMap();
         // 第一次请求过来，协商认证方式，目前只支持用户名加密码
         if (socksMessage instanceof Socks5InitialRequest) {
             ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
@@ -60,10 +64,17 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
         if (socksMessage instanceof Socks5PasswordAuthRequest authReq) {
             String username = authReq.username();
             String password = authReq.password();
+            if (bruteForceProtector.isLocked(username)) {
+                log.warn("SOCKS5 authentication failed for user {}: account is temporarily locked", username);
+                rejectAuthentication(channelHandlerContext);
+                return;
+            }
+
             UserConfig user = FindUser.find(username, inboundConfig);
             boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
 
             if (ok) {
+                bruteForceProtector.clearFailures(username);
                 // 认证通过，返回成功并加入命令解析器以处理后续CONNECT等请求
                 channelHandlerContext.pipeline().addBefore(channelHandlerContext.name(),
                         "socks5CommandReqDecoder",
@@ -73,9 +84,9 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
                 ChannelAttributes.setAuthenticatedUser(channelHandlerContext.channel(), user);
             } else {
                 // 认证失败，返回失败并关闭连接
-                log.warn("failed to authenticate user: {} by password {}", username, password);
-                channelHandlerContext.writeAndFlush(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.FAILURE))
-                        .addListener(ChannelFutureListener.CLOSE);
+                bruteForceProtector.recordFailure(username);
+                log.warn("SOCKS5 authentication failed for user {}: invalid credentials", username);
+                rejectAuthentication(channelHandlerContext);
             }
             return;
         }
@@ -107,5 +118,10 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
         // 其他未预期消息类型
         log.warn("Unexpected SOCKS message: {}", socksMessage.getClass().getSimpleName());
         channelHandlerContext.close();
+    }
+
+    private void rejectAuthentication(ChannelHandlerContext channelHandlerContext) {
+        channelHandlerContext.writeAndFlush(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.FAILURE))
+                .addListener(ChannelFutureListener.CLOSE);
     }
 }
