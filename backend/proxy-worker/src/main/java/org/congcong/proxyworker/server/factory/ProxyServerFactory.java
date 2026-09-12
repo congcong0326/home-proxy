@@ -18,6 +18,8 @@ public class ProxyServerFactory {
             return new TransparentProxyServer(cfg);
         } else if (type == ProtocolType.DNS_SERVER) {
             return new DnsProxyServer(cfg);
+        } else if (type == ProtocolType.TLS_SNI_TCP) {
+            return new TlsSniProxyServer(cfg);
         }
         return null;
     }

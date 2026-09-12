@@ -21,7 +21,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-worker-proxy e2e-worker-proxy-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -47,6 +47,14 @@ worker-it:
 # It builds isolated E2E images by default; set E2E_BUILD=0 to reuse them.
 e2e-transparent:
 	bash scripts/e2e/transparent-proxy-e2e.sh
+
+# Reuses the running control-manager and home-01 worker. Provision fixtures once,
+# then keep the regular E2E read-only for release checks.
+e2e-worker-proxy:
+	bash scripts/e2e/worker-proxy-e2e.sh
+
+e2e-worker-proxy-setup:
+	bash scripts/e2e/worker-proxy-e2e.sh --provision
 
 frontend-install:
 	$(NPM) $(NPM_ARGS) --prefix $(FRONTEND_DIR) ci

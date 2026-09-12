@@ -155,7 +155,9 @@ class ApiService {
       if (!response.ok) {
         const errorMessage = await this.getErrorMessage(response);
         this.handleUnauthorized(response.status, endpoint);
-        throw new Error(errorMessage);
+        const error = new Error(errorMessage) as Error & { status?: number };
+        error.status = response.status;
+        throw error;
       }
 
       return await this.readResponseBody<T>(response);

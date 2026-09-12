@@ -34,6 +34,7 @@ export enum ProtocolType {
   TP_PROXY = 'TP_PROXY',
   DOT = 'DOT',
   DNS_SERVER = 'DNS_SERVER',
+  TLS_SNI_TCP = 'TLS_SNI_TCP',
 }
 
 // 协议类型标签映射
@@ -46,7 +47,8 @@ export const PROTOCOL_TYPE_LABELS = {
   [ProtocolType.VLESS_REALITY]: 'VLESS REALITY Vision协议',
   [ProtocolType.TP_PROXY]: '透明代理',
   [ProtocolType.DOT]: 'dns over tls 服务器',
-  [ProtocolType.DNS_SERVER]: 'dns服务器'
+  [ProtocolType.DNS_SERVER]: 'dns服务器',
+  [ProtocolType.TLS_SNI_TCP]: 'TLS SNI 四层分流'
 };
 
 // 出站代理加密算法类型（仅在 SHADOW_SOCKS 时使用）

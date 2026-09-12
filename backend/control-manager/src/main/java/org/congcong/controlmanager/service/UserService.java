@@ -170,6 +170,7 @@ public class UserService {
      * @param id 用户ID
      * @throws ResponseStatusException 如果用户不存在或用户被入站配置引用
      */
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)

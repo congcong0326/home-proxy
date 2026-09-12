@@ -13,7 +13,7 @@ public class UserQueryService   {
             case SHADOW_SOCKS -> {
                 return inboundConfig.getUsersMap().values().stream().findAny().orElse(null);
             }
-            case TP_PROXY,DNS_SERVER -> {
+            case TP_PROXY,DNS_SERVER,TLS_SNI_TCP -> {
                 UserConfig userConfig = inboundConfig.getDeviceIpMapUser().get(key);
                 if (userConfig != null) {
                     return userConfig;

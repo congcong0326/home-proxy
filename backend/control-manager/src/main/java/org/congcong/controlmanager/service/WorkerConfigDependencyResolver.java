@@ -37,6 +37,7 @@ public class WorkerConfigDependencyResolver {
         for (InboundConfig inbound : safe(inbounds)) {
             if (inbound.getAnonymousUserId() != null) ids.add(inbound.getAnonymousUserId());
             for (InboundRouteBinding binding : safe(inbound.getInboundRouteBindings())) {
+                if (binding == null) continue;
                 ids.addAll(nonNull(binding.getUserIds()));
             }
         }
@@ -48,6 +49,7 @@ public class WorkerConfigDependencyResolver {
         for (InboundConfig inbound : safe(inbounds)) {
             if (inbound.getFallbackRouteId() != null) ids.add(inbound.getFallbackRouteId());
             for (InboundRouteBinding binding : safe(inbound.getInboundRouteBindings())) {
+                if (binding == null) continue;
                 ids.addAll(nonNull(binding.getRouteIds()));
             }
         }
@@ -57,7 +59,9 @@ public class WorkerConfigDependencyResolver {
     public Set<String> resolveRuleSetKeys(Collection<Route> routes) {
         Set<String> keys = new LinkedHashSet<>();
         for (Route route : safe(routes)) {
+            if (route == null) continue;
             for (RouteRule rule : safe(route.getRules())) {
+                if (rule == null) continue;
                 if (rule.getConditionType() == RouteConditionType.RULE_SET && rule.getValue() != null && !rule.getValue().isBlank()) {
                     keys.add(rule.getValue());
                 }

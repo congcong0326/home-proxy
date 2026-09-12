@@ -55,6 +55,9 @@ import './RouteManagement.css';
 
 const { Title, Text } = Typography;
 
+const isConflictError = (error: unknown): error is Error & { status: number } =>
+  error instanceof Error && (error as Error & { status?: number }).status === 409;
+
 interface RouteManagementState {
   routes: RouteDTO[];
   loading: boolean;
@@ -276,6 +279,10 @@ const RouteManagement: React.FC = () => {
       setState(prev => ({ ...prev, currentPage: targetPage }));
       loadRoutes();
     } catch (error) {
+      if (isConflictError(error)) {
+        message.error(error.message || '路由仍被入站配置引用，无法删除');
+        return;
+      }
       console.error('Failed to delete route:', error);
       
       // API失败时从模拟数据中删除
@@ -320,6 +327,10 @@ const RouteManagement: React.FC = () => {
       setState(prev => ({ ...prev, currentPage: targetPage }));
       loadRoutes();
     } catch (error) {
+      if (isConflictError(error)) {
+        message.error(error.message || '存在仍被入站配置引用的路由，无法删除');
+        return;
+      }
       console.error('Failed to batch delete routes:', error);
       
       // API失败时从模拟数据中删除

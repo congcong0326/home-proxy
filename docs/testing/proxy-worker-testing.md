@@ -13,11 +13,14 @@
 - 单元测试：`make backend-test`。
 - proxy-worker 集成测试：`make worker-it`。
 - 透明代理特权 E2E：`make e2e-transparent`。
+- 研发环境 worker 代理 E2E：`make e2e-worker-proxy`。
 - proxy-worker 打包验证：`make worker-build`。
 
 `make worker-it` 使用 Maven Failsafe 执行 `*IT.java`，普通 `make backend-test` 仍只执行 Surefire 单元测试。集成测试会按需下载固定版本 xray 到仓库根目录 `.it-cache/xray`，该目录不提交；如果本机已经有 xray，可用 `XRAY_BIN=/path/to/xray make worker-it` 指定可执行文件，也可用 `-Dxray.cache.dir=/path/to/cache` 改缓存目录。
 
 `make e2e-transparent` 是独立的特权 Linux E2E，不会进入 `make backend-test` 或 `make worker-it`。它要求原生 Linux、Docker、`iproute2`、`iptables`、`curl`、`jq`、`openssl`，以及 root 或免密 `sudo`。测试会构建当前 control-manager/worker 镜像，启动独立 MySQL/ClickHouse/control-manager 栈和 worker；随后创建 network namespace、veth、TPROXY 规则与策略路由。无论成功或失败，脚本都按精确资源名删除容器、Compose 卷、iptables 规则、策略路由、命名空间和 loopback 测试地址。用 `E2E_BUILD=0` 可跳过镜像构建，用 `E2E_KEEP_ARTIFACTS=1` 保留失败现场的临时配置文件。
+
+`make e2e-worker-proxy-setup` 只需在研发/测试控制面执行一次。它在固定的 `home-01` 节点上创建两条入站：`TP_PROXY` 和 `SOCKS5`，并绑定直连、阻断、SOCKS5 出站、目标重写四类路由；默认凭据是 `worker-e2e / worker-e2e-pass`，可通过 `E2E_*` 环境变量覆盖。常规发布前回归只执行 `make e2e-worker-proxy`，该命令复用正在运行的 control-manager 和 worker，不修改管理配置，只启动临时 HTTP 目标和 SOCKS5 上游并验证两条入站的请求结果。透明代理测试使用独立 network namespace、veth、TPROXY 和策略路由，结束后清理所有临时网络资源。
 
 ## 集成测试覆盖
 
@@ -44,6 +47,7 @@
 | 透明代理未知载荷回退 | 非 HTTP/TLS 流量仍必须转发到原始 IP | `ProtocolDetectHandlerTest` | 已覆盖 |
 | 透明代理隧道请求 | 设备 IP 到用户的映射，或首包保留逻辑损坏 | `TransparentServerHandlerTest` | 已覆盖 |
 | 透明代理部署链路 | TPROXY、策略路由、`IP_TRANSPARENT`、控制面发布、HTTP Host/TLS SNI 路由、目标重写与阻断 | `make e2e-transparent` | 已覆盖（特权 Linux） |
+| 研发环境 worker 代理链路 | `home-01` 的 TP_PROXY/SOCKS5 入站，直连、阻断、SOCKS5 出站、目标重写 | `make e2e-worker-proxy` | 已覆盖（持久化测试环境） |
 | DNS UDP 查询规范化 | 丢失 DNS id、qName、qType、client 或 bytes-in 上下文 | `UdpDnsQueryHandlerTest` | 已覆盖 |
 | DNS 应答 IP 提取 | DNS 日志丢失 A/AAAA 应答 IP，或错误修改 buffer | `DnsMessageUtilTest` | 已覆盖 |
 | DNS 重写 | 无效重写配置或 AAAA 查询得到错误应答 | `DnsRewritingProtocolStrategyTest` | 已覆盖 |

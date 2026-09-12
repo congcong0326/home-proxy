@@ -8,6 +8,7 @@ import org.congcong.controlmanager.dto.InboundConfigUpdateRequest;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.entity.InboundConfig;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
+import org.congcong.controlmanager.repository.UserRepository;
 import org.springframework.beans.BeanUtils;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
@@ -30,6 +31,7 @@ public class InboundConfigService {
 
     private final InboundConfigRepository inboundConfigRepository;
     private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
+    private final UserRepository userRepository;
 
     /**
      * 分页查询入站配置列表
@@ -139,6 +141,13 @@ public class InboundConfigService {
      * 业务校验 - 实体
      */
     private void validateInboundConfigEntity(InboundConfig inboundConfig) {
+        if (inboundConfig.getProtocol() == ProtocolType.TLS_SNI_TCP) {
+            inboundConfig.setTlsEnabled(false);
+            inboundConfig.setSniffEnabled(true);
+            if (inboundConfig.getAnonymousUserId() == null || userRepository.findById(inboundConfig.getAnonymousUserId()).map(u -> !Integer.valueOf(1).equals(u.getStatus())).orElse(true)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "TLS_SNI_TCP协议必须选择启用状态的路由用户");
+            }
+        }
         // 校验协议与TLS的组合
         if (inboundConfig.getProtocol() == ProtocolType.SOCKS5_HTTPS && inboundConfig.getTlsEnabled()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, 

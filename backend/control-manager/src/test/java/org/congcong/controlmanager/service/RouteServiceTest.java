@@ -3,11 +3,15 @@ package org.congcong.controlmanager.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
@@ -81,6 +85,22 @@ class RouteServiceTest {
 
         assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
         assertEquals("AD_BLOCK 路由条件已下线，请使用 RULE_SET 规则集替代", error.getReason());
+    }
+
+    @Test
+    void refusesDeletingRouteReferencedByInboundConfig() {
+        Route route = new Route();
+        route.setId(7L);
+        when(routeRepository.findById(7L)).thenReturn(Optional.of(route));
+        when(dependencyResolver.isRouteReferenced(7L)).thenReturn(true);
+
+        ResponseStatusException error = assertThrows(
+                ResponseStatusException.class,
+                () -> routeService.deleteRoute(7L));
+
+        assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+        assertEquals("路由正在被入站配置引用，无法删除", error.getReason());
+        verify(routeRepository, never()).delete(eq(route));
     }
 
     private CreateRouteRequest vlessRealityRequest(Map<String, Object> config) {

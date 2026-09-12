@@ -52,6 +52,9 @@ const USER_STATUS_COLORS = {
   [UserStatus.DISABLED]: 'default',
 };
 
+const isConflictError = (error: unknown): error is Error & { status: number } =>
+  error instanceof Error && (error as Error & { status?: number }).status === 409;
+
 interface UserManagementState {
   users: UserDTO[];
   loading: boolean;
@@ -250,6 +253,10 @@ const UserManagement: React.FC = () => {
       await apiService.deleteUser(userId);
       message.success('用户删除成功');
     } catch (error) {
+      if (isConflictError(error)) {
+        message.error(error.message || '用户仍被入站配置引用，无法删除');
+        return;
+      }
       console.warn('API删除失败，从模拟数据中删除:', error);
       // API失败时，从模拟数据中删除
       setMockUsers(prev => prev.filter(user => user.id !== userId));
@@ -293,6 +300,10 @@ const UserManagement: React.FC = () => {
       await apiService.batchDeleteUsers(state.selectedRowKeys as number[]);
       message.success('批量删除成功');
     } catch (error) {
+      if (isConflictError(error)) {
+        message.error(error.message || '存在仍被入站配置引用的用户，无法删除');
+        return;
+      }
       console.warn('API批量删除失败，从模拟数据中删除:', error);
       // API失败时，从模拟数据中删除
       setMockUsers(prev => prev.filter(user => !state.selectedRowKeys.includes(user.id)));

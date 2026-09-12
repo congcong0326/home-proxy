@@ -143,6 +143,7 @@ const InboundManagement: React.FC = () => {
     { value: ProtocolType.SS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SS] },
     { value: ProtocolType.TP_PROXY, label: PROTOCOL_TYPE_LABELS[ProtocolType.TP_PROXY] },
     { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
+    { value: ProtocolType.TLS_SNI_TCP, label: PROTOCOL_TYPE_LABELS[ProtocolType.TLS_SNI_TCP] },
   ]), []);
 
   const statusSelectOptions = useMemo(() => ([

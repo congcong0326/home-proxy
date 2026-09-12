@@ -10,7 +10,8 @@ public enum ProtocolType {
     DNS_SERVER("DNS_SERVER", "dns 服务器"),
     DOT("DOT","dns over tls 服务器"),
     SHADOW_SOCKS("SHADOW_SOCKS", "Shadowsocks协议"),
-    VLESS_REALITY("VLESS_REALITY", "VLESS REALITY Vision出站协议");
+    VLESS_REALITY("VLESS_REALITY", "VLESS REALITY Vision出站协议"),
+    TLS_SNI_TCP("TLS_SNI_TCP", "TLS SNI 四层分流");
     private final String value;
     private final String description;
 
