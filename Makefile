@@ -22,7 +22,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build worker-it frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -43,6 +43,11 @@ worker-build:
 
 worker-it:
 	$(MVN) -f $(BACKEND_DIR)/pom.xml $(MAVEN_ARGS) -pl proxy-worker -am verify -Pworker-it -DskipTests=false
+
+# Requires Linux, Docker, iproute2/iptables, and permission to create a network namespace.
+# It builds isolated E2E images by default; set E2E_BUILD=0 to reuse them.
+e2e-transparent:
+	bash scripts/e2e/transparent-proxy-e2e.sh
 
 frontend-install:
 	$(NPM) $(NPM_ARGS) --prefix $(FRONTEND_DIR) ci
