@@ -50,6 +50,9 @@ services:
       clickhouse: { condition: service_healthy }
     environment:
       SERVER_PORT: 8443
+      # Worker WSS endpoints use locally generated certificates without IP SANs.
+      # Set this at JVM startup (runtime System.setProperty is too late for JDK HttpClient).
+      JAVA_TOOL_OPTIONS: "-Djdk.internal.httpclient.disableHostnameVerification=true"
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-tpproxy}?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
@@ -64,7 +67,7 @@ services:
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     ports:
-      - "${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HTTPS_HOST_PORT:-18443}:8443"
+      - "${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HTTPS_HOST_PORT:-18443}:8443"
     networks: [home-proxy-db]
 
 volumes:

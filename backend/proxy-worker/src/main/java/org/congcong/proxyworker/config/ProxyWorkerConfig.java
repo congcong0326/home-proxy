@@ -34,6 +34,10 @@ public class ProxyWorkerConfig {
     private final boolean tlsAllowSelfSigned;
     private final String workerTokenFile;
     private final String lastKnownGoodConfig;
+    private final boolean managementEnabled;
+    private final int managementPort;
+    private final String managementTokenFile;
+    private final long managementPollIntervalMs;
     
     private static ProxyWorkerConfig instance;
     
@@ -64,6 +68,10 @@ public class ProxyWorkerConfig {
         this.lastKnownGoodConfig = props.getProperty("worker.lastKnownGoodConfig", "/data/proxy-worker/last-known-good-config.json");
         this.workerId = props.getProperty("worker.id", "default");
         this.workerControlPollIntervalMs = Long.parseLong(props.getProperty("worker.control.pollIntervalMs", "2000"));
+        this.managementEnabled = Boolean.parseBoolean(props.getProperty("worker.management.enabled", "false"));
+        this.managementPort = Integer.parseInt(props.getProperty("worker.management.port", "18444"));
+        this.managementTokenFile = props.getProperty("worker.management.tokenFile", "/data/proxy-worker/management.token");
+        this.managementPollIntervalMs = Long.parseLong(props.getProperty("worker.management.pollIntervalMs", "2000"));
         
         log.info("代理工作节点配置加载完成 - 控制端地址: {}", controlBaseUrl);
     }
@@ -129,6 +137,10 @@ public class ProxyWorkerConfig {
         overrideProperty(props, "worker.tokenFile", "WORKER_TOKEN_FILE");
         overrideProperty(props, "worker.lastKnownGoodConfig", "LAST_KNOWN_GOOD_CONFIG");
         overrideProperty(props, "worker.control.pollIntervalMs", "WORKER_CONTROL_POLL_INTERVAL_MS");
+        overrideProperty(props, "worker.management.enabled", "WORKER_MANAGEMENT_ENABLED");
+        overrideProperty(props, "worker.management.port", "WORKER_MANAGEMENT_PORT");
+        overrideProperty(props, "worker.management.tokenFile", "WORKER_MANAGEMENT_TOKEN_FILE");
+        overrideProperty(props, "worker.management.pollIntervalMs", "WORKER_MANAGEMENT_POLL_INTERVAL_MS");
     }
 
     private void overrideProperty(Properties props, String propertyName, String envName) {
@@ -237,4 +249,8 @@ public class ProxyWorkerConfig {
     public boolean isTlsAllowSelfSigned() { return tlsAllowSelfSigned; }
     public String getWorkerTokenFile() { return workerTokenFile; }
     public String getLastKnownGoodConfig() { return lastKnownGoodConfig; }
+    public boolean isManagementEnabled() { return managementEnabled; }
+    public int getManagementPort() { return managementPort; }
+    public String getManagementTokenFile() { return managementTokenFile; }
+    public long getManagementPollIntervalMs() { return managementPollIntervalMs; }
 }

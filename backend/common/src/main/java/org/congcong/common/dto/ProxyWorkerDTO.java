@@ -10,7 +10,9 @@ public class ProxyWorkerDTO {
     private String displayName;
     private Boolean enabled;
     private String description;
-    private Boolean tokenPresent;
+    private String managementUrl;
+    private String managementToken;
+    private Boolean managementTokenPresent;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private WorkerStatusSnapshot status;

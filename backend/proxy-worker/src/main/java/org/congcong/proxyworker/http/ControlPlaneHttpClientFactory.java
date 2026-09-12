@@ -19,8 +19,9 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Shared client for all worker-to-control-plane traffic.
  *
  * <p>The control plane creates an ephemeral self-signed certificate at each start. Workers therefore
- * deliberately skip certificate-chain and hostname verification, while still requiring HTTPS and a
- * per-worker bearer token.</p>
+ * deliberately skip certificate-chain and hostname verification. Legacy HTTP callers may still
+ * attach a Worker Token when one is configured, but controller-initiated management mode does not
+ * require or validate that credential.</p>
  */
 public final class ControlPlaneHttpClientFactory {
     private static final AtomicReference<ControlPlaneHttpClientFactory> INSTANCE = new AtomicReference<>();
@@ -54,17 +55,21 @@ public final class ControlPlaneHttpClientFactory {
     public HttpClient getHttpClient() { return httpClient; }
 
     public HttpRequest.Builder requestBuilder(URI uri) {
-        return HttpRequest.newBuilder().uri(uri).header("Authorization", "Bearer " + token);
+        HttpRequest.Builder builder = HttpRequest.newBuilder().uri(uri);
+        if (token != null) {
+            builder.header("Authorization", "Bearer " + token);
+        }
+        return builder;
     }
 
     private static String readToken(String tokenFile) {
-        if (tokenFile == null) throw new IllegalStateException("worker.tokenFile 未配置");
+        if (tokenFile == null || tokenFile.isBlank()) return null;
         try {
             String value = Files.readString(Path.of(tokenFile), StandardCharsets.UTF_8).trim();
             if (!value.startsWith("hpw_") || value.length() <= 4) throw new IllegalStateException("Worker Token 格式无效");
             return value;
         } catch (Exception e) {
-            throw new IllegalStateException("无法读取 Worker Token 文件", e);
+            throw new IllegalStateException("无法读取兼容模式 Worker Token 文件", e);
         }
     }
 

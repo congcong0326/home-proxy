@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Card, Form, Input, Modal, Popconfirm, Space, Table, Tag, Typography, message } from 'antd';
-import { DeleteOutlined, KeyOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { apiService } from '../services/api';
 import { ProxyWorkerDTO, WorkerCreateRequest } from '../types/worker';
 
@@ -8,7 +8,7 @@ const WorkerManagement: React.FC = () => {
   const [workers, setWorkers] = useState<ProxyWorkerDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const [editingWorker, setEditingWorker] = useState<ProxyWorkerDTO | null>(null);
   const [form] = Form.useForm<WorkerCreateRequest>();
 
   const load = useCallback(async () => {
@@ -24,32 +24,51 @@ const WorkerManagement: React.FC = () => {
 
   useEffect(() => { void load(); }, [load]);
 
-  const create = async () => {
+  const openCreate = () => {
+    setEditingWorker(null);
+    form.resetFields();
+    setCreateOpen(true);
+  };
+
+  const openEdit = (worker: ProxyWorkerDTO) => {
+    setEditingWorker(worker);
+    form.setFieldsValue({
+      workerId: worker.workerId,
+      displayName: worker.displayName,
+      description: worker.description,
+      managementUrl: worker.managementUrl || '',
+      managementToken: worker.managementToken || '',
+    });
+    setCreateOpen(true);
+  };
+
+  const save = async () => {
     try {
       const value = await form.validateFields();
-      const response = await apiService.createWorker(value);
+      if (editingWorker) {
+        await apiService.updateWorker(editingWorker.workerId, {
+          displayName: value.displayName,
+          description: value.description,
+          managementUrl: value.managementUrl,
+          managementToken: value.managementToken?.trim() || undefined,
+        });
+      } else {
+        await apiService.createWorker(value);
+      }
       form.resetFields();
       setCreateOpen(false);
-      setToken(response.token);
+      setEditingWorker(null);
       await load();
     } catch (error) {
       if (error instanceof Error) message.error(error.message);
     }
   };
 
-  const createToken = async (workerId: string) => {
-    try {
-      const response = await apiService.createWorkerToken(workerId);
-      setToken(response.token);
-      await load();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '创建 Token 失败');
-    }
-  };
-
   const columns = [
     { title: '节点', key: 'worker', render: (_: unknown, worker: ProxyWorkerDTO) => <><strong>{worker.displayName}</strong><br /><Typography.Text type="secondary">{worker.workerId}</Typography.Text></> },
     { title: '状态', key: 'state', render: (_: unknown, worker: ProxyWorkerDTO) => <Space><Tag color={worker.enabled ? 'green' : 'red'}>{worker.enabled ? '启用' : '禁用'}</Tag><Tag color={worker.status?.online ? 'blue' : 'default'}>{worker.status?.online ? '在线' : '离线'}</Tag></Space> },
+    { title: '管理地址', dataIndex: 'managementUrl', key: 'managementUrl', render: (value?: string) => value || '-' },
+    { title: 'Worker 管理 Token', dataIndex: 'managementToken', key: 'managementToken', render: (value?: string) => value || '-' },
     { title: '主机名', dataIndex: ['status', 'hostname'], key: 'hostname', render: (value?: string) => value || '-' },
     { title: '入站', dataIndex: ['status', 'runningInboundCount'], key: 'inbounds', render: (value?: number) => value ?? 0 },
     { title: '连接', dataIndex: ['status', 'activeConnectionCount'], key: 'connections', render: (value?: number) => value ?? 0 },
@@ -58,8 +77,7 @@ const WorkerManagement: React.FC = () => {
     {
       title: '操作', key: 'actions', render: (_: unknown, worker: ProxyWorkerDTO) => (
         <Space>
-          {worker.tokenPresent ? <Popconfirm title="删除后节点将立即无法访问管理端，确认删除？" onConfirm={() => apiService.deleteWorkerToken(worker.workerId).then(load)}><Button size="small" icon={<KeyOutlined />} danger>删除 Token</Button></Popconfirm>
-            : <Button size="small" icon={<KeyOutlined />} onClick={() => void createToken(worker.workerId)}>创建 Token</Button>}
+          <Button size="small" icon={<EditOutlined />} onClick={() => openEdit(worker)}>编辑</Button>
           {worker.enabled && <Popconfirm title="确认禁用节点？" onConfirm={() => apiService.disableWorker(worker.workerId).then(load)}><Button size="small" icon={<StopOutlined />}>禁用</Button></Popconfirm>}
           <Popconfirm title="仅无入站、任务和状态记录的节点可删除，确认继续？" onConfirm={() => apiService.deleteWorker(worker.workerId).then(load)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
         </Space>
@@ -69,14 +87,11 @@ const WorkerManagement: React.FC = () => {
 
   return <div className="inbound-management">
     <div className="page-header"><Typography.Title level={2}>代理节点</Typography.Title></div>
-    <Card extra={<Space><Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading} /><Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>新建节点</Button></Space>}>
+    <Card extra={<Space><Button icon={<ReloadOutlined />} onClick={() => void load()} loading={loading} /><Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新建节点</Button></Space>}>
       <Table rowKey="workerId" loading={loading} columns={columns} dataSource={workers} scroll={{ x: 1100 }} />
     </Card>
-    <Modal title="新建代理节点" open={createOpen} onCancel={() => setCreateOpen(false)} onOk={() => void create()}>
-      <Form form={form} layout="vertical"><Form.Item name="workerId" label="节点标识" rules={[{ required: true, pattern: /^[a-z0-9][a-z0-9._-]{0,127}$/, message: '仅限小写字母、数字、点、下划线和连字符' }]}><Input /></Form.Item><Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item></Form>
-    </Modal>
-    <Modal title="Worker Token" open={token !== null} footer={<Button type="primary" onClick={() => setToken(null)}>关闭</Button>} closable={false}>
-      <Typography.Paragraph copyable={{ text: token || '' }}><Typography.Text code>{token}</Typography.Text></Typography.Paragraph>
+    <Modal title={editingWorker ? '编辑代理节点' : '新建代理节点'} open={createOpen} onCancel={() => { setCreateOpen(false); setEditingWorker(null); form.resetFields(); }} onOk={() => void save()}>
+      <Form form={form} layout="vertical"><Form.Item name="workerId" label="节点标识"><Input disabled={Boolean(editingWorker)} /></Form.Item><Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="managementUrl" label="Worker WSS 地址" extra="填写 Worker 启动后监听的 wss:// 地址" rules={[{ required: true, pattern: /^wss:\/\/.+/, message: '请输入有效的 wss:// 地址' }]}><Input placeholder="wss://worker.example.com:18444/management/ws" /></Form.Item><Form.Item name="managementToken" label="Worker 管理 Token" extra="Token 由 Worker 生成，读取 worker.management.tokenFile 后粘贴到这里" rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item><Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item></Form>
     </Modal>
   </div>;
 };

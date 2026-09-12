@@ -10,7 +10,7 @@ import java.util.List;
  */
 @Data
 public class AccessLog {
-    /** Set by the control plane from the authenticated worker, never trusted from the request. */
+    /** Worker identifier attached by the worker management runtime. */
     private String workerId;
     // 时间戳与请求标识
     private Instant ts = Instant.now();

@@ -23,8 +23,8 @@ describe('TrafficOverview', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (apiService.getWorkers as jest.Mock).mockResolvedValue([
-      { workerId: 'default', displayName: '默认节点', enabled: true, tokenPresent: true },
-      { workerId: 'edge-a', displayName: '边缘节点 A', enabled: true, tokenPresent: true },
+      { workerId: 'default', displayName: '默认节点', enabled: true },
+      { workerId: 'edge-a', displayName: '边缘节点 A', enabled: true },
     ]);
     (apiService.getDailyUserTrafficStats as jest.Mock).mockResolvedValue([]);
     (apiService.getMonthlyUserTrafficStats as jest.Mock).mockResolvedValue([]);

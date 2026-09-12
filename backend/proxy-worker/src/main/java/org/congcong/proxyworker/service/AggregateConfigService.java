@@ -31,10 +31,12 @@ public class AggregateConfigService {
     private final LastKnownGoodConfigStore lastKnownGoodConfigStore;
     private volatile WorkerControlService.ConfigApplicationStatus applicationStatus = WorkerControlService.ConfigApplicationStatus.empty();
     private volatile String fetchedConfigHash;
+    private volatile AggregateConfigResponse pushedConfig;
     
     public AggregateConfigService() {
-        this.httpClientManager = new HttpClientManager();
-        this.lastKnownGoodConfigStore = new LastKnownGoodConfigStore(ProxyWorkerConfig.getInstance().getLastKnownGoodConfig());
+        ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
+        this.httpClientManager = config.isManagementEnabled() ? null : new HttpClientManager();
+        this.lastKnownGoodConfigStore = new LastKnownGoodConfigStore(config.getLastKnownGoodConfig());
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "config-fetcher");
             t.setDaemon(true);
@@ -64,6 +66,17 @@ public class AggregateConfigService {
             log.info("聚合配置服务已启动，获取间隔: {}秒", DEFAULT_FETCH_INTERVAL);
         }
     }
+
+    /**
+     * Starts only the local part of configuration handling. A connected
+     * controller will answer management-channel polls with configurations.
+     */
+    public void startManaged() {
+        if (isRunning.compareAndSet(false, true)) {
+            log.info("启动 WebSocket 管理通道配置服务");
+            applyLastKnownGoodConfig();
+        }
+    }
     
     /**
      * 停止配置服务
@@ -88,38 +101,18 @@ public class AggregateConfigService {
      * 立即获取配置
      */
     public void fetchConfigNow() {
+        if (httpClientManager == null) {
+            log.warn("已启用 WSS 管理通道，忽略旧 HTTP 配置拉取");
+            return;
+        }
         try {
             log.debug("开始获取聚合配置");
             
             HttpClientManager.ConfigFetchResult result = httpClientManager.fetchAggregateConfig();
             
             if (result.isSuccess()) {
-                if (result.getConfig() != null) {
-                    fetchedConfigHash = result.getConfig().getConfigHash();
-                }
                 if (result.isUpdated()) {
-                    log.info("配置已更新，版本: {}", result.getConfig().getVersion());
-                    
-                    // 通知配置变更监听器
-                    if (configChangeListener != null) {
-                        try {
-                            ConfigApplyResult applyResult = configChangeListener.onConfigChanged(result.getConfig());
-                            if (!applyResult.success()) {
-                                applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
-                                        applyResult.errorSummary(), null);
-                                httpClientManager.clearCache();
-                                return;
-                            }
-                            applicationStatus = new WorkerControlService.ConfigApplicationStatus(result.getConfig().getConfigHash(), true,
-                                    null, java.time.LocalDateTime.now());
-                            lastKnownGoodConfigStore.write(result.getConfig());
-                        } catch (Exception e) {
-                            applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
-                                    summarize(e), null);
-                            httpClientManager.clearCache();
-                            log.error("通知配置变更监听器时发生异常", e);
-                        }
-                    }
+                    acceptConfig(result.getConfig());
                 } else {
                     log.debug("配置未变更，使用缓存");
                 }
@@ -136,21 +129,21 @@ public class AggregateConfigService {
      * 获取当前缓存的配置
      */
     public AggregateConfigResponse getCurrentConfig() {
-        return httpClientManager.getCachedConfig();
+        return pushedConfig == null && httpClientManager != null ? httpClientManager.getCachedConfig() : pushedConfig;
     }
     
     /**
      * 检查是否有缓存的配置
      */
     public boolean hasConfig() {
-        return httpClientManager.hasCachedConfig();
+        return pushedConfig != null || (httpClientManager != null && httpClientManager.hasCachedConfig());
     }
     
     /**
      * 清除配置缓存
      */
     public void clearCache() {
-        httpClientManager.clearCache();
+        if (httpClientManager != null) httpClientManager.clearCache();
         log.info("已清除配置缓存");
     }
     
@@ -164,6 +157,54 @@ public class AggregateConfigService {
     public WorkerControlService.ConfigApplicationStatus getApplicationStatus() { return applicationStatus; }
 
     public String getFetchedConfigHash() { return fetchedConfigHash; }
+
+    /** Hash advertised to the controller. Failed applies deliberately advertise no hash so they retry. */
+    public String getManagedPollingConfigHash() {
+        return Boolean.TRUE.equals(applicationStatus.success()) ? applicationStatus.appliedConfigHash() : null;
+    }
+
+    /** Applies a configuration received over the worker management WebSocket. */
+    public void acceptManagedConfig(AggregateConfigResponse config) {
+        if (config == null || !ProxyWorkerConfig.getInstance().getWorkerId().equals(config.getWorkerId())) {
+            log.warn("忽略来自管理通道的不匹配配置");
+            return;
+        }
+        if (config.getConfigHash() != null && config.getConfigHash().equals(fetchedConfigHash)
+                && Boolean.TRUE.equals(applicationStatus.success())) {
+            return;
+        }
+        acceptConfig(config);
+    }
+
+    private void acceptConfig(AggregateConfigResponse config) {
+        if (config == null) {
+            log.warn("控制端返回空配置");
+            return;
+        }
+        fetchedConfigHash = config.getConfigHash();
+        pushedConfig = config;
+        log.info("配置已更新，版本: {}", config.getVersion());
+        if (configChangeListener == null) {
+            return;
+        }
+        try {
+            ConfigApplyResult applyResult = configChangeListener.onConfigChanged(config);
+            if (!applyResult.success()) {
+                applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
+                        applyResult.errorSummary(), null);
+                if (httpClientManager != null) httpClientManager.clearCache();
+                return;
+            }
+            applicationStatus = new WorkerControlService.ConfigApplicationStatus(config.getConfigHash(), true,
+                    null, java.time.LocalDateTime.now());
+            lastKnownGoodConfigStore.write(config);
+        } catch (Exception e) {
+            applicationStatus = new WorkerControlService.ConfigApplicationStatus(null, false,
+                    summarize(e), null);
+            if (httpClientManager != null) httpClientManager.clearCache();
+            log.error("通知配置变更监听器时发生异常", e);
+        }
+    }
 
     private void applyLastKnownGoodConfig() {
         if (configChangeListener == null) return;

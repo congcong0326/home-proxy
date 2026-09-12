@@ -17,4 +17,12 @@ public class WorkerCreateRequest {
 
     @Size(max = 255)
     private String description;
+
+    @NotBlank(message = "Worker WSS 地址不能为空")
+    @Size(max = 512)
+    private String managementUrl;
+
+    @NotBlank(message = "Worker 管理 Token 不能为空")
+    @Size(max = 128)
+    private String managementToken;
 }

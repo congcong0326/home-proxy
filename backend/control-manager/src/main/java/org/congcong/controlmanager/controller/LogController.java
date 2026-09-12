@@ -7,11 +7,9 @@ import org.congcong.common.dto.AuthLog;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.service.LogService;
 import org.congcong.controlmanager.service.WorkerControlService;
-import org.congcong.controlmanager.security.WorkerPrincipal;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -33,19 +31,28 @@ public class LogController {
      * 接收访问日志批量
      */
     @PostMapping("/access")
-    public ResponseEntity<Map<String, Object>> ingestAccessLogs(@AuthenticationPrincipal WorkerPrincipal principal,
-                                                                 @RequestBody List<AccessLog> logs) {
-        int saved = logService.saveAccessLogs(principal.workerId(), logs);
+    public ResponseEntity<Map<String, Object>> ingestAccessLogs(@RequestBody List<AccessLog> logs) {
+        int saved = logService.saveAccessLogs(resolveWorkerId(logs), logs);
         Map<String, Object> resp = new HashMap<>();
         resp.put("saved", saved);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
     }
 
     @PostMapping("/auth")
-    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@AuthenticationPrincipal WorkerPrincipal principal,
-                                                               @RequestBody List<AuthLog> logs) {
-        int saved = logService.saveAuthLogs(principal.workerId(), logs);
+    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@RequestBody List<AuthLog> logs) {
+        int saved = logService.saveAuthLogs(resolveWorkerId(logs), logs);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("saved", saved));
+    }
+
+    private String resolveWorkerId(List<?> logs) {
+        if (logs != null) {
+            for (Object item : logs) {
+                String workerId = item instanceof AccessLog accessLog ? accessLog.getWorkerId()
+                        : item instanceof AuthLog authLog ? authLog.getWorkerId() : null;
+                if (workerId != null && !workerId.isBlank()) return workerId.trim();
+            }
+        }
+        return org.congcong.controlmanager.service.WorkerControlService.DEFAULT_WORKER_ID;
     }
 
     /**

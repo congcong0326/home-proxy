@@ -1,0 +1,245 @@
+package org.congcong.controlmanager.service;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.AggregateConfigResponse;
+import org.congcong.common.dto.WorkerManagementMessage;
+import org.congcong.common.dto.WorkerManagementMessageType;
+import org.congcong.controlmanager.entity.ProxyWorker;
+import org.congcong.controlmanager.repository.ProxyWorkerRepository;
+import org.springframework.stereotype.Service;
+
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.WebSocket;
+import java.security.SecureRandom;
+import java.security.cert.X509Certificate;
+import java.time.Duration;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * Maintains controller-initiated WSS connections to configured workers. A
+ * worker sends CONFIG_POLL through its connected socket; this service replies
+ * with a configuration only when the worker's hash is stale.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class WorkerManagementConnectionService {
+    private static final long RECONCILE_INTERVAL_SECONDS = 3L;
+
+    static {
+        // Must be set before java.net.http initializes its SSL hostname verifier.
+        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
+    }
+
+    private final ProxyWorkerRepository proxyWorkerRepository;
+    private final AggregateConfigCacheService aggregateConfigCacheService;
+    private final WorkerControlService workerControlService;
+    private final ConcurrentHashMap<String, Connection> connections = new ConcurrentHashMap<>();
+    private final Set<String> connecting = ConcurrentHashMap.newKeySet();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "worker-wss-connection-manager");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+    private final HttpClient webSocketClient = createWebSocketClient();
+
+    @PostConstruct
+    void start() {
+        scheduler.scheduleWithFixedDelay(this::safeReconcile, 0, RECONCILE_INTERVAL_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /** Keep the scheduler alive even when a database/network/client failure escapes a callback. */
+    private void safeReconcile() {
+        try {
+            reconcile();
+        } catch (Throwable error) {
+            log.error("同步 worker WSS 连接时发生未捕获异常，下一周期继续重试", error);
+        }
+    }
+
+    @PreDestroy
+    void stop() {
+        scheduler.shutdownNow();
+        connections.values().forEach(connection -> connection.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "controller stopping"));
+        connections.clear();
+    }
+
+    private void reconcile() {
+        try {
+            Set<String> configuredWorkerIds = new HashSet<>();
+            for (ProxyWorker worker : proxyWorkerRepository.findAll()) {
+                if (!Boolean.TRUE.equals(worker.getEnabled()) || isBlank(worker.getManagementUrl()) || isBlank(worker.getManagementToken())) {
+                    continue;
+                }
+                configuredWorkerIds.add(worker.getWorkerId());
+                Connection existing = connections.get(worker.getWorkerId());
+                if (existing != null && existing.matches(worker)) continue;
+                if (existing != null && connections.remove(worker.getWorkerId(), existing)) {
+                    existing.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "worker connection changed");
+                }
+                connect(worker);
+            }
+            connections.forEach((workerId, connection) -> {
+                if (configuredWorkerIds.contains(workerId)) return;
+                if (connections.remove(workerId, connection)) {
+                    connection.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "worker disabled or removed");
+                }
+            });
+        } catch (Exception e) {
+            log.warn("同步 worker WSS 连接失败", e);
+        }
+    }
+
+    private void connect(ProxyWorker worker) {
+        String workerId = worker.getWorkerId();
+        if (!connecting.add(workerId)) return;
+        URI uri;
+        try {
+            uri = URI.create(worker.getManagementUrl());
+        } catch (IllegalArgumentException e) {
+            connecting.remove(workerId);
+            log.warn("worker {} 的管理地址无效", workerId);
+            return;
+        }
+        String token = worker.getManagementToken();
+        WorkerWebSocketListener listener = new WorkerWebSocketListener(workerId);
+        webSocketClient.newWebSocketBuilder()
+                .connectTimeout(Duration.ofSeconds(5))
+                .header("Authorization", "Bearer " + token)
+                .buildAsync(uri, listener)
+                .whenComplete((socket, error) -> {
+                    connecting.remove(workerId);
+                    if (error != null) {
+                        log.warn("连接 worker WSS 失败, workerId={}, url={}", workerId, worker.getManagementUrl(), error);
+                        return;
+                    }
+                    // A close can race with completion. Never retain a dead socket: it
+                    // would make reconcile believe the worker is connected forever.
+                    if (socket == null || listener.closed) {
+                        log.warn("worker WSS 握手后连接已关闭, workerId={}, 将重试", workerId);
+                        return;
+                    }
+                    connections.put(workerId, new Connection(worker.getManagementUrl(), token, socket));
+                    log.info("已连接 worker WSS 管理端, workerId={}", workerId);
+                });
+    }
+
+    private void handleMessage(String expectedWorkerId, WebSocket socket, String json) {
+        try {
+            WorkerManagementMessage request = objectMapper.readValue(json, WorkerManagementMessage.class);
+            if (request.getType() != WorkerManagementMessageType.CONFIG_POLL
+                    || !expectedWorkerId.equals(request.getWorkerId())) {
+                log.warn("收到无效 worker WSS 管理消息, workerId={}", expectedWorkerId);
+                return;
+            }
+            workerControlService.recordManagementPoll(expectedWorkerId, request.getConfigHash());
+            AggregateConfigResponse config = aggregateConfigCacheService.getAggregateConfig(expectedWorkerId);
+            WorkerManagementMessage response;
+            if (config.getConfigHash() != null && config.getConfigHash().equals(request.getConfigHash())) {
+                response = new WorkerManagementMessage(WorkerManagementMessageType.CONFIG_UNCHANGED,
+                        expectedWorkerId, config.getConfigHash(), null);
+            } else {
+                response = new WorkerManagementMessage(WorkerManagementMessageType.CONFIG,
+                        expectedWorkerId, config.getConfigHash(), config);
+            }
+            socket.sendText(objectMapper.writeValueAsString(response), true);
+        } catch (Exception e) {
+            log.warn("处理 worker WSS 配置轮询失败, workerId={}, error={}", expectedWorkerId, e.toString());
+        }
+    }
+
+    private static HttpClient createWebSocketClient() {
+        try {
+            // Worker management certificates are generated locally at startup.
+            // The bearer token is the deliberately simple controller credential.
+            TrustManager[] trustManagers = {new X509TrustManager() {
+                @Override public void checkClientTrusted(X509Certificate[] chain, String authType) { }
+                @Override public void checkServerTrusted(X509Certificate[] chain, String authType) { }
+                @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+            }};
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, trustManagers, new SecureRandom());
+            SSLParameters sslParameters = new SSLParameters();
+            // An empty endpoint algorithm disables JDK HttpClient hostname checks.
+            // Worker certificates are self-signed and commonly have no IP SAN.
+            sslParameters.setEndpointIdentificationAlgorithm("");
+            return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
+                    .sslContext(sslContext).sslParameters(sslParameters).build();
+        } catch (Exception e) {
+            throw new IllegalStateException("无法初始化 worker WSS 客户端", e);
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private record Connection(String managementUrl, String managementToken, WebSocket webSocket) {
+        boolean matches(ProxyWorker worker) {
+            return managementUrl.equals(worker.getManagementUrl()) && managementToken.equals(worker.getManagementToken());
+        }
+    }
+
+    private final class WorkerWebSocketListener implements WebSocket.Listener {
+        private final String workerId;
+        private final StringBuilder pendingText = new StringBuilder();
+        private volatile boolean closed;
+
+        private WorkerWebSocketListener(String workerId) {
+            this.workerId = workerId;
+        }
+
+        @Override
+        public void onOpen(WebSocket webSocket) {
+            webSocket.request(1);
+        }
+
+        @Override
+        public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+            pendingText.append(data);
+            if (last) {
+                String message = pendingText.toString();
+                pendingText.setLength(0);
+                handleMessage(workerId, webSocket, message);
+            }
+            webSocket.request(1);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            closed = true;
+            connections.computeIfPresent(workerId, (ignored, connection) -> connection.webSocket() == webSocket ? null : connection);
+            log.warn("worker WSS 已关闭, workerId={}, code={}, reason={}; 将由 reconcile 重连", workerId, statusCode, reason);
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public void onError(WebSocket webSocket, Throwable error) {
+            closed = true;
+            connections.computeIfPresent(workerId, (ignored, connection) -> connection.webSocket() == webSocket ? null : connection);
+            log.warn("worker WSS 连接异常, workerId={}", workerId, error);
+        }
+    }
+}

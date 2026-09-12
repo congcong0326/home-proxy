@@ -27,6 +27,14 @@ public class ProxyWorker {
     @Column(length = 255)
     private String description;
 
+    @Column(name = "management_url", length = 512)
+    private String managementUrl;
+
+    /** Raw token supplied by the worker for the controller-initiated WSS connection. */
+    @Column(name = "management_token", length = 128)
+    private String managementToken;
+
+    /** Legacy column retained for rolling database compatibility; it is no longer used. */
     @Column(name = "token_hash", columnDefinition = "BINARY(32)")
     private byte[] tokenHash;
 

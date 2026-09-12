@@ -8,6 +8,7 @@ import org.congcong.common.dto.AccessLog;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
+import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
 
@@ -111,6 +112,7 @@ public class AccessLogUtil {
      */
     private static AccessLog createAccessLog(ProxyContext proxyContext, ProxyTimeContext timeContext) {
         AccessLog accessLog = new AccessLog();
+        accessLog.setWorkerId(ProxyWorkerConfig.getInstance().getWorkerId());
         
         // 生成高性能请求ID用于追踪
         accessLog.setRequestId(generateRequestId());

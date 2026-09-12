@@ -373,7 +373,6 @@ const TrafficOverview: React.FC = () => {
         workerId: DEFAULT_WORKER_ID,
         displayName: DEFAULT_WORKER_ID,
         enabled: true,
-        tokenPresent: false,
       }, ...workers];
 
   return (

@@ -1,6 +1,8 @@
 package org.congcong.controlmanager.service;
 
 import org.congcong.common.dto.ProxyWorkerDTO;
+import org.congcong.common.dto.WorkerTokenResponse;
+import org.congcong.controlmanager.dto.WorkerCreateRequest;
 import org.congcong.controlmanager.entity.ProxyWorker;
 import org.congcong.controlmanager.entity.WorkerStatus;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
@@ -17,8 +19,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -60,6 +64,24 @@ class ProxyWorkerServiceTest {
         assertTrue(result.get(0).getStatus().getOnline());
         verify(workerStatusRepository).findAllById(List.of("worker-a", "worker-b"));
         verify(workerStatusRepository, never()).findById(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void createsControllerInitiatedManagementConnectionWithoutLegacyToken() {
+        WorkerCreateRequest request = new WorkerCreateRequest();
+        request.setWorkerId("edge-01");
+        request.setDisplayName("Edge 01");
+        request.setManagementUrl("wss://edge.example.test:18444/management/ws");
+        request.setManagementToken("hpw_example-management-token");
+        when(proxyWorkerRepository.existsById("edge-01")).thenReturn(false);
+        when(proxyWorkerRepository.save(any(ProxyWorker.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(workerStatusRepository.findById("edge-01")).thenReturn(java.util.Optional.empty());
+
+        WorkerTokenResponse response = service.create(request);
+
+        assertNull(response.getToken());
+        assertEquals("wss://edge.example.test:18444/management/ws", response.getWorker().getManagementUrl());
+        assertTrue(response.getWorker().getManagementTokenPresent());
     }
 
     private ProxyWorker worker(String workerId, String displayName) {

@@ -97,6 +97,23 @@ public class WorkerControlService {
         return toStatusDto(status, LocalDateTime.now());
     }
 
+    /** Records liveness for a worker using the controller-initiated WSS channel. */
+    @Transactional
+    public void recordManagementPoll(String workerId, String appliedConfigHash) {
+        LocalDateTime now = LocalDateTime.now();
+        WorkerStatus status = workerStatusRepository.findById(workerId).orElseGet(WorkerStatus::new);
+        status.setWorkerId(workerId);
+        status.setLastSeenAt(now);
+        if (appliedConfigHash != null && !appliedConfigHash.isBlank()) {
+            status.setFetchedConfigHash(appliedConfigHash);
+            status.setAppliedConfigHash(appliedConfigHash);
+            status.setApplySuccess(true);
+            status.setApplyError(null);
+            status.setAppliedAt(now);
+        }
+        workerStatusRepository.save(status);
+    }
+
     private void updateWorkerStatus(String workerId, WorkerPollRequest request, LocalDateTime now) {
         WorkerStatus status = workerStatusRepository.findById(workerId).orElseGet(WorkerStatus::new);
         status.setWorkerId(workerId);

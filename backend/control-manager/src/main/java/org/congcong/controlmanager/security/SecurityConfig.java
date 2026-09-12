@@ -4,7 +4,6 @@ import org.congcong.controlmanager.repository.AdminTokenBlacklistRepository;
 import org.congcong.controlmanager.repository.AdminUserRepository;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
@@ -22,11 +21,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, JwtService jwtService, AdminUserRepository userRepo,
-                                           AdminTokenBlacklistRepository blacklistRepo,
-                                           WorkerTokenAuthenticationService workerTokenAuthenticationService,
-                                           @Value("${worker.auth.legacy-enabled:false}") boolean legacyEnabled) throws Exception {
+                                           AdminTokenBlacklistRepository blacklistRepo) throws Exception {
         JwtAuthenticationFilter jwtFilter = new JwtAuthenticationFilter(jwtService, userRepo, blacklistRepo);
-        WorkerTokenAuthenticationFilter workerFilter = new WorkerTokenAuthenticationFilter(workerTokenAuthenticationService, legacyEnabled);
         http.csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -35,7 +31,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/admin/setup").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/config/aggregate").hasRole("WORKER")
                     .requestMatchers(HttpMethod.POST, "/api/worker/poll").hasRole("WORKER")
-                    .requestMatchers(HttpMethod.POST, "/api/logs/access", "/api/logs/auth").hasRole("WORKER")
+                    // Worker logs no longer carry a controller-issued Worker Token.
+                    .requestMatchers(HttpMethod.POST, "/api/logs/access", "/api/logs/auth").permitAll()
                     .requestMatchers(HttpMethod.GET, "/api/logs/**").hasRole("ADMIN")
                     .requestMatchers("/api/config/hash").hasRole("ADMIN")
                     .requestMatchers("/api/worker/status").hasAnyRole("ADMIN", "SUPER_ADMIN")
@@ -61,7 +58,6 @@ public class SecurityConfig {
                     res.getWriter().write("{\"code\":\"FORBIDDEN\",\"message\":\"access denied\"}");
                 })
             )
-            .addFilterBefore(workerFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
             .cors(Customizer.withDefaults());
         return http.build();

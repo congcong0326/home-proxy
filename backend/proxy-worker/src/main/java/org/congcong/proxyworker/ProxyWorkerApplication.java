@@ -14,7 +14,7 @@ import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.server.ConfigApplyResult;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.service.AggregateConfigService;
-import org.congcong.proxyworker.service.WorkerControlService;
+import org.congcong.proxyworker.service.WorkerManagementWebSocketServer;
 
 import java.util.*;
 
@@ -28,22 +28,24 @@ public class ProxyWorkerApplication {
     
     public static void main(String[] args) throws Exception {
         log.info("启动代理工作节点应用程序");
-        // 创建配置服务
         AggregateConfigService configService = new AggregateConfigService();
-        WorkerControlService workerControlService = WorkerControlService.forAggregateConfigService(configService);
-        
-        // 设置配置变更监听器
         configService.setConfigChangeListener(new ConfigChangeListener());
-        // 日志服务启动
+
+        ProxyWorkerConfig workerConfig = ProxyWorkerConfig.getInstance();
         AccessLogUtil.start();
-        workerControlService.start();
-        // 启动配置服务
-        configService.start();
+        if (!workerConfig.isManagementEnabled()) {
+            log.warn("WORKER_MANAGEMENT_ENABLED=false 已不再支持，仍将启动 controller 推送管理通道");
+        }
+        configService.startManaged();
+        WorkerManagementWebSocketServer managementServer = new WorkerManagementWebSocketServer(configService);
+        managementServer.start();
+
+        WorkerManagementWebSocketServer activeManagementServer = managementServer;
         // 添加关闭钩子
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("应用程序正在关闭...");
             configService.stop();
-            workerControlService.stop();
+            activeManagementServer.stop();
             PROXY_CONTEXT.closeAll();
             AccessLogUtil.stop();
         }));

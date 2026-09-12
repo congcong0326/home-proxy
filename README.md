@@ -72,7 +72,7 @@ docker pull congcong0326/home-proxy-worker:latest
 
 运行时会启动这些服务：
 
-- `control-manager`：控制面、管理页面和 API，默认绑定 `127.0.0.1:18081`；局域网访问时绑定到宿主机内网 IP
+- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源
 - `mysql`：控制面配置库，仅 Docker 内部网络可访问
 - `clickhouse`：访问日志和统计库，仅 Docker 内部网络可访问
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
@@ -155,7 +155,7 @@ services:
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     ports:
-      - "${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HOST_PORT:-18081}:8081"
+      - "${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HOST_PORT:-18081}:8081"
     networks:
       - home-proxy-db
 
@@ -214,13 +214,21 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      CONTROL_MANAGER_URL: ${CONTROL_MANAGER_URL:-http://127.0.0.1:18081}
+      CONTROL_MANAGER_URL: ${CONTROL_MANAGER_URL:-https://127.0.0.1:18443}
+      WORKER_ID: ${WORKER_ID:-default}
+      WORKER_MANAGEMENT_ENABLED: ${WORKER_MANAGEMENT_ENABLED:-true}
+      WORKER_MANAGEMENT_PORT: ${WORKER_MANAGEMENT_PORT:-18444}
       PROXY_WORKER_CONFIG: ${PROXY_WORKER_CONFIG:-}
       TLS_CERT_FILE: ${TLS_CERT_FILE:-}
       TLS_KEY_FILE: ${TLS_KEY_FILE:-}
       TLS_KEY_PASSWORD: ${TLS_KEY_PASSWORD:-}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
+    volumes:
+      - proxy-worker-data:/data/proxy-worker
+
+volumes:
+  proxy-worker-data:
 YAML
 ```
 
@@ -230,11 +238,7 @@ YAML
 docker compose -f docker-compose.worker.yml up -d
 ```
 
-如果 worker 部署在另一台机器，把控制面地址改成控制面服务器的内网 IP：
-
-```bash
-CONTROL_MANAGER_URL=http://<控制面内网IP>:18081 docker compose -f docker-compose.worker.yml up -d
-```
+worker 启动后会在持久卷中生成 `/data/proxy-worker/management.token`，并监听 `wss://<worker地址>:18444/management/ws`。将该 Token 和 WSS 地址填入管理台的“新建节点”表单即可；controller 会主动连接 worker，因此 controller 不需要公网地址。重建容器会保留 Token，`docker compose down -v` 会删除它。
 
 worker 使用 `network_mode: host`，控制面下发的代理入站端口会直接监听在宿主机上。新增端口前请确认宿主机防火墙已放行，并且没有其他进程占用同一端口。
 
@@ -313,7 +317,7 @@ EOF
 常用变量：
 
 ```text
-CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 127.0.0.1；局域网访问填写宿主机内网 IP
+CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 0.0.0.0；请通过宿主机防火墙或云安全组限制访问来源
 CONTROL_HOST_PORT              控制面宿主机端口，默认 18081
 MYSQL_ROOT_PASSWORD            MySQL root 密码，默认 congcong
 CLICKHOUSE_PASSWORD            ClickHouse 密码，默认 congcong

@@ -13,4 +13,11 @@ public class WorkerUpdateRequest {
     @Size(max = 255)
     private String description;
     private Boolean enabled;
+
+    @Size(max = 512)
+    private String managementUrl;
+
+    /** Omit this field to retain the currently configured token. */
+    @Size(max = 128)
+    private String managementToken;
 }

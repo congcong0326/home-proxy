@@ -36,7 +36,7 @@ docker compose --env-file /opt/home-proxy/control.env \
 
 默认服务：
 
-- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HTTPS_HOST_PORT:-18443}` -> 容器 `8443`
+- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HTTPS_HOST_PORT:-18443}` -> 容器 `8443`
 - `mysql`：仅 Docker 网络内可见
 - `clickhouse`：仅 Docker 网络内可见
 
@@ -50,7 +50,7 @@ CLICKHOUSE_PASSWORD=change_me
 ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
 ```
 
-`CONTROL_BIND_ADDRESS` 默认是 `127.0.0.1`。需要局域网访问控制面时，设置为控制面宿主机的内网 IP，并在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问该端口。
+`CONTROL_BIND_ADDRESS` 默认是 `0.0.0.0`。请在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问该端口；如需仅本机访问，可显式设为 `127.0.0.1`。
 
 磁盘监控已改为宿主机主动推送。进入控制面“磁盘监控”页面后，系统会自动生成并明文展示上报 Token；将该值写入宿主机的 `scripts/disk-monitor/disk-monitor.env` 中的 `DISK_PUSH_TOKEN`，再通过 cron 定时调用 `push-smartctl.sh`。`DISK_MONITOR_PUSH_TOKEN` 仅作为兼容旧部署的可选初始 Token；如果没有设置，页面会随机生成并持久化。
 
@@ -68,36 +68,41 @@ make CONFIRM=1 docker-reset-control
 make docker-up-worker
 ```
 
-worker 使用 `network_mode: host`，因此控制面下发的入站端口会直接监听在宿主机网络栈，不需要在 compose 里重复配置 `ports`。
+worker 使用 `network_mode: host`，因此控制面下发的入站端口会直接监听在宿主机网络栈，不需要在 compose 里重复配置 `ports`。默认还会在宿主机的 `18444` 端口启动 WSS 管理端；请在 worker 的防火墙中放行该端口，使 controller 能访问它。
 
-每台 worker 必须有独立的 Token 文件：
+每台 worker 必须有独立的 ID：
 
 ```bash
 WORKER_ID=shanghai-01
-CONTROL_MANAGER_HOST_IP=192.168.1.10
-CONTROL_HTTPS_HOST_PORT=18443
-WORKER_TOKEN_HOST_FILE=/opt/home-proxy/secrets/shanghai-01.token
+WORKER_MANAGEMENT_ENABLED=true
+WORKER_MANAGEMENT_PORT=18444
 ```
 
-启动前通过管理台创建节点并仅展示一次 Token，将其写入 `WORKER_TOKEN_HOST_FILE` 指向的 `0600` 文件。然后运行：
+启动 worker 后，它会在持久卷的 `/data/proxy-worker/management.token` 首次生成随机 Token；容器重建和镜像升级都会复用该文件。查看并复制 Token：
 
 ```bash
 docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
-  -f deploy/docker/docker-compose.worker.yml up -d
+  -f deploy/docker/docker-compose.worker.yml exec -T proxy-worker \
+  cat /data/proxy-worker/management.token
 ```
 
-本地临时节点可在 `deploy/docker/worker.env.local` 配置节点 ID、控制端地址和 Token
-文件路径，然后执行 `make docker-up-worker`。该文件不会提交；要使用其他环境文件时执行
+然后在管理台创建节点，填写以下两项：
+
+- Worker WSS 地址：`wss://<worker 公网地址>:18444/management/ws`
+- Worker 管理 Token：上一步显示的值
+
+controller 会主动建立 WSS 连接，worker 在该连接中轮询配置；controller 不需要公网入站地址。
+
+本地临时节点可在 `deploy/docker/worker.env.local` 配置节点 ID 和管理端口，然后执行 `make docker-up-worker`。该文件不会提交；要使用其他环境文件时执行
 `make docker-up-worker WORKER_ENV_FILE=/opt/home-proxy/workers/shanghai-01.env`。
 
 使用 host network 时，新增入站端口前需要确认宿主机没有同端口进程占用。Linux 原生 Docker 对该模式支持最好；Docker Desktop 的 host network 行为可能不同。
 
-worker 保持 HTTPS 加密，但会刻意跳过管理端证书链和主机名校验，以接受每次启动新生成的自签名证书。
-这意味着网络路径上的攻击者可伪装管理端；仅应在可信 LAN/VPN 中使用，且 Token 仍必须妥善保护。
+worker WSS 使用启动时生成的自签名证书，worker 使用管理 Token 校验 controller 的连接。Token 不会写入启动日志；不要执行 `docker compose down -v`，该命令会删除 `proxy-worker-data` 卷及其中的 Token。
 
 worker 配置优先级为：
 
-1. 环境变量或 JVM system properties，例如 `CONTROL_MANAGER_URL`、`WORKER_ID`、`WORKER_TOKEN_FILE`。
+1. 环境变量或 JVM system properties，例如 `WORKER_ID`、`WORKER_MANAGEMENT_PORT`、`WORKER_MANAGEMENT_TOKEN_FILE`。
 2. `PROXY_WORKER_CONFIG` 指向的外部 `proxy-worker.properties`。
 3. JAR 内置的 `proxy-worker.properties`。
 

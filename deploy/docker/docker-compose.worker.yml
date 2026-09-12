@@ -12,8 +12,11 @@ services:
     environment:
       CONTROL_MANAGER_URL: https://proxy-manager.internal:${CONTROL_HTTPS_HOST_PORT:-18443}
       WORKER_ID: ${WORKER_ID:?WORKER_ID is required}
-      WORKER_TOKEN_FILE: /run/secrets/worker-token
       LAST_KNOWN_GOOD_CONFIG: /data/proxy-worker/last-known-good-config.json
+      WORKER_MANAGEMENT_ENABLED: ${WORKER_MANAGEMENT_ENABLED:-true}
+      WORKER_MANAGEMENT_PORT: ${WORKER_MANAGEMENT_PORT:-18444}
+      WORKER_MANAGEMENT_TOKEN_FILE: /data/proxy-worker/management.token
+      WORKER_MANAGEMENT_POLL_INTERVAL_MS: ${WORKER_MANAGEMENT_POLL_INTERVAL_MS:-2000}
       TLS_CERT_FILE: ${TLS_CERT_FILE:-}
       TLS_KEY_FILE: ${TLS_KEY_FILE:-}
       TLS_KEY_PASSWORD_FILE: ${TLS_KEY_PASSWORD_FILE:-}
@@ -22,16 +25,8 @@ services:
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     volumes:
       - proxy-worker-data:/data/proxy-worker
-    secrets:
-      - source: worker_token
-        target: worker-token
-        mode: 0400
     extra_hosts:
-      - "proxy-manager.internal:${CONTROL_MANAGER_HOST_IP:?CONTROL_MANAGER_HOST_IP is required}"
-
-secrets:
-  worker_token:
-    file: ${WORKER_TOKEN_HOST_FILE:?WORKER_TOKEN_HOST_FILE is required}
+      - "proxy-manager.internal:${CONTROL_MANAGER_HOST_IP:-127.0.0.1}"
 
 volumes:
   proxy-worker-data:

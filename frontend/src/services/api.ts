@@ -463,14 +463,6 @@ class ApiService {
     return this.request<void>(`/workers/${encodeURIComponent(workerId)}`, { method: 'DELETE' });
   }
 
-  async createWorkerToken(workerId: string): Promise<WorkerTokenResponse> {
-    return this.request<WorkerTokenResponse>(`/workers/${encodeURIComponent(workerId)}/token`, { method: 'POST' });
-  }
-
-  async deleteWorkerToken(workerId: string): Promise<void> {
-    return this.request<void>(`/workers/${encodeURIComponent(workerId)}/token`, { method: 'DELETE' });
-  }
-  
   // 根据ID查询路由详情
   async getRouteById(id: number): Promise<RouteDTO> {
     return this.request<RouteDTO>(`/routes/${id}`);

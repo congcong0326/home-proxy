@@ -19,7 +19,6 @@ beforeEach(() => {
       workerId: 'gateway-main',
       displayName: '主网关',
       enabled: true,
-      tokenPresent: true,
       status: {
         workerId: 'gateway-main',
         hostname: 'nas-proxy',
@@ -40,7 +39,6 @@ beforeEach(() => {
       workerId: 'gateway-backup',
       displayName: '备用网关',
       enabled: true,
-      tokenPresent: true,
       status: {
         workerId: 'gateway-backup',
         hostname: 'backup-proxy',

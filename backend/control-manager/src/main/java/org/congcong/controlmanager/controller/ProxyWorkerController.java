@@ -55,15 +55,6 @@ public class ProxyWorkerController {
     @PostMapping("/{workerId}/disable")
     public ProxyWorkerDTO disable(@PathVariable String workerId) { return proxyWorkerService.disable(workerId); }
 
-    @PostMapping("/{workerId}/token")
-    public WorkerTokenResponse createToken(@PathVariable String workerId) { return proxyWorkerService.createToken(workerId); }
-
-    @DeleteMapping("/{workerId}/token")
-    public ResponseEntity<Void> deleteToken(@PathVariable String workerId) {
-        proxyWorkerService.deleteToken(workerId);
-        return ResponseEntity.noContent().build();
-    }
-
     @GetMapping("/{workerId}/status")
     public WorkerStatusSnapshot status(@PathVariable String workerId) {
         ProxyWorkerDTO worker = proxyWorkerService.get(workerId);

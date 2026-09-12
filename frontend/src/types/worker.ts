@@ -21,7 +21,9 @@ export interface ProxyWorkerDTO {
   displayName: string;
   enabled: boolean;
   description?: string;
-  tokenPresent: boolean;
+  managementUrl?: string;
+  managementToken?: string;
+  managementTokenPresent?: boolean;
   createdAt?: string;
   updatedAt?: string;
   status?: WorkerStatusSnapshot;
@@ -31,15 +33,18 @@ export interface WorkerCreateRequest {
   workerId: string;
   displayName: string;
   description?: string;
+  managementUrl: string;
+  managementToken: string;
 }
 
 export interface WorkerUpdateRequest {
   displayName: string;
   description?: string;
   enabled?: boolean;
+  managementUrl?: string;
+  managementToken?: string;
 }
 
 export interface WorkerTokenResponse {
   worker: ProxyWorkerDTO;
-  token: string;
 }

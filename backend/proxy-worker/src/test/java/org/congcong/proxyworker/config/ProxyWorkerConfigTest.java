@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProxyWorkerConfigTest {
 
@@ -24,7 +25,11 @@ class ProxyWorkerConfigTest {
             "TLS_ALLOW_SELF_SIGNED",
             "WORKER_ID",
             "WORKER_TOKEN_FILE",
-            "LAST_KNOWN_GOOD_CONFIG"
+            "LAST_KNOWN_GOOD_CONFIG",
+            "WORKER_MANAGEMENT_ENABLED",
+            "WORKER_MANAGEMENT_PORT",
+            "WORKER_MANAGEMENT_TOKEN_FILE",
+            "WORKER_MANAGEMENT_POLL_INTERVAL_MS"
     };
 
     @TempDir
@@ -88,6 +93,21 @@ class ProxyWorkerConfigTest {
         assertEquals("/mounted/cert.pem", config.getTlsCertFile());
         assertEquals("/mounted/key.pem", config.getTlsKeyFile());
         assertEquals("file-secret", config.getTlsKeyPassword());
+    }
+
+    @Test
+    void managementChannelSettingsCanBeOverriddenAtRuntime() {
+        System.setProperty("WORKER_MANAGEMENT_ENABLED", "true");
+        System.setProperty("WORKER_MANAGEMENT_PORT", "19444");
+        System.setProperty("WORKER_MANAGEMENT_TOKEN_FILE", "/state/management.token");
+        System.setProperty("WORKER_MANAGEMENT_POLL_INTERVAL_MS", "2500");
+
+        ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
+
+        assertTrue(config.isManagementEnabled());
+        assertEquals(19444, config.getManagementPort());
+        assertEquals("/state/management.token", config.getManagementTokenFile());
+        assertEquals(2500L, config.getManagementPollIntervalMs());
     }
 
     private static void clearSystemProperties() {

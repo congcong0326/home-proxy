@@ -12,15 +12,12 @@ import org.congcong.controlmanager.repository.InboundConfigRepository;
 import org.congcong.controlmanager.repository.ProxyWorkerRepository;
 import org.congcong.controlmanager.repository.WorkerStatusRepository;
 import org.congcong.controlmanager.repository.WorkerTaskRepository;
-import org.congcong.controlmanager.security.WorkerTokenAuthenticationService;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -29,7 +26,6 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class ProxyWorkerService {
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final String TOKEN_PREFIX = "hpw_";
     private static final long ONLINE_THRESHOLD_SECONDS = 10L;
 
@@ -67,10 +63,9 @@ public class ProxyWorkerService {
         worker.setDisplayName(request.getDisplayName());
         worker.setDescription(request.getDescription());
         worker.setEnabled(true);
-        String token = generateToken();
-        worker.setTokenHash(WorkerTokenAuthenticationService.hash(token));
+        configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), true);
         ProxyWorker saved = proxyWorkerRepository.save(worker);
-        return tokenResponse(saved, token);
+        return tokenResponse(saved);
     }
 
     @Transactional
@@ -79,6 +74,7 @@ public class ProxyWorkerService {
         worker.setDisplayName(request.getDisplayName());
         worker.setDescription(request.getDescription());
         if (request.getEnabled() != null) worker.setEnabled(request.getEnabled());
+        configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), false);
         return toDto(proxyWorkerRepository.save(worker));
     }
 
@@ -87,24 +83,6 @@ public class ProxyWorkerService {
         ProxyWorker worker = requireWorker(workerId);
         worker.setEnabled(false);
         return toDto(proxyWorkerRepository.save(worker));
-    }
-
-    @Transactional
-    public WorkerTokenResponse createToken(String workerId) {
-        ProxyWorker worker = requireWorker(workerId);
-        if (worker.getTokenHash() != null) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "节点已有有效 Token");
-        }
-        String token = generateToken();
-        worker.setTokenHash(WorkerTokenAuthenticationService.hash(token));
-        return tokenResponse(proxyWorkerRepository.save(worker), token);
-    }
-
-    @Transactional
-    public void deleteToken(String workerId) {
-        ProxyWorker worker = requireWorker(workerId);
-        worker.setTokenHash(null);
-        proxyWorkerRepository.save(worker);
     }
 
     @Transactional
@@ -125,17 +103,10 @@ public class ProxyWorkerService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "节点不存在: " + workerId));
     }
 
-    private WorkerTokenResponse tokenResponse(ProxyWorker worker, String token) {
+    private WorkerTokenResponse tokenResponse(ProxyWorker worker) {
         WorkerTokenResponse response = new WorkerTokenResponse();
         response.setWorker(toDto(worker));
-        response.setToken(token);
         return response;
-    }
-
-    private String generateToken() {
-        byte[] bytes = new byte[32];
-        RANDOM.nextBytes(bytes);
-        return TOKEN_PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     private ProxyWorkerDTO toDto(ProxyWorker worker) {
@@ -148,11 +119,59 @@ public class ProxyWorkerService {
         dto.setDisplayName(worker.getDisplayName());
         dto.setEnabled(worker.getEnabled());
         dto.setDescription(worker.getDescription());
-        dto.setTokenPresent(worker.getTokenHash() != null);
+        dto.setManagementUrl(worker.getManagementUrl());
+        dto.setManagementToken(worker.getManagementToken());
+        dto.setManagementTokenPresent(worker.getManagementToken() != null && !worker.getManagementToken().isBlank());
         dto.setCreatedAt(worker.getCreatedAt());
         dto.setUpdatedAt(worker.getUpdatedAt());
         if (status != null) dto.setStatus(toStatus(status));
         return dto;
+    }
+
+    private void configureManagementConnection(ProxyWorker worker, String suppliedUrl, String suppliedToken,
+                                               boolean creating) {
+        boolean urlProvided = suppliedUrl != null;
+        boolean tokenProvided = suppliedToken != null;
+        if (!urlProvided && !tokenProvided && !creating) return;
+
+        String url = urlProvided ? normalizeManagementUrl(suppliedUrl) : worker.getManagementUrl();
+        String token = tokenProvided ? trimToNull(suppliedToken) : worker.getManagementToken();
+        if (creating && (url == null || token == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Worker WSS 地址和 Worker 管理 Token 必须同时配置");
+        }
+        if (url == null && token == null) {
+            worker.setManagementUrl(null);
+            worker.setManagementToken(null);
+            return;
+        }
+        if (url == null || token == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "管理地址和管理 Token 必须同时配置");
+        }
+        if (!token.startsWith(TOKEN_PREFIX) || token.length() <= TOKEN_PREFIX.length()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "管理 Token 格式不正确");
+        }
+        worker.setManagementUrl(url);
+        worker.setManagementToken(token);
+    }
+
+    private String normalizeManagementUrl(String value) {
+        String url = trimToNull(value);
+        if (url == null) return null;
+        try {
+            java.net.URI uri = java.net.URI.create(url);
+            if (!"wss".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null) {
+                throw new IllegalArgumentException();
+            }
+            return uri.toString();
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "管理地址必须是有效的 wss:// 地址");
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     private WorkerStatusSnapshot toStatus(WorkerStatus status) {
