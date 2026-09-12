@@ -10,6 +10,6 @@ COPY backend/control-manager/target/control-manager-*.jar /app/control-manager.j
 COPY data/geoip/ /app/data/geoip/
 
 ENV JAVA_OPTS=""
-EXPOSE 8081
+EXPOSE 8443
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/control-manager.jar"]

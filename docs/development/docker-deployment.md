@@ -26,8 +26,8 @@ make docker-save-offline   # 导出应用镜像以及 MySQL/ClickHouse 镜像
 make docker-up-control
 ```
 
-生产部署使用管理面 HTTPS 和每节点独立 Token。准备好 `data/tls/control-manager.p12`、
-`data/tls/control-manager.crt` 与 `data/tls/control-manager-keystore.password` 后，以独立环境文件展开 Compose：
+生产部署使用管理面 HTTPS 和每节点独立 Token。`control-manager` 每次启动都会自行生成临时自签名证书，
+因此不需要准备、挂载或备份管理面 P12、CRT 和口令文件。以独立环境文件展开 Compose：
 
 ```bash
 docker compose --env-file /opt/home-proxy/control.env \
@@ -70,7 +70,7 @@ make docker-up-worker
 
 worker 使用 `network_mode: host`，因此控制面下发的入站端口会直接监听在宿主机网络栈，不需要在 compose 里重复配置 `ports`。
 
-每台 worker 必须有独立的 Token 文件，且只读挂载管理端公开证书，不能挂载 P12 或其口令：
+每台 worker 必须有独立的 Token 文件：
 
 ```bash
 WORKER_ID=shanghai-01
@@ -92,9 +92,12 @@ docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
 
 使用 host network 时，新增入站端口前需要确认宿主机没有同端口进程占用。Linux 原生 Docker 对该模式支持最好；Docker Desktop 的 host network 行为可能不同。
 
+worker 保持 HTTPS 加密，但会刻意跳过管理端证书链和主机名校验，以接受每次启动新生成的自签名证书。
+这意味着网络路径上的攻击者可伪装管理端；仅应在可信 LAN/VPN 中使用，且 Token 仍必须妥善保护。
+
 worker 配置优先级为：
 
-1. 环境变量或 JVM system properties，例如 `CONTROL_MANAGER_URL`、`CONTROL_MANAGER_TRUSTED_CERT_FILES`、`WORKER_ID`、`WORKER_TOKEN_FILE`。
+1. 环境变量或 JVM system properties，例如 `CONTROL_MANAGER_URL`、`WORKER_ID`、`WORKER_TOKEN_FILE`。
 2. `PROXY_WORKER_CONFIG` 指向的外部 `proxy-worker.properties`。
 3. JAR 内置的 `proxy-worker.properties`。
 

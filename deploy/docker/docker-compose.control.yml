@@ -50,10 +50,6 @@ services:
       clickhouse: { condition: service_healthy }
     environment:
       SERVER_PORT: 8443
-      SERVER_SSL_ENABLED: "true"
-      SERVER_SSL_KEY_STORE: file:/data/tls/control-manager.p12
-      SERVER_SSL_KEY_STORE_TYPE: PKCS12
-      SPRING_CONFIG_IMPORT: configtree:/run/secrets/
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-tpproxy}?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
@@ -67,19 +63,9 @@ services:
       DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
-    volumes:
-      - ../../data/tls/control-manager.p12:/data/tls/control-manager.p12:ro
-    secrets:
-      - source: control_manager_keystore_password
-        target: server.ssl.key-store-password
-        mode: 0400
     ports:
       - "${CONTROL_BIND_ADDRESS:-127.0.0.1}:${CONTROL_HTTPS_HOST_PORT:-18443}:8443"
     networks: [home-proxy-db]
-
-secrets:
-  control_manager_keystore_password:
-    file: ../../data/tls/control-manager-keystore.password
 
 volumes:
   mysql-data:

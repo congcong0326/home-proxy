@@ -27,11 +27,10 @@ git rev-parse HEAD
 
 ## 2. 备份并预检数据库
 
-使用生产环境的备份机制备份 MySQL、ClickHouse 数据和 `data/tls`。同时使用不可变的本地标签保留当前应用镜像。
+使用生产环境的备份机制备份 MySQL、ClickHouse 数据；如 `data/tls` 还用于代理入站证书，也一并备份。管理面 TLS 不再使用该目录。同时使用不可变的本地标签保留当前应用镜像。
 
 ```bash
-mkdir -p "$BACKUP_DIR/tls"
-cp -a data/tls/. "$BACKUP_DIR/tls/"
+if [ -d data/tls ]; then cp -a data/tls "$BACKUP_DIR/tls"; fi
 docker image tag home-proxy-control-manager:latest "home-proxy-control-manager:pre-worker-v2-$(date +%Y%m%d-%H%M%S)"
 docker image tag home-proxy-worker:latest "home-proxy-worker:pre-worker-v2-$(date +%Y%m%d-%H%M%S)"
 docker compose --env-file "$CONTROL_ENV" -f deploy/docker/docker-compose.control.yml exec -T mysql \
@@ -70,9 +69,9 @@ WHERE username = '\''Anonymous user'\'' OR ip_address = '\''127.0.0.1'\'';"'
 
 如出现其他结果，请停止发布。V21/V22 中的 MySQL DDL 不具备自动回滚边界；在更改生产环境前，应先恢复或修复一个预发布环境的数据库副本。
 
-## 3. 准备 TLS 和控制端环境
+## 3. 准备控制端环境
 
-新的 Worker Compose 配置连接到 `https://proxy-manager.internal:18443`。控制端证书的 DNS 使用者可选名称中必须包含 `proxy-manager.internal`。只向 Worker 分发 `control-manager.crt`，绝不能分发 P12 文件或密钥库密码。
+新的 Worker Compose 配置连接到 `https://proxy-manager.internal:18443`。控制端会在启动时生成临时自签名证书，worker 不校验证书或主机名；无需分发 `control-manager.crt`、P12 或密钥库密码。务必仅在可信 LAN/VPN 中部署。
 
 在发布控制端时，将以下临时兼容配置添加到 `$CONTROL_ENV`：
 
@@ -82,7 +81,7 @@ WORKER_AUTH_LEGACY_ENABLED=true
 
 `legacy` 模式只会将未认证的旧 Worker 认证为 `default`。它不会保留各个历史 Worker 的归属关系，并且必须在所有 Worker 都开始使用令牌后关闭。
 
-当前控制端 Compose 配置会直接启用 HTTPS。切换控制端后，仍使用旧 HTTP 端点的 Worker 将无法再接收新配置，但会继续使用当前已应用的配置提供服务，直到它们重启。尽量缩短控制端与 Worker 的切换间隔；在旧 Worker 的 HTTPS、证书和令牌文件准备就绪前，不要重启它。
+当前控制端 Compose 配置会直接启用 HTTPS。切换控制端后，仍使用旧 HTTP 端点的 Worker 将无法再接收新配置，但会继续使用当前已应用的配置提供服务，直到它们重启。尽量缩短控制端与 Worker 的切换间隔；在旧 Worker 的 HTTPS 和令牌文件准备就绪前，不要重启它。
 
 更改容器前，验证配置插值结果：
 
@@ -135,10 +134,9 @@ export CONTROL_MANAGER_HOST_IP=192.168.1.10
 export WORKER_ENV=/opt/home-proxy/env/workers/${WORKER_ID}.env
 export TOKEN_FILE=/opt/home-proxy/secrets/${WORKER_ID}.token
 
-install -d -m 700 "$(dirname "$TOKEN_FILE")" "$(dirname "$WORKER_ENV")" "$ROOT/data/tls"
+install -d -m 700 "$(dirname "$TOKEN_FILE")" "$(dirname "$WORKER_ENV")"
 install -m 600 /dev/null "$TOKEN_FILE"
 # 使用能够保持 0600 权限的编辑器，将仅显示一次的令牌写入 $TOKEN_FILE。
-cp /secure-transfer/control-manager.crt "$ROOT/data/tls/control-manager.crt"
 
 cat > "$WORKER_ENV" <<EOF
 WORKER_ID=${WORKER_ID}

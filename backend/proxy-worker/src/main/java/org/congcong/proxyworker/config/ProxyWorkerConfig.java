@@ -32,7 +32,6 @@ public class ProxyWorkerConfig {
     private final String tlsKeyPassword;
     private final String tlsKeyPasswordFile;
     private final boolean tlsAllowSelfSigned;
-    private final String controlManagerTrustedCertFiles;
     private final String workerTokenFile;
     private final String lastKnownGoodConfig;
     
@@ -61,7 +60,6 @@ public class ProxyWorkerConfig {
         this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
         this.tlsKeyPasswordFile = trimToNull(props.getProperty("tls.keyPasswordFile"));
         this.tlsAllowSelfSigned = Boolean.parseBoolean(props.getProperty("tls.allowSelfSigned", "false"));
-        this.controlManagerTrustedCertFiles = trimToNull(props.getProperty("control.manager.trustedCertFiles"));
         this.workerTokenFile = trimToNull(props.getProperty("worker.tokenFile"));
         this.lastKnownGoodConfig = props.getProperty("worker.lastKnownGoodConfig", "/data/proxy-worker/last-known-good-config.json");
         this.workerId = props.getProperty("worker.id", "default");
@@ -127,7 +125,6 @@ public class ProxyWorkerConfig {
         overrideProperty(props, "tls.keyPassword", "TLS_KEY_PASSWORD");
         overrideProperty(props, "tls.keyPasswordFile", "TLS_KEY_PASSWORD_FILE");
         overrideProperty(props, "tls.allowSelfSigned", "TLS_ALLOW_SELF_SIGNED");
-        overrideProperty(props, "control.manager.trustedCertFiles", "CONTROL_MANAGER_TRUSTED_CERT_FILES");
         overrideProperty(props, "worker.id", "WORKER_ID");
         overrideProperty(props, "worker.tokenFile", "WORKER_TOKEN_FILE");
         overrideProperty(props, "worker.lastKnownGoodConfig", "LAST_KNOWN_GOOD_CONFIG");
@@ -238,7 +235,6 @@ public class ProxyWorkerConfig {
 
     public String getTlsKeyPasswordFile() { return tlsKeyPasswordFile; }
     public boolean isTlsAllowSelfSigned() { return tlsAllowSelfSigned; }
-    public String getControlManagerTrustedCertFiles() { return controlManagerTrustedCertFiles; }
     public String getWorkerTokenFile() { return workerTokenFile; }
     public String getLastKnownGoodConfig() { return lastKnownGoodConfig; }
 }

@@ -22,7 +22,6 @@ class ProxyWorkerConfigTest {
             "TLS_KEY_FILE",
             "TLS_KEY_PASSWORD",
             "TLS_ALLOW_SELF_SIGNED",
-            "CONTROL_MANAGER_TRUSTED_CERT_FILES",
             "WORKER_ID",
             "WORKER_TOKEN_FILE",
             "LAST_KNOWN_GOOD_CONFIG"

@@ -11,7 +11,6 @@ services:
     network_mode: host
     environment:
       CONTROL_MANAGER_URL: https://proxy-manager.internal:${CONTROL_HTTPS_HOST_PORT:-18443}
-      CONTROL_MANAGER_TRUSTED_CERT_FILES: /data/tls/control-manager.crt
       WORKER_ID: ${WORKER_ID:?WORKER_ID is required}
       WORKER_TOKEN_FILE: /run/secrets/worker-token
       LAST_KNOWN_GOOD_CONFIG: /data/proxy-worker/last-known-good-config.json
@@ -22,7 +21,6 @@ services:
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
     volumes:
-      - ../../data/tls/control-manager.crt:/data/tls/control-manager.crt:ro
       - proxy-worker-data:/data/proxy-worker
     secrets:
       - source: worker_token

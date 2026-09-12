@@ -25,6 +25,7 @@
 
 - `ControlManagerApplication`：Spring Boot 主类，启用缓存。
 - `src/main/resources/application.properties`：默认端口、MySQL、Flyway、JWT、ClickHouse、日志落库配置。
+- `config/SelfSignedTlsConfiguration`：启动时生成临时自签名 HTTPS 密钥库；worker 保持 HTTPS 但不校验管理端证书。
 - `src/main/resources/db/migration`：Flyway 脚本，覆盖管理员、核心配置、日志、聚合统计、WOL、DNS、入站路由绑定、邮件网关、计划任务等表。
 
 主要控制器：

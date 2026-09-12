@@ -3,21 +3,25 @@ package org.congcong.proxyworker.http;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
-import java.io.InputStream;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyStore;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Shared client for all worker-to-control-plane traffic. */
+/** Shared client for all worker-to-control-plane traffic.
+ *
+ * <p>The control plane creates an ephemeral self-signed certificate at each start. Workers therefore
+ * deliberately skip certificate-chain and hostname verification, while still requiring HTTPS and a
+ * per-worker bearer token.</p>
+ */
 public final class ControlPlaneHttpClientFactory {
     private static final AtomicReference<ControlPlaneHttpClientFactory> INSTANCE = new AtomicReference<>();
 
@@ -30,9 +34,13 @@ public final class ControlPlaneHttpClientFactory {
             throw new IllegalStateException("control.manager.url 必须使用 https");
         }
         this.token = readToken(config.getWorkerTokenFile());
+        // HttpClient otherwise enables HTTPS hostname verification when no algorithm is supplied.
+        // This JDK switch is intentionally process-wide because all worker-to-control-plane calls
+        // share this client and the control-plane certificate is regenerated on every restart.
+        System.setProperty("jdk.internal.httpclient.disableHostnameVerification", "true");
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(5000))
-                .sslContext(createSslContext(config.getControlManagerTrustedCertFiles()))
+                .sslContext(createInsecureSslContext())
                 .build();
     }
 
@@ -60,29 +68,29 @@ public final class ControlPlaneHttpClientFactory {
         }
     }
 
-    private static SSLContext createSslContext(String certificateFiles) {
-        if (certificateFiles == null) throw new IllegalStateException("control.manager.trustedCertFiles 未配置");
+    private static SSLContext createInsecureSslContext() {
         try {
-            KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
-            trustStore.load(null, null);
-            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
-            int count = 0;
-            for (String rawPath : certificateFiles.split(",")) {
-                String path = rawPath.trim();
-                if (path.isEmpty()) continue;
-                try (InputStream input = Files.newInputStream(Path.of(path))) {
-                    X509Certificate certificate = (X509Certificate) certificateFactory.generateCertificate(input);
-                    trustStore.setCertificateEntry("control-plane-" + count++, certificate);
+            TrustManager[] trustManagers = {new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {
+                    // The worker is never a TLS client-auth endpoint.
                 }
-            }
-            if (count == 0) throw new IllegalStateException("未加载任何管理端信任证书");
-            TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            trustManagerFactory.init(trustStore);
+
+                @Override
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {
+                    // Intentionally trust the control-plane's startup-generated self-signed certificate.
+                }
+
+                @Override
+                public X509Certificate[] getAcceptedIssuers() {
+                    return new X509Certificate[0];
+                }
+            }};
             SSLContext context = SSLContext.getInstance("TLS");
-            context.init(null, trustManagerFactory.getTrustManagers(), null);
+            context.init(null, trustManagers, new SecureRandom());
             return context;
         } catch (Exception e) {
-            throw new IllegalStateException("无法初始化管理端 TLS 信任链", e);
+            throw new IllegalStateException("无法初始化管理端非校验 TLS 客户端", e);
         }
     }
 }

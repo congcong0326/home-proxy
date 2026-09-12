@@ -42,14 +42,12 @@
 ### 3.2 安全模型
 
 - 管理端只通过 HTTPS 向 worker 提供接口。
-- HTTPS 使用用户预先生成并长期固定使用的自签服务器证书。
-- 推荐证书有效期为 20 年，不设计真正无过期时间的证书。
-- 仓库本地 `data/tls/` 中的 `control-manager.p12` 和口令文件只挂载到 `control-manager`，禁止进入 worker 镜像或容器。
-- `data/tls/control-manager.crt` 只包含公钥证书，必须只读挂载到每个 `proxy-worker`，用于固定信任管理端。
-- worker 代理入站所使用的证书与管理端 HTTPS 证书是两类不同凭据；不得把 `control-manager.p12` 或其中私钥复制给 worker。
+- `control-manager` 每次启动时生成临时自签名证书，不依赖宿主机证书、P12 或口令文件。
+- worker 保持 HTTPS 传输加密，但刻意不校验证书链或主机名，以接受管理端重启后变化的证书。
+- worker 代理入站所使用的证书仍是独立凭据，可按需挂载到对应 worker。
 - 每个 worker 使用独立 Worker Token 进行身份认证。
-- worker 固定信任管理端公开证书，禁止 trust-all SSL。
 - 服务端根据 Token 确定 worker 身份，不信任请求参数或请求体中的 `workerId`。
+- 此模式不抵抗网络路径上的中间人攻击，只能部署在可信 LAN/VPN；如需身份校验，必须恢复固定证书校验方案。
 
 ### 3.3 配置资源共享语义
 
@@ -474,6 +472,11 @@ tokenHash = SHA-256(fullToken)
 认证时对请求 Token 计算 32 字节摘要，并通过 `proxy_worker.token_hash` 唯一索引查询 worker，不扫描全部节点；未命中返回 `401`，命中但 worker 已禁用返回 `403`。第一阶段不缓存 Token 到 worker 的认证结果，确保删除 Token 后下一次请求立即失效。由于 Token 使用 32 字节安全随机数，数据库摘要泄露后也无法通过可行的穷举恢复原 Token。
 
 ## 12. HTTPS、证书与容器集成
+
+> **实现更新（2026-09-12）**：当前实现采用第 3.2 节的简化 TLS 模式：`control-manager`
+> 每次启动生成临时自签名证书，worker 不校验证书链或主机名。下文 12.2–12.8 所记载的
+> P12、公开 CRT、固定证书校验和轮换流程仅保留为旧方案记录，不能用于当前部署；请以
+> `docs/development/docker-deployment.md` 和现行 Compose 文件为准。
 
 ### 12.1 两类 TLS 边界
 
