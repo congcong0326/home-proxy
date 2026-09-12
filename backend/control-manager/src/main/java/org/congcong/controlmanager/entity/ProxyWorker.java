@@ -24,6 +24,9 @@ public class ProxyWorker {
     @Column(nullable = false)
     private Boolean enabled = true;
 
+    @Column(name = "log_reporting_enabled", nullable = false)
+    private Boolean logReportingEnabled = true;
+
     @Column(length = 255)
     private String description;
 

@@ -20,4 +20,5 @@ public class WorkerUpdateRequest {
     /** Omit this field to retain the currently configured token. */
     @Size(max = 128)
     private String managementToken;
+    private Boolean logReportingEnabled;
 }

@@ -17,6 +17,9 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AccessLogUtil {
+    private static volatile boolean logReportingEnabled = true;
+
+    public static void setLogReportingEnabled(Boolean enabled) { logReportingEnabled = enabled == null || enabled; }
 
     private static final LogPublisher logPublisher = new AsyncHttpLogPublisher(1000, 100, 50);
     
@@ -25,6 +28,7 @@ public class AccessLogUtil {
     private static final long START_TIMESTAMP = System.currentTimeMillis();
 
     public static void logSuccess(Channel channel) {
+        if (!logReportingEnabled) return;
         // 从 channel 获取 ProxyContext 和 ProxyTimeContext
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(channel);
         ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(channel);
@@ -48,6 +52,7 @@ public class AccessLogUtil {
     }
 
     public static void logFailure(Channel channel, int status, String errorCode, String errorMsg) {
+        if (!logReportingEnabled) return;
         // 从 channel 获取 ProxyContext 和 ProxyTimeContext
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(channel);
         ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(channel);
@@ -76,7 +81,7 @@ public class AccessLogUtil {
                               DnsProxyContext dnsCtx,
                               DnsResponseCode code,
                               List<String> answerIps) {
-        if (proxyContext == null) return;
+        if (!logReportingEnabled || proxyContext == null) return;
         ProxyTimeContext ctx = timeContext != null ? timeContext : new ProxyTimeContext();
         ctx.setRequestEndTime(System.currentTimeMillis());
 

@@ -25,4 +25,6 @@ public class WorkerCreateRequest {
     @NotBlank(message = "Worker 管理 Token 不能为空")
     @Size(max = 128)
     private String managementToken;
+
+    private Boolean logReportingEnabled = true;
 }

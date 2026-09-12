@@ -9,6 +9,7 @@ public class ProxyWorkerDTO {
     private String workerId;
     private String displayName;
     private Boolean enabled;
+    private Boolean logReportingEnabled;
     private String description;
     private String managementUrl;
     private String managementToken;

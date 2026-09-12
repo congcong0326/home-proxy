@@ -20,6 +20,7 @@ export interface ProxyWorkerDTO {
   workerId: string;
   displayName: string;
   enabled: boolean;
+  logReportingEnabled?: boolean;
   description?: string;
   managementUrl?: string;
   managementToken?: string;
@@ -35,6 +36,7 @@ export interface WorkerCreateRequest {
   description?: string;
   managementUrl: string;
   managementToken: string;
+  logReportingEnabled?: boolean;
 }
 
 export interface WorkerUpdateRequest {
@@ -43,6 +45,7 @@ export interface WorkerUpdateRequest {
   enabled?: boolean;
   managementUrl?: string;
   managementToken?: string;
+  logReportingEnabled?: boolean;
 }
 
 export interface WorkerTokenResponse {

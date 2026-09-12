@@ -63,6 +63,7 @@ public class ProxyWorkerService {
         worker.setDisplayName(request.getDisplayName());
         worker.setDescription(request.getDescription());
         worker.setEnabled(true);
+        worker.setLogReportingEnabled(request.getLogReportingEnabled() == null || request.getLogReportingEnabled());
         configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), true);
         ProxyWorker saved = proxyWorkerRepository.save(worker);
         return tokenResponse(saved);
@@ -74,6 +75,7 @@ public class ProxyWorkerService {
         worker.setDisplayName(request.getDisplayName());
         worker.setDescription(request.getDescription());
         if (request.getEnabled() != null) worker.setEnabled(request.getEnabled());
+        if (request.getLogReportingEnabled() != null) worker.setLogReportingEnabled(request.getLogReportingEnabled());
         configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), false);
         return toDto(proxyWorkerRepository.save(worker));
     }
@@ -118,6 +120,7 @@ public class ProxyWorkerService {
         dto.setWorkerId(worker.getWorkerId());
         dto.setDisplayName(worker.getDisplayName());
         dto.setEnabled(worker.getEnabled());
+        dto.setLogReportingEnabled(worker.getLogReportingEnabled() == null || worker.getLogReportingEnabled());
         dto.setDescription(worker.getDescription());
         dto.setManagementUrl(worker.getManagementUrl());
         dto.setManagementToken(worker.getManagementToken());

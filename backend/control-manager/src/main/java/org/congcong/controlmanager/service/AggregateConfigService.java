@@ -34,6 +34,7 @@ public class AggregateConfigService {
     private final RouteRepository routeRepository;
     private final WorkerConfigDependencyResolver dependencyResolver;
     private final CanonicalConfigHasher canonicalConfigHasher;
+    private final org.congcong.controlmanager.repository.ProxyWorkerRepository proxyWorkerRepository;
 
     /** Builds the minimal runtime configuration for exactly one authenticated worker. */
     public AggregateConfigResponse getAggregateConfig(String workerId) {
@@ -72,8 +73,11 @@ public class AggregateConfigService {
         }
 
         List<RateLimitDTO> rateLimits = filterRateLimits(rateLimitService.getRateLimitsByEnabled(true), userIds);
-        String configHash = canonicalConfigHasher.hash(inbounds, routes, rateLimits, users, ruleSets);
-        return AggregateConfigResponse.of(workerId, inbounds, routes, rateLimits, users, ruleSets, configHash);
+        boolean logReportingEnabled = proxyWorkerRepository.findById(workerId).map(w -> w.getLogReportingEnabled() == null || w.getLogReportingEnabled()).orElse(true);
+        String configHash = canonicalConfigHasher.hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled);
+        AggregateConfigResponse response = AggregateConfigResponse.of(workerId, inbounds, routes, rateLimits, users, ruleSets, configHash);
+        response.setLogReportingEnabled(logReportingEnabled);
+        return response;
     }
 
     public String getCurrentConfigHash(String workerId) {

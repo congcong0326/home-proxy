@@ -25,6 +25,11 @@ public class CanonicalConfigHasher {
 
     public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
                        List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets) {
+        return hash(inbounds, routes, rateLimits, users, ruleSets, true);
+    }
+
+    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
+                       List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled) {
         try {
             LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("inbounds", inbounds);
@@ -32,6 +37,7 @@ public class CanonicalConfigHasher {
             snapshot.put("rateLimits", rateLimits);
             snapshot.put("users", users);
             snapshot.put("ruleSets", ruleSets);
+            snapshot.put("logReportingEnabled", logReportingEnabled);
             return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(snapshot)));
         } catch (Exception e) {
             throw new IllegalStateException("无法计算配置哈希", e);

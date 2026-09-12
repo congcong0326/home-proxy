@@ -17,6 +17,8 @@ import java.util.List;
 public class AggregateConfigResponse {
     /** Worker that is authorized to consume this response. */
     private String workerId;
+    /** 是否启用代理网关访问日志上报，默认开启。 */
+    private Boolean logReportingEnabled = true;
     /**
      * 配置版本
      */

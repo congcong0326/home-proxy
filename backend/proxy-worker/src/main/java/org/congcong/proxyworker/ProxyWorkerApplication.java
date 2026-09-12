@@ -69,6 +69,7 @@ public class ProxyWorkerApplication {
                 return ConfigApplyResult.failure(null, new IllegalArgumentException("配置 workerId 与本节点不一致"));
             }
             log.info("收到配置变更通知:");
+            AccessLogUtil.setLogReportingEnabled(newConfig.getLogReportingEnabled());
             log.info("  版本: {}", newConfig.getVersion());
             log.info("  生成时间: {}", newConfig.getGeneratedAt());
             log.info("  入站配置数量: {}", newConfig.getInbounds() != null ? newConfig.getInbounds().size() : 0);
