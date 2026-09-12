@@ -10,8 +10,13 @@ import io.netty.channel.epoll.EpollEventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.DatagramChannel;
 import io.netty.channel.socket.nio.NioDatagramChannel;
+import org.congcong.proxyworker.config.InboundConfig;
 
 public abstract class UdpProxyServer extends AbstractProxyServer {
+
+    protected UdpProxyServer(InboundConfig inboundConfig) {
+        super(inboundConfig);
+    }
 
     /**
      * UDP 的 pipeline 初始化

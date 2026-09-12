@@ -11,17 +11,27 @@ import org.congcong.proxyworker.server.netty.AbstractChannelInitializer;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
+import java.util.Objects;
+import java.util.function.Supplier;
+
 public class DnsServerInitializer extends AbstractChannelInitializer {
+
+    private final Supplier<InboundConfig> inboundConfigSupplier;
 
 
     public DnsServerInitializer(InboundConfig inboundConfig) {
-        super(inboundConfig);
+        this(() -> inboundConfig);
+    }
+
+    public DnsServerInitializer(Supplier<InboundConfig> inboundConfigSupplier) {
+        super(Objects.requireNonNull(inboundConfigSupplier, "inboundConfigSupplier").get());
+        this.inboundConfigSupplier = inboundConfigSupplier;
     }
 
     @Override
     protected void init(Channel ch) {
         ch.pipeline().addLast(new DatagramDnsQueryDecoder());
-        ch.pipeline().addLast(new UdpDnsQueryHandler());
+        ch.pipeline().addLast(new UdpDnsQueryHandler(inboundConfigSupplier));
         ch.pipeline().addLast(new DatagramDnsResponseEncoder());
     }
 

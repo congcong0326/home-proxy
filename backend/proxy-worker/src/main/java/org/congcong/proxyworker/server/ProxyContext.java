@@ -77,7 +77,8 @@ public class ProxyContext {
             InboundConfig oldCfg = configs.get(id);
             AbstractProxyServer existing = servers.get(id);
 
-            boolean needsRestart = (oldCfg == null) || !Objects.equals(oldCfg, newCfg);
+            boolean needsRestart = existing == null || !existing.isRunning()
+                    || oldCfg == null || listenerChanged(oldCfg, newCfg);
             if (needsRestart) {
                 activeInboundConsumer.accept(id);
                 // 关闭旧服务
@@ -95,11 +96,18 @@ public class ProxyContext {
                 servers.put(id, newServer);
                 configs.put(id, newCfg);
             } else {
-                log.info("配置未变更");
+                existing.updateRuntimeConfig(newCfg);
+                configs.put(id, newCfg);
+                log.info("入站运行时快照已原子更新，监听端口保持不变: {}", id);
             }
         }
     }
 
+    private boolean listenerChanged(InboundConfig oldConfig, InboundConfig newConfig) {
+        return !Objects.equals(oldConfig.getProtocol(), newConfig.getProtocol())
+                || !Objects.equals(oldConfig.getListenIp(), newConfig.getListenIp())
+                || !Objects.equals(oldConfig.getPort(), newConfig.getPort());
+    }
     public synchronized void closeAll() {
         for (AbstractProxyServer proxyServer : servers.values()) {
             try {
@@ -136,6 +144,10 @@ public class ProxyContext {
 
     void resetActiveConnectionCountForTest() {
         activeConnectionCount.set(0);
+    }
+
+    synchronized AbstractProxyServer getServerForTest(Long inboundId) {
+        return servers.get(inboundId);
     }
 
 

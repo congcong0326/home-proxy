@@ -9,12 +9,13 @@ import org.congcong.common.util.geo.DomainTrie;
 
 import java.net.IDN;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public final class RuleSetRegistry {
 
-    private static final Map<String, CompiledRuleSet> RULE_SETS = new ConcurrentHashMap<>();
+    private static final AtomicReference<Map<String, CompiledRuleSet>> RULE_SETS =
+            new AtomicReference<>(Map.of());
 
     private RuleSetRegistry() {
     }
@@ -29,16 +30,15 @@ public final class RuleSetRegistry {
                 compiled.put(ruleSet.getRuleKey(), compile(ruleSet));
             }
         }
-        RULE_SETS.clear();
-        RULE_SETS.putAll(compiled);
-        log.info("已刷新规则集注册表，数量: {}", RULE_SETS.size());
+        RULE_SETS.set(Map.copyOf(compiled));
+        log.info("已刷新规则集注册表，数量: {}", compiled.size());
     }
 
     public static boolean match(String ruleSetKey, String host) {
         if (ruleSetKey == null || ruleSetKey.isBlank() || host == null || host.isBlank()) {
             return false;
         }
-        CompiledRuleSet ruleSet = RULE_SETS.get(ruleSetKey);
+        CompiledRuleSet ruleSet = RULE_SETS.get().get(ruleSetKey);
         if (ruleSet == null) {
             return false;
         }

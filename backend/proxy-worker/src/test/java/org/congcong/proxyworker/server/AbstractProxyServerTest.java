@@ -2,7 +2,6 @@ package org.congcong.proxyworker.server;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
-import org.congcong.proxyworker.config.InboundConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,11 +37,6 @@ class AbstractProxyServerTest {
         @Override
         public String getServerName() {
             return "test";
-        }
-
-        @Override
-        public InboundConfig getInboundConfig() {
-            return null;
         }
 
         @Override

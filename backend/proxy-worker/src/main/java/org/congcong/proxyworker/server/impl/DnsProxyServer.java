@@ -9,34 +9,27 @@ import org.congcong.proxyworker.server.UdpProxyServer;
 public class DnsProxyServer extends UdpProxyServer {
 
 
-    private final InboundConfig cfg;
-
     public DnsProxyServer(InboundConfig cfg) {
-        this.cfg = cfg;
+        super(cfg);
     }
 
     @Override
     public int getPort() {
-        return cfg.getPort();
+        return getInboundConfig().getPort();
     }
 
     @Override
     public String getIp() {
-        return cfg.getListenIp();
+        return getInboundConfig().getListenIp();
     }
 
     @Override
     public String getServerName() {
-        return cfg.getName();
-    }
-
-    @Override
-    public InboundConfig getInboundConfig() {
-        return cfg;
+        return getInboundConfig().getName();
     }
 
     @Override
     public ChannelInitializer<Channel> getChannelInitializer() {
-        return new DnsServerInitializer(getInboundConfig());
+        return new DnsServerInitializer(this::getInboundConfig);
     }
 }

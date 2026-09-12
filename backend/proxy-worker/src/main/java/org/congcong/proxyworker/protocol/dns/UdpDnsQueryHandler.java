@@ -17,9 +17,21 @@ import org.congcong.proxyworker.util.ProxyContextFillUtil;
 import org.congcong.proxyworker.protocol.dns.util.DnsMessageUtil;
 
 import java.net.InetSocketAddress;
+import java.util.Objects;
+import java.util.function.Supplier;
 
 @Slf4j
 public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQuery> {
+
+    private final Supplier<InboundConfig> inboundConfigSupplier;
+
+    public UdpDnsQueryHandler() {
+        this(() -> null);
+    }
+
+    public UdpDnsQueryHandler(Supplier<InboundConfig> inboundConfigSupplier) {
+        this.inboundConfigSupplier = Objects.requireNonNull(inboundConfigSupplier, "inboundConfigSupplier");
+    }
 
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, DatagramDnsQuery query) {
@@ -41,7 +53,14 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         log.debug("DNS query from {} name={} type={}", client, qName, qType);
 
 
-        InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(ctx.channel());
+        InboundConfig inboundConfig = inboundConfigSupplier.get();
+        if (inboundConfig == null) {
+            inboundConfig = ChannelAttributes.getInboundConfig(ctx.channel());
+        }
+        if (inboundConfig == null) {
+            log.warn("DNS query received before inbound runtime config was available");
+            return;
+        }
         String clientIp = client.getAddress().getHostAddress();
         UserConfig userConfig = FindUser.find(clientIp, inboundConfig);
 

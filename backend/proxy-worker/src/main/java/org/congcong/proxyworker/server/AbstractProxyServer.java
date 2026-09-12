@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.InboundConfig;
 
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 public abstract class AbstractProxyServer {
@@ -17,16 +18,34 @@ public abstract class AbstractProxyServer {
     protected volatile Channel serverChannel;
     protected volatile ChannelFuture bindFuture;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicReference<InboundConfig> inboundConfig = new AtomicReference<>();
 
-    // === 原来就有的抽象方法，保持不变 ===
+    protected AbstractProxyServer() {
+    }
+
+    protected AbstractProxyServer(InboundConfig inboundConfig) {
+        this.inboundConfig.set(inboundConfig);
+    }
+
     public abstract int getPort();
     public abstract String getIp();
     public abstract String getServerName();
 
-    // 如果 UDP 也要用，可以放这
-    public abstract InboundConfig getInboundConfig();
+    public final InboundConfig getInboundConfig() {
+        return inboundConfig.get();
+    }
 
-    // === 模板方法：留给子类真正启动 / 关闭 ===
+    /**
+     * Replaces the snapshot used when accepting subsequent requests. Existing
+     * channels keep the snapshot that was attached during their initialization.
+     */
+    public final void updateRuntimeConfig(InboundConfig newConfig) {
+        if (newConfig == null) {
+            throw new IllegalArgumentException("Inbound config is required");
+        }
+        inboundConfig.set(newConfig);
+    }
+
     protected abstract void doStart() throws InterruptedException;
     protected abstract void doClose() throws InterruptedException;
 

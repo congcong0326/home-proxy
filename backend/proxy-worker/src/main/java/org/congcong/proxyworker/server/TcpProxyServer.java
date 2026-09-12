@@ -15,11 +15,25 @@ import org.congcong.proxyworker.config.InboundConfig;
 
 @Slf4j
 public abstract class TcpProxyServer extends AbstractProxyServer {
-    // 保持原来的抽象方法签名不变
-    public abstract ChannelInitializer<Channel> getChildHandler();
+    protected TcpProxyServer(InboundConfig inboundConfig) {
+        super(inboundConfig);
+    }
 
-    @Override
-    public abstract InboundConfig getInboundConfig();
+    protected abstract ChannelInitializer<Channel> createChildHandler(InboundConfig inboundConfig);
+
+    private ChannelInitializer<Channel> getChildHandler() {
+        return new ChannelInitializer<>() {
+            @Override
+            protected void initChannel(Channel channel) {
+                InboundConfig snapshot = getInboundConfig();
+                if (snapshot == null) {
+                    throw new IllegalStateException("Inbound runtime config is missing");
+                }
+                // Build a dedicated pipeline from one immutable snapshot per connection.
+                channel.pipeline().addLast(createChildHandler(snapshot));
+            }
+        };
+    }
 
     @Override
     protected void doStart() throws InterruptedException {
