@@ -33,6 +33,7 @@ import {
   TeamOutlined,
   EyeOutlined,
   FilterOutlined,
+  SafetyCertificateOutlined,
 } from '@ant-design/icons';
 import { UserDTO, UserStatus, UserQueryParams } from '../types/user';
 import { apiService } from '../services/api';
@@ -54,6 +55,43 @@ const USER_STATUS_COLORS = {
 
 const isConflictError = (error: unknown): error is Error & { status: number } =>
   error instanceof Error && (error as Error & { status?: number }).status === 409;
+
+const CREDENTIAL_LENGTH = 20;
+const LOWERCASE_CHARS = 'abcdefghijklmnopqrstuvwxyz';
+const UPPERCASE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const NUMBER_CHARS = '0123456789';
+const SYMBOL_CHARS = '!@#$%^&*()-_=+[]{};:,.?';
+const ALL_CREDENTIAL_CHARS = LOWERCASE_CHARS + UPPERCASE_CHARS + NUMBER_CHARS + SYMBOL_CHARS;
+
+const getRandomIndex = (max: number): number => {
+  const values = new Uint32Array(1);
+  globalThis.crypto.getRandomValues(values);
+  return values[0] % max;
+};
+
+const shuffleCredentialChars = (chars: string[]): string[] => {
+  const result = [...chars];
+  for (let i = result.length - 1; i > 0; i -= 1) {
+    const j = getRandomIndex(i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+
+const generateStrongCredential = (): string => {
+  const requiredChars = [
+    LOWERCASE_CHARS[getRandomIndex(LOWERCASE_CHARS.length)],
+    UPPERCASE_CHARS[getRandomIndex(UPPERCASE_CHARS.length)],
+    NUMBER_CHARS[getRandomIndex(NUMBER_CHARS.length)],
+    SYMBOL_CHARS[getRandomIndex(SYMBOL_CHARS.length)],
+  ];
+
+  const remainingChars = Array.from({ length: CREDENTIAL_LENGTH - requiredChars.length }, () =>
+    ALL_CREDENTIAL_CHARS[getRandomIndex(ALL_CREDENTIAL_CHARS.length)]
+  );
+
+  return shuffleCredentialChars([...requiredChars, ...remainingChars]).join('');
+};
 
 interface UserManagementState {
   users: UserDTO[];
@@ -277,7 +315,7 @@ const UserManagement: React.FC = () => {
     if (!currentUser) return;
 
     try {
-      await apiService.resetUserCredential(currentUser.id, values.newCredential);
+      await apiService.resetUserCredential(currentUser.id, { newCredential: values.newCredential });
       message.success('用户凭证重置成功');
       setCredentialModalVisible(false);
       credentialForm.resetFields();
@@ -355,6 +393,53 @@ const UserManagement: React.FC = () => {
   const openCredentialModal = (user: UserDTO) => {
     setCurrentUser(user);
     setCredentialModalVisible(true);
+  };
+
+  const handleGenerateCredential = (
+    form: typeof createForm,
+    fieldName: 'credential' | 'newCredential'
+  ) => {
+    form.setFieldsValue({ [fieldName]: generateStrongCredential() });
+  };
+
+  const renderUserDetail = (user: UserDTO, credentialLoadFailed = false) => (
+    <div>
+      <p><strong>ID:</strong> {user.id}</p>
+      <p><strong>用户名:</strong> {user.username}</p>
+      <p><strong>用户凭证:</strong></p>
+      <Input.Password
+        value={user.credential || ''}
+        readOnly
+        placeholder={credentialLoadFailed ? '凭证加载失败，请稍后重试' : '未设置凭证'}
+        visibilityToggle
+      />
+      <p><strong>设备IP:</strong> {user.ipAddress || '-'}</p>
+      <p><strong>状态:</strong> {USER_STATUS_LABELS[user.status as UserStatus]}</p>
+      <p><strong>创建时间:</strong> {new Date(user.createdAt).toLocaleString('zh-CN')}</p>
+      <p><strong>更新时间:</strong> {new Date(user.updatedAt).toLocaleString('zh-CN')}</p>
+      {user.remark && <p><strong>备注:</strong> {user.remark}</p>}
+    </div>
+  );
+
+  const openUserDetailModal = async (user: UserDTO) => {
+    const modal = Modal.info({
+      title: '用户详情',
+      content: <Text type="secondary">正在加载用户详情...</Text>,
+      width: 520,
+    });
+
+    try {
+      const detail = await apiService.getUserById(user.id);
+      modal.update({
+        content: renderUserDetail(detail),
+      });
+    } catch (error) {
+      console.error('加载用户详情失败:', error);
+      message.error('加载用户详情失败');
+      modal.update({
+        content: renderUserDetail(user, true),
+      });
+    }
   };
 
   // 搜索处理
@@ -438,21 +523,7 @@ const UserManagement: React.FC = () => {
               type="text"
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => {
-                Modal.info({
-                  title: '用户详情',
-                  content: (
-                    <div>
-                      <p><strong>ID:</strong> {record.id}</p>
-                      <p><strong>用户名:</strong> {record.username}</p>
-                      <p><strong>设备IP:</strong> {record.ipAddress || '-'}</p>
-                      <p><strong>状态:</strong> {USER_STATUS_LABELS[record.status as UserStatus]}</p>
-                      <p><strong>创建时间:</strong> {new Date(record.createdAt).toLocaleString('zh-CN')}</p>
-                      <p><strong>更新时间:</strong> {new Date(record.updatedAt).toLocaleString('zh-CN')}</p>
-                    </div>
-                  ),
-                });
-              }}
+              onClick={() => openUserDetailModal(record)}
             />
           </Tooltip>
           <Tooltip title="编辑">
@@ -526,21 +597,7 @@ const UserManagement: React.FC = () => {
               type="text"
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => {
-                Modal.info({
-                  title: '用户详情',
-                  content: (
-                    <div>
-                      <p><strong>ID:</strong> {record.id}</p>
-                      <p><strong>用户名:</strong> {record.username}</p>
-                      <p><strong>设备IP:</strong> {record.ipAddress || '-'}</p>
-                      <p><strong>状态:</strong> {USER_STATUS_LABELS[record.status as UserStatus]}</p>
-                      <p><strong>创建时间:</strong> {new Date(record.createdAt).toLocaleString('zh-CN')}</p>
-                      <p><strong>更新时间:</strong> {new Date(record.updatedAt).toLocaleString('zh-CN')}</p>
-                    </div>
-                  ),
-                });
-              }}
+              onClick={() => openUserDetailModal(record)}
             />
           </Tooltip>
           <Tooltip title="编辑">
@@ -776,15 +833,26 @@ const UserManagement: React.FC = () => {
             <Input placeholder="请输入用户名" />
           </Form.Item>
 
-          <Form.Item
-            name="credential"
-            label="用户凭证"
-            rules={[
-              { required: true, message: '请输入用户凭证' },
-              { min: 8, max: 64, message: '凭证长度为8-64个字符' },
-            ]}
-          >
-            <Input.Password placeholder="请输入用户凭证" />
+          <Form.Item label="用户凭证" required>
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item
+                name="credential"
+                noStyle
+                rules={[
+                  { required: true, message: '请输入用户凭证' },
+                  { min: 8, max: 64, message: '凭证长度为8-64个字符' },
+                ]}
+              >
+                <Input.Password style={{ flex: 1 }} placeholder="请输入用户凭证，或生成强密码" />
+              </Form.Item>
+              <Button
+                htmlType="button"
+                icon={<SafetyCertificateOutlined />}
+                onClick={() => handleGenerateCredential(createForm, 'credential')}
+              >
+                生成强密码
+              </Button>
+            </Space.Compact>
           </Form.Item>
 
           <Form.Item
@@ -911,15 +979,26 @@ const UserManagement: React.FC = () => {
           onFinish={handleResetCredential}
           autoComplete="off"
         >
-          <Form.Item
-            name="newCredential"
-            label="新凭证"
-            rules={[
-              { required: true, message: '请输入新凭证' },
-              { min: 8, max: 64, message: '凭证长度为8-64个字符' },
-            ]}
-          >
-            <Input.Password placeholder="请输入新凭证" />
+          <Form.Item label="新凭证" required>
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item
+                name="newCredential"
+                noStyle
+                rules={[
+                  { required: true, message: '请输入新凭证' },
+                  { min: 8, max: 64, message: '凭证长度为8-64个字符' },
+                ]}
+              >
+                <Input.Password style={{ flex: 1 }} placeholder="请输入新凭证，或生成强密码" />
+              </Form.Item>
+              <Button
+                htmlType="button"
+                icon={<SafetyCertificateOutlined />}
+                onClick={() => handleGenerateCredential(credentialForm, 'newCredential')}
+              >
+                生成强密码
+              </Button>
+            </Space.Compact>
           </Form.Item>
 
           <Form.Item className="modal-actions">

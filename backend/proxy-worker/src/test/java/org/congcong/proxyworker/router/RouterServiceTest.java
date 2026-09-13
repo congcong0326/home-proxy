@@ -67,6 +67,29 @@ class RouterServiceTest {
         channel.finishAndReleaseAll();
     }
 
+    @Test
+    void tlsSniUsesConfiguredAnonymousUserForRouteBinding() {
+        UserConfig authenticatedLikeUser = user();
+        UserConfig anonymous = user();
+        anonymous.setId(200L);
+        anonymous.setUsername("anonymous");
+        RouteConfig sniRoute = route(3L, "sni-direct", RoutePolicy.DIRECT, domainRule("example.com"));
+        RouteConfig fallback = route(4L, "fallback-block", RoutePolicy.BLOCK, domainRule("*"));
+        InboundConfig inbound = inbound(anonymous, List.of(sniRoute), fallback);
+        inbound.setProtocol(ProtocolType.TLS_SNI_TCP);
+        inbound.setAnonymousUser(anonymous);
+        ProxyTunnelRequest request = new ProxyTunnelRequest(
+                ProtocolType.TLS_SNI_TCP, "example.com", 443, authenticatedLikeUser, inbound, null);
+
+        EmbeddedChannel channel = new EmbeddedChannel(RouterService.getInstance());
+        ChannelAttributes.setProxyContext(channel, new ProxyContext());
+        channel.writeInbound(request);
+
+        ProxyTunnelRequest routed = channel.readInbound();
+        assertSame(sniRoute, routed.getRouteConfig());
+        channel.finishAndReleaseAll();
+    }
+
     private InboundConfig inbound(UserConfig user, List<RouteConfig> routes, RouteConfig fallback) {
         InboundConfig inbound = new InboundConfig();
         inbound.setProtocol(ProtocolType.SOCKS5);

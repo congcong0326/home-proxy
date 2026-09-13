@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -24,6 +25,21 @@ class UserServiceTest {
     UserServiceTest() {
         ReflectionTestUtils.setField(userService, "userRepository", userRepository);
         ReflectionTestUtils.setField(userService, "workerConfigDependencyResolver", dependencyResolver);
+    }
+
+    @Test
+    void includesCredentialWhenLoadingUserDetails() {
+        User user = new User();
+        user.setId(11L);
+        user.setUsername("alice");
+        user.setCredential("secret-password");
+        when(userRepository.findById(11L)).thenReturn(Optional.of(user));
+
+        var result = userService.findByIdWithCredential(11L);
+
+        assertTrue(result.isPresent());
+        assertEquals("secret-password", result.get().getCredential());
+        assertEquals("alice", result.get().getUsername());
     }
 
     @Test

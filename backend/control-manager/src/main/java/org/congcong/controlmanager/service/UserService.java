@@ -90,6 +90,16 @@ public class UserService {
     }
 
     /**
+     * 根据ID查询用户详情（包含凭证）
+     * @param id 用户ID
+     * @return 用户信息和凭证
+     */
+    public Optional<UserDtoWithCredential> findByIdWithCredential(Long id) {
+        Optional<User> userOpt = userRepository.findById(id);
+        return userOpt.map(this::convertToDTOWithCredential);
+    }
+
+    /**
      * 根据用户名查询用户
      * @param username 用户名
      * @return 用户信息

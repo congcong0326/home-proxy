@@ -248,8 +248,10 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
 
     private void buildWhere(AccessLogQueryRequest req, StringBuilder sb, List<Object> params) {
         if (notBlank(req.getWorkerId())) { sb.append(" AND worker_id = ?"); params.add(req.getWorkerId()); }
-        if (req.getFrom() != null && !req.getFrom().isBlank()) { sb.append(" AND ts >= ?"); params.add(toTimestamp(parseDate(req.getFrom()))); }
-        if (req.getTo() != null && !req.getTo().isBlank()) { sb.append(" AND ts <= ?"); params.add(toTimestamp(parseDate(req.getTo()))); }
+        LocalDateTime from = parseDate(req.getFrom());
+        LocalDateTime to = parseDate(req.getTo());
+        if (from != null) { sb.append(" AND ts >= ?"); params.add(toTimestamp(from)); }
+        if (to != null) { sb.append(" AND ts <= ?"); params.add(toTimestamp(to)); }
         if (req.getUserId() != null) { sb.append(" AND user_id = ?"); params.add(req.getUserId()); }
         if (notBlank(req.getUsername())) { sb.append(" AND username = ?"); params.add(req.getUsername()); }
         if (notBlank(req.getProxyName())) { sb.append(" AND proxy_name = ?"); params.add(req.getProxyName()); }
@@ -281,11 +283,13 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     private String parseOrder(String sort) {
         if (sort == null || sort.isBlank()) return "ts DESC";
         String[] parts = sort.split(",");
+        Set<String> allowed = Set.of("ts", "status", "bytes_in", "bytes_out", "request_duration_ms", "user_id", "inbound_id");
+        if (!allowed.contains(parts[0])) return "ts DESC";
         if (parts.length == 2) {
             String dir = "asc".equalsIgnoreCase(parts[1]) ? "ASC" : "DESC";
             return parts[0] + " " + dir;
         }
-        return sort + " DESC";
+        return parts[0] + " DESC";
     }
 
     private boolean notBlank(String s) { return s != null && !s.isBlank(); }

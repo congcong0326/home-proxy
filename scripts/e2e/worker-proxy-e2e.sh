@@ -296,7 +296,8 @@ preflight() {
     ! run_privileged ip route show table "$ROUTE_TABLE" 2>/dev/null | grep -q . || fail "route table is not empty: ${ROUTE_TABLE}"
     port_free "$ORIGIN_PORT" || fail "origin target port is already in use: ${ORIGIN_PORT}"
     port_free "$TLS_ORIGIN_PORT" || fail "TLS origin target port is already in use: ${TLS_ORIGIN_PORT}"
-    port_free "$TLS_SNI_PORT" || fail "TLS SNI listener port is already in use: ${TLS_SNI_PORT}"
+    # Inbound listeners belong to the persistent worker; only temporary target
+    # ports must be free. validate_effective_config checks their configuration.
     port_free "$OVERRIDE_PORT" || fail "override target port is already in use: ${OVERRIDE_PORT}"
     port_free "$UPSTREAM_PORT" || fail "SOCKS5 upstream port is already in use: ${UPSTREAM_PORT}"
     login

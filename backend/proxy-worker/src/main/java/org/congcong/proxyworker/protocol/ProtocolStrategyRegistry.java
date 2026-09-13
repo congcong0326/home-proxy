@@ -30,6 +30,8 @@ public class ProtocolStrategyRegistry {
         STRATEGIES.put(ProtocolType.HTTPS_CONNECT, new HttpsConnectProtocolStrategy());
         STRATEGIES.put(ProtocolType.SHADOW_SOCKS, new ShadowSocksProtocolStrategy());
         STRATEGIES.put(ProtocolType.TP_PROXY, new TransparentProtocolStrategy());
+        // TLS SNI is a raw TCP tunnel after the ClientHello is sniffed.
+        STRATEGIES.put(ProtocolType.TLS_SNI_TCP, new TransparentProtocolStrategy());
     }
 
     private ProtocolStrategyRegistry() {}

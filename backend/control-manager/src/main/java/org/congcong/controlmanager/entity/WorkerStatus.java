@@ -3,6 +3,8 @@ package org.congcong.controlmanager.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
 
@@ -12,6 +14,7 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "worker_status")
 public class WorkerStatus {
+    private static final String EMPTY_CAPABILITIES_JSON = "[]";
 
     @Id
     @Column(name = "worker_id", length = 128)
@@ -41,6 +44,9 @@ public class WorkerStatus {
     @Column(name = "applied_at")
     private LocalDateTime appliedAt;
 
+    @Column(name = "capabilities_json", nullable = false, columnDefinition = "json")
+    private String capabilitiesJson = EMPTY_CAPABILITIES_JSON;
+
     @Column(name = "uptime_seconds")
     private Long uptimeSeconds;
 
@@ -55,4 +61,12 @@ public class WorkerStatus {
 
     @Column(name = "active_connection_count")
     private Integer activeConnectionCount;
+
+    @PrePersist
+    @PreUpdate
+    void ensureCapabilitiesJson() {
+        if (capabilitiesJson == null || capabilitiesJson.isBlank()) {
+            capabilitiesJson = EMPTY_CAPABILITIES_JSON;
+        }
+    }
 }

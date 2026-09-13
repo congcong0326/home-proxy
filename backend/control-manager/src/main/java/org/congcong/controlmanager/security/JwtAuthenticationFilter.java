@@ -78,7 +78,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain) throws ServletException, IOException {
         String path = request.getRequestURI();
-        if (isWorkerRuntimePath(path)) {
+        if (isWorkerRuntimePath(path) && "POST".equalsIgnoreCase(request.getMethod())) {
             chain.doFilter(request, response);
             return;
         }

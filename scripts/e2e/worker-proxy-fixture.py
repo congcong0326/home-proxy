@@ -120,7 +120,10 @@ def _run_tcp_response(args: argparse.Namespace) -> None:
 def _tls_client(args: argparse.Namespace) -> None:
     host = args.sni.encode("idna")
     # TLS 1.2 ClientHello carrying a server_name extension.
-    name = b"\x00" + bytes([len(host)]) + host
+    # ServerName entry: name type (1), host name length (2), host name.
+    # The previous one-byte length produced an invalid ClientHello that the
+    # worker correctly rejected, yielding an empty TLS SNI response.
+    name = b"\x00" + struct.pack("!H", len(host)) + host
     ext = b"\x00\x00" + struct.pack("!H", len(name) + 2) + struct.pack("!H", len(name)) + name
     hello = b"\x03\x03" + b"\x00" * 32 + b"\x00" + b"\x00\x02\x13\x01" + b"\x01\x00" + struct.pack("!H", len(ext)) + ext
     record = b"\x16\x03\x03" + struct.pack("!H", len(hello) + 4) + b"\x01" + len(hello).to_bytes(3, "big") + hello

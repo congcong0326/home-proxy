@@ -33,8 +33,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/worker/poll").hasRole("WORKER")
                     // Worker logs no longer carry a controller-issued Worker Token.
                     .requestMatchers(HttpMethod.POST, "/api/logs/access", "/api/logs/auth").permitAll()
-                    .requestMatchers(HttpMethod.GET, "/api/logs/**").hasRole("ADMIN")
-                    .requestMatchers("/api/config/hash").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/logs/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
+                    .requestMatchers("/api/config/hash").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers("/api/worker/status").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers("/api/workers/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/disk/push").permitAll()

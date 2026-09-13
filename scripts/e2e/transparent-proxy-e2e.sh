@@ -12,6 +12,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 COMPOSE_FILE="$ROOT_DIR/scripts/e2e/transparent-proxy.compose.yml"
 
 CONTROL_PORT="${E2E_CONTROL_PORT:-28443}"
+MANAGEMENT_PORT="${E2E_MANAGEMENT_PORT:-28444}"
 TPORT="${E2E_TPROXY_PORT:-29080}"
 HTTP_ORIGIN_PORT="${E2E_HTTP_ORIGIN_PORT:-29090}"
 HTTP_OVERRIDE_PORT="${E2E_HTTP_OVERRIDE_PORT:-29091}"
@@ -156,7 +157,11 @@ api_get() {
 }
 
 api_post() {
-    curl -ksS --fail-with-body -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' --data "$2" "$CONTROL_BASE$1"
+    local response
+    if ! response="$(curl -ksS --fail-with-body -H "Authorization: Bearer ${ADMIN_TOKEN}" -H 'Content-Type: application/json' --data "$2" "$CONTROL_BASE$1")"; then
+        fail "POST $1 failed: $response"
+    fi
+    printf '%s\n' "$response"
 }
 
 client_curl() {
@@ -198,6 +203,7 @@ preflight() {
 
     [[ ${#HOST_IF} -le 15 && ${#CLIENT_IF} -le 15 ]] || fail "generated veth interface name exceeds Linux's 15-character limit"
     ! listener_ready || fail "TPROXY test port ${TPORT} is already listening"
+    ! ss -ltn | awk '{print $4}' | grep -q ":${MANAGEMENT_PORT}$" || fail "worker management port ${MANAGEMENT_PORT} is already listening"
     ! run_privileged ip netns list | grep -q "^${CLIENT_NS}" || fail "test network namespace already exists"
     ! run_privileged ip rule show | grep -q "^${RULE_PRIORITY}:" || fail "policy-rule priority ${RULE_PRIORITY} is already in use"
     ! run_privileged ip route show table "$ROUTE_TABLE" 2>/dev/null | grep -q . || fail "route table ${ROUTE_TABLE} is not empty"
@@ -289,8 +295,10 @@ setup_control_plane() {
 
     local admin_password="$(openssl rand -hex 24)"
     local setup_response
-    setup_response="$(curl -ksS --fail-with-body -H 'Content-Type: application/json' \
-        --data "{\"username\":\"e2e_admin\",\"password\":\"${admin_password}\"}" "$CONTROL_BASE/admin/setup")"
+    if ! setup_response="$(curl -ksS --fail-with-body -H 'Content-Type: application/json' \
+        --data "{\"username\":\"e2e_admin\",\"password\":\"${admin_password}\"}" "$CONTROL_BASE/admin/setup")"; then
+        fail "POST /admin/setup failed: $setup_response"
+    fi
     ADMIN_TOKEN="$(jq -er '.token' <<<"$setup_response")"
 }
 
@@ -304,13 +312,16 @@ create_runtime_config() {
     http_override_id="$(api_post /api/routes "$(jq -n --arg host "$OVERRIDE_IP" --argjson port "$HTTP_OVERRIDE_PORT" '{name:"e2e-tproxy-http-override",rules:[{conditionType:"DOMAIN",op:"IN",value:"http-override.tproxy-e2e.test"}],policy:"DESTINATION_OVERRIDE",outboundProxyHost:$host,outboundProxyPort:$port,status:1}')" | jq -er '.id')"
     tls_override_id="$(api_post /api/routes "$(jq -n --arg host "$OVERRIDE_IP" --argjson port "$TLS_OVERRIDE_PORT" '{name:"e2e-tproxy-tls-override",rules:[{conditionType:"DOMAIN",op:"IN",value:"tls-override.tproxy-e2e.test"}],policy:"DESTINATION_OVERRIDE",outboundProxyHost:$host,outboundProxyPort:$port,status:1}')" | jq -er '.id')"
 
-    local worker_response worker_token inbound
-    worker_response="$(api_post /api/workers "{\"workerId\":\"${WORKER_ID}\",\"displayName\":\"Transparent proxy E2E\",\"description\":\"ephemeral E2E worker\"}")"
-    worker_token="$(jq -er '.token' <<<"$worker_response")"
+    local worker_token inbound
+    worker_token="hpw_$(openssl rand -hex 32)"
     (
         umask 077
         printf '%s' "$worker_token" > "$TEMP_DIR/worker-token"
     )
+    api_post /api/workers "$(jq -n --arg worker "$WORKER_ID" \
+        --arg url "wss://home-proxy-control-manager:${MANAGEMENT_PORT}/management/ws" --arg token "$worker_token" \
+        '{workerId:$worker,displayName:"Transparent proxy E2E",description:"ephemeral E2E worker",
+          managementUrl:$url,managementToken:$token}')" >/dev/null
 
     inbound="$(jq -n --arg worker "$WORKER_ID" --argjson fallback "$fallback_route_id" --argjson anonymous "$anonymous_id" --argjson tport "$TPORT" \
         --argjson block "$block_id" --argjson direct "$direct_id" --argjson httpOverride "$http_override_id" --argjson tlsOverride "$tls_override_id" \
@@ -321,9 +332,11 @@ create_runtime_config() {
         -v "$TEMP_DIR/worker-token:/run/secrets/worker-token:ro" \
         -e CONTROL_MANAGER_URL="$CONTROL_BASE" \
         -e WORKER_ID="$WORKER_ID" \
-        -e WORKER_TOKEN_FILE=/run/secrets/worker-token \
+        -e WORKER_MANAGEMENT_ENABLED=true \
+        -e WORKER_MANAGEMENT_PORT="$MANAGEMENT_PORT" \
+        -e WORKER_MANAGEMENT_TOKEN_FILE=/run/secrets/worker-token \
         -e LAST_KNOWN_GOOD_CONFIG=/tmp/last-known-good-config.json \
-        -e WORKER_CONTROL_POLL_INTERVAL_MS=500 \
+        -e WORKER_MANAGEMENT_POLL_INTERVAL_MS=500 \
         "$WORKER_IMAGE" >/dev/null
     WORKER_STARTED=1
     wait_until "TPROXY worker listener" listener_ready

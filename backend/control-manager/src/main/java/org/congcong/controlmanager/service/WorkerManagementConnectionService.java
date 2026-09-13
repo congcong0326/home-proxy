@@ -16,13 +16,14 @@ import org.springframework.stereotype.Service;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.X509ExtendedTrustManager;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
+import java.net.Socket;
+import javax.net.ssl.SSLEngine;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.Set;
@@ -173,17 +174,26 @@ public class WorkerManagementConnectionService {
         try {
             // Worker management certificates are generated locally at startup.
             // The bearer token is the deliberately simple controller credential.
-            TrustManager[] trustManagers = {new X509TrustManager() {
+            // Worker management endpoints use a startup-generated self-signed
+            // certificate without IP SANs. An X509TrustManager is wrapped by
+            // JSSE's identity checker for java.net.http WebSocket connections,
+            // which still rejects an IP URL with "No subject alternative names
+            // present" even when endpoint identification is disabled. Using an
+            // X509ExtendedTrustManager keeps all socket/engine trust decisions in
+            // this deliberately trusted private management channel.
+            X509ExtendedTrustManager trustManager = new X509ExtendedTrustManager() {
                 @Override public void checkClientTrusted(X509Certificate[] chain, String authType) { }
                 @Override public void checkServerTrusted(X509Certificate[] chain, String authType) { }
+                @Override public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) { }
+                @Override public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) { }
+                @Override public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) { }
+                @Override public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) { }
                 @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-            }};
+            };
             SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, trustManagers, new SecureRandom());
+            sslContext.init(null, new javax.net.ssl.TrustManager[]{trustManager}, new SecureRandom());
             SSLParameters sslParameters = new SSLParameters();
-            // An empty endpoint algorithm disables JDK HttpClient hostname checks.
-            // Worker certificates are self-signed and commonly have no IP SAN.
-            sslParameters.setEndpointIdentificationAlgorithm("");
+            sslParameters.setEndpointIdentificationAlgorithm(null);
             return HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5))
                     .sslContext(sslContext).sslParameters(sslParameters).build();
         } catch (Exception e) {

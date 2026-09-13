@@ -95,8 +95,25 @@ class WorkerControlServiceTest {
         WorkerStatus saved = captor.getValue();
         assertThat(saved.getWorkerId()).isEqualTo("default");
         assertThat(saved.getHostname()).isEqualTo("proxy-host");
+        assertThat(saved.getCapabilitiesJson()).isEqualTo("[]");
         assertThat(saved.getHeapUsedBytes()).isEqualTo(134217728L);
         assertThat(saved.getRunningInboundCount()).isEqualTo(3);
+    }
+
+    @Test
+    void managementPollCreatesStatusWithEmptyCapabilities() {
+        when(statusRepository.findById("happy-bounty-1")).thenReturn(Optional.empty());
+        when(statusRepository.save(any(WorkerStatus.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.recordManagementPoll("happy-bounty-1", "hash-123");
+
+        org.mockito.ArgumentCaptor<WorkerStatus> captor = org.mockito.ArgumentCaptor.forClass(WorkerStatus.class);
+        verify(statusRepository).save(captor.capture());
+        WorkerStatus saved = captor.getValue();
+        assertThat(saved.getWorkerId()).isEqualTo("happy-bounty-1");
+        assertThat(saved.getFetchedConfigHash()).isEqualTo("hash-123");
+        assertThat(saved.getAppliedConfigHash()).isEqualTo("hash-123");
+        assertThat(saved.getCapabilitiesJson()).isEqualTo("[]");
     }
 
     @Test

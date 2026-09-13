@@ -273,7 +273,7 @@ class ApiService {
     return this.request<PageResponse<UserDTO>>(endpoint);
   }
   
-  // 根据ID查询用户详情
+  // 根据ID查询用户详情（包含凭证）
   async getUserById(id: number): Promise<UserDTO> {
     return this.request<UserDTO>(`/users/${id}`);
   }

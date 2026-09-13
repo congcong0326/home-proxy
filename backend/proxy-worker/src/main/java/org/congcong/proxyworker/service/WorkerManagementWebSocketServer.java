@@ -20,6 +20,7 @@ import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.websocketx.ContinuationWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
@@ -148,6 +149,7 @@ public final class WorkerManagementWebSocketServer {
     }
 
     private final class ManagementFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
+        private final StringBuilder pendingText = new StringBuilder();
         @Override
         public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
             if (evt instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
@@ -158,8 +160,22 @@ public final class WorkerManagementWebSocketServer {
 
         @Override
         protected void channelRead0(ChannelHandlerContext ctx, WebSocketFrame frame) throws Exception {
-            if (!(frame instanceof TextWebSocketFrame textFrame)) return;
-            WorkerManagementMessage message = objectMapper.readValue(textFrame.text(), WorkerManagementMessage.class);
+            // java.net.http may fragment large outbound text messages. Netty delivers
+            // the first part as TextWebSocketFrame and the remaining parts as
+            // ContinuationWebSocketFrame, so parse only after the final fragment.
+            if (frame instanceof TextWebSocketFrame textFrame) {
+                pendingText.setLength(0);
+                pendingText.append(textFrame.text());
+            } else if (frame instanceof ContinuationWebSocketFrame continuation) {
+                pendingText.append(continuation.content().toString(StandardCharsets.UTF_8));
+            } else {
+                return;
+            }
+            if (!frame.isFinalFragment()) return;
+
+            String json = pendingText.toString();
+            pendingText.setLength(0);
+            WorkerManagementMessage message = objectMapper.readValue(json, WorkerManagementMessage.class);
             if (!config.getWorkerId().equals(message.getWorkerId())) {
                 log.warn("忽略 workerId 不匹配的管理消息");
                 return;

@@ -7,6 +7,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.UserDTO;
+import org.congcong.common.dto.UserDtoWithCredential;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.entity.User;
 import org.congcong.controlmanager.service.UserService;
@@ -70,12 +71,12 @@ public class UserController {
     }
 
     /**
-     * 根据ID查询用户详情
+     * 根据ID查询用户详情（包含凭证）
      * GET /api/users/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<UserDTO> getUserById(@PathVariable Long id) {
-        Optional<UserDTO> userDTO = userService.findById(id);
+    public ResponseEntity<UserDtoWithCredential> getUserById(@PathVariable Long id) {
+        Optional<UserDtoWithCredential> userDTO = userService.findByIdWithCredential(id);
         if (userDTO.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在");
         }

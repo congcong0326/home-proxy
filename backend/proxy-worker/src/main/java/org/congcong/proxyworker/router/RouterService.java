@@ -43,7 +43,14 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
         ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-        List<RouteConfig> routes = FindRoutes.find(proxyTunnelRequest.getUser().getId(), inboundConfig);
+        // TLS SNI is an unauthenticated inbound: its routing identity is always
+        // the anonymous user configured on the inbound. Keep this decision at
+        // the routing boundary so bindings for that user are consistently used.
+        Long routingUserId = proxyTunnelRequest.getProtocolType() == ProtocolType.TLS_SNI_TCP
+                && inboundConfig.getAnonymousUser() != null
+                ? inboundConfig.getAnonymousUser().getId()
+                : proxyTunnelRequest.getUser() == null ? null : proxyTunnelRequest.getUser().getId();
+        List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
         String targetHost = proxyTunnelRequest.getTargetHost();
         boolean hostIsIp = isIp(targetHost);
         RouteConfig matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
@@ -55,6 +62,15 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         }
         ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
         proxyTunnelRequest.setRouteConfig(matchedRoute);
+        log.info("SNI 分流: user={}, domain={}, targetPort={}, route={}, policy={}, outbound={}, destination={}:{}",
+                proxyContext.getUserName(),
+                targetHost,
+                proxyTunnelRequest.getTargetPort(),
+                matchedRoute.getName(),
+                matchedRoute.getPolicy(),
+                matchedRoute.getOutboundProxyType(),
+                proxyTunnelRequest.getFinalTargetHost(),
+                proxyTunnelRequest.getFinalTargetPort());
         channelHandlerContext.fireChannelRead(proxyTunnelRequest);
     }
 

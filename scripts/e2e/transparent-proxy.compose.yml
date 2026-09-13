@@ -45,6 +45,9 @@ services:
       WORKER_AUTH_LEGACY_ENABLED: "false"
     ports:
       - "127.0.0.1:${E2E_CONTROL_PORT}:8443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "home-proxy-control-manager:host-gateway"
     networks: [control]
 
 networks:
