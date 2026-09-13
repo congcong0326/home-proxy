@@ -213,6 +213,12 @@ public class AggregateConfigService {
             try {
                 ConfigApplyResult result = configChangeListener.onConfigChanged(config);
                 if (result.success()) {
+                    // The recovered snapshot is the worker's fetched configuration too.
+                    // Keep this hash populated so the first management heartbeat after
+                    // startup reports a complete configuration state even when the
+                    // controller answers CONFIG_UNCHANGED.
+                    fetchedConfigHash = config.getConfigHash();
+                    pushedConfig = config;
                     applicationStatus = new WorkerControlService.ConfigApplicationStatus(config.getConfigHash(), true, null,
                             java.time.LocalDateTime.now());
                     log.info("已从最后成功配置恢复 {} 个入站", config.getInbounds() == null ? 0 : config.getInbounds().size());

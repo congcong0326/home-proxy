@@ -5,9 +5,10 @@ import io.netty.handler.codec.dns.DnsResponseCode;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.common.dto.AccessLog;
+import org.congcong.common.dto.AuthLog;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.proxyworker.audit.impl.AsyncHttpLogPublisher;
+import org.congcong.proxyworker.audit.impl.WebSocketLogPublisher;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.DnsProxyContext;
@@ -21,7 +22,7 @@ public class AccessLogUtil {
 
     public static void setLogReportingEnabled(Boolean enabled) { logReportingEnabled = enabled == null || enabled; }
 
-    private static final LogPublisher logPublisher = new AsyncHttpLogPublisher(1000, 100, 50);
+    private static final WebSocketLogPublisher logPublisher = new WebSocketLogPublisher(5000);
     
     // 高性能ID生成器
     private static final AtomicLong REQUEST_ID_COUNTER = new AtomicLong(0);
@@ -165,12 +166,27 @@ public class AccessLogUtil {
     }
 
     public static void start() {
-        // 触发类加载就可以初始化日志服务
-        // logPublisher 已经在静态初始化时创建，这里可以执行额外的启动逻辑
-        // 例如：验证配置、预热连接池等
+        // The publisher only buffers. Logs leave the worker through the
+        // controller-initiated management WebSocket.
     }
 
     public static void stop() {
         logPublisher.shutdown();
+    }
+
+    public static List<AccessLog> drainAccessLogs(int maxItems) {
+        return logPublisher.drainAccess(maxItems);
+    }
+
+    public static List<AuthLog> drainAuthLogs(int maxItems) {
+        return logPublisher.drainAuth(maxItems);
+    }
+
+    public static void requeueAccessLogs(List<AccessLog> logs) {
+        logPublisher.requeueAccess(logs);
+    }
+
+    public static void requeueAuthLogs(List<AuthLog> logs) {
+        logPublisher.requeueAuth(logs);
     }
 }

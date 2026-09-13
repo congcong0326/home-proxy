@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.common.dto.WorkerManagementMessage;
 import org.congcong.common.dto.WorkerManagementMessageType;
+import org.congcong.common.dto.WorkerManagementHeartbeat;
+import org.congcong.common.dto.WorkerPollRequest;
 import org.congcong.controlmanager.entity.ProxyWorker;
 import org.congcong.controlmanager.repository.ProxyWorkerRepository;
 import org.springframework.stereotype.Service;
@@ -36,8 +38,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Maintains controller-initiated WSS connections to configured workers. A
- * worker sends CONFIG_POLL through its connected socket; this service replies
- * with a configuration only when the worker's hash is stale.
+ * worker sends CONFIG_POLL through its connected socket with heartbeat data
+ * and buffered logs; this service ingests them and replies with a configuration
+ * only when the worker's hash is stale.
  */
 @Service
 @RequiredArgsConstructor
@@ -53,6 +56,7 @@ public class WorkerManagementConnectionService {
     private final ProxyWorkerRepository proxyWorkerRepository;
     private final AggregateConfigCacheService aggregateConfigCacheService;
     private final WorkerControlService workerControlService;
+    private final LogService logService;
     private final ConcurrentHashMap<String, Connection> connections = new ConcurrentHashMap<>();
     private final Set<String> connecting = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -154,7 +158,18 @@ public class WorkerManagementConnectionService {
                 log.warn("收到无效 worker WSS 管理消息, workerId={}", expectedWorkerId);
                 return;
             }
-            workerControlService.recordManagementPoll(expectedWorkerId, request.getConfigHash());
+            WorkerManagementHeartbeat heartbeat = request.getHeartbeat();
+            if (heartbeat != null) {
+                workerControlService.recordManagementPoll(expectedWorkerId, toPollRequest(heartbeat));
+            } else {
+                workerControlService.recordManagementPoll(expectedWorkerId, request.getConfigHash());
+            }
+            if (request.getAccessLogs() != null && !request.getAccessLogs().isEmpty()) {
+                logService.saveAccessLogs(expectedWorkerId, request.getAccessLogs());
+            }
+            if (request.getAuthLogs() != null && !request.getAuthLogs().isEmpty()) {
+                logService.saveAuthLogs(expectedWorkerId, request.getAuthLogs());
+            }
             AggregateConfigResponse config = aggregateConfigCacheService.getAggregateConfig(expectedWorkerId);
             WorkerManagementMessage response;
             if (config.getConfigHash() != null && config.getConfigHash().equals(request.getConfigHash())) {
@@ -167,6 +182,29 @@ public class WorkerManagementConnectionService {
             socket.sendText(objectMapper.writeValueAsString(response), true);
         } catch (Exception e) {
             log.warn("处理 worker WSS 配置轮询失败, workerId={}, error={}", expectedWorkerId, e.toString());
+        }
+    }
+
+    private WorkerPollRequest toPollRequest(WorkerManagementHeartbeat heartbeat) {
+        WorkerPollRequest poll = new WorkerPollRequest();
+        poll.setHostname(heartbeat.getHostname());
+        poll.setStartedAt(parseDateTime(heartbeat.getStartedAt()));
+        poll.setFetchedConfigHash(heartbeat.getFetchedConfigHash());
+        poll.setAppliedConfigHash(heartbeat.getAppliedConfigHash());
+        poll.setApplySuccess(heartbeat.getApplySuccess());
+        poll.setApplyError(heartbeat.getApplyError());
+        poll.setAppliedAt(parseDateTime(heartbeat.getAppliedAt()));
+        poll.setMetrics(heartbeat.getMetrics());
+        return poll;
+    }
+
+    private java.time.LocalDateTime parseDateTime(String value) {
+        if (value == null || value.isBlank()) return null;
+        try {
+            return java.time.LocalDateTime.parse(value);
+        } catch (RuntimeException error) {
+            log.warn("忽略格式非法的 worker WSS 时间字段: {}", value);
+            return null;
         }
     }
 

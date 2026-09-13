@@ -91,7 +91,7 @@ docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
 - Worker WSS 地址：`wss://<worker 公网地址>:18444/management/ws`
 - Worker 管理 Token：上一步显示的值
 
-controller 会主动建立 WSS 连接，worker 在该连接中轮询配置；controller 不需要公网入站地址。
+controller 会主动建立 WSS 连接，worker 在该连接中轮询配置、上报心跳指标和批量日志；controller 不需要公网入站地址。
 
 本地临时节点可在 `deploy/docker/worker.env.local` 配置节点 ID 和管理端口，然后执行 `make docker-up-worker`。该文件不会提交；要使用其他环境文件时执行
 `make docker-up-worker WORKER_ENV_FILE=/opt/home-proxy/workers/shanghai-01.env`。

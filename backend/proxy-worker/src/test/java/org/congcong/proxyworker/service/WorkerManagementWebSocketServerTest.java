@@ -91,6 +91,8 @@ class WorkerManagementWebSocketServerTest {
             assertTrue(received.await(5, TimeUnit.SECONDS));
             assertEquals(WorkerManagementMessageType.CONFIG_POLL, message.get().getType());
             assertEquals("wss-test", message.get().getWorkerId());
+            assertTrue(message.get().getHeartbeat() != null);
+            assertTrue(message.get().getHeartbeat().getMetrics() != null);
             socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
         } finally {
             server.stop();

@@ -369,6 +369,8 @@ If-None-Match: "<configHash>"
 
 ### 10.2 Worker Poll
 
+当前启用 WSS 管理通道时，worker 不再主动调用以下 HTTP 轮询接口；状态、指标和任务结果随 `/management/ws` 的 `CONFIG_POLL` 帧上送。HTTP 接口保留用于旧版本 worker 兼容。
+
 ```http
 POST /api/worker/poll
 Authorization: Bearer hpw_<base64urlRandomSecret>
@@ -381,6 +383,8 @@ Authorization: Bearer hpw_<base64urlRandomSecret>
 - 只允许上报属于认证 worker 的任务结果。
 
 ### 10.3 日志上报
+
+启用 WSS 管理通道时，访问日志和认证日志在 worker 侧批量缓冲，并随同一条管理连接发送。以下 HTTP 接口仅作为旧版本 worker 的兼容入口。
 
 ```http
 POST /api/logs/access

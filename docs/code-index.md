@@ -67,7 +67,7 @@
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。
-- `audit/AccessLogUtil` + `audit/impl/AsyncHttpLogPublisher`：把访问日志异步上报到管理端。
+- `audit/AccessLogUtil` + `audit/impl/WebSocketLogPublisher`：把访问日志缓冲后随 worker 管理 WSS 批量上报。
 
 ## 前端 frontend
 
@@ -111,9 +111,9 @@
 
 日志与看板链路：
 
-1. worker 上报 `/api/logs/access`。
-2. `control-manager` 的 `LogService` 通过 `AccessLogStoreFactory` 写入当前日志 store；现状是 ClickHouse。
-3. 看板页面通过 `LogController`、`UserTrafficStatsController` 查询明细、TopN、时间序列和聚合统计。
+1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带心跳指标和缓冲的访问/认证日志。
+2. `control-manager` 的 `WorkerManagementConnectionService` 调用 `LogService` 写入当前日志 store；现状是 ClickHouse。旧 `/api/logs/access`、`/api/logs/auth` 端点保留给兼容 worker。
+3. 看板页面通过 `LogController`、`UserTrafficStatsController` 查询明细、TopN、时间序列和聚合统计；网关监控读取同一条 WSS 心跳落库的 `worker_status`。
 
 认证链路：
 

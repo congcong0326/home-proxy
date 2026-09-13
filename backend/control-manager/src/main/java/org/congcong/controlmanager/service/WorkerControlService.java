@@ -114,6 +114,32 @@ public class WorkerControlService {
         workerStatusRepository.save(status);
     }
 
+    /** Records the complete heartbeat and metrics carried by the management WebSocket. */
+    @Transactional
+    public void recordManagementPoll(String workerId, WorkerPollRequest request) {
+        LocalDateTime now = LocalDateTime.now();
+        WorkerPollRequest safeRequest = request == null ? new WorkerPollRequest() : request;
+        WorkerStatus status = workerStatusRepository.findById(workerId).orElseGet(WorkerStatus::new);
+        status.setWorkerId(workerId);
+        status.setHostname(safeRequest.getHostname());
+        status.setStartedAt(safeRequest.getStartedAt());
+        status.setLastSeenAt(now);
+        status.setFetchedConfigHash(firstNonBlank(safeRequest.getFetchedConfigHash(), safeRequest.getLastConfigHash()));
+        status.setAppliedConfigHash(safeRequest.getAppliedConfigHash());
+        status.setApplySuccess(safeRequest.getApplySuccess());
+        status.setApplyError(truncate(safeRequest.getApplyError(), 1024));
+        status.setAppliedAt(safeRequest.getAppliedAt());
+        WorkerMetricsDTO metrics = safeRequest.getMetrics();
+        if (metrics != null) {
+            status.setUptimeSeconds(metrics.getUptimeSeconds());
+            status.setHeapUsedBytes(metrics.getHeapUsedBytes());
+            status.setHeapMaxBytes(metrics.getHeapMaxBytes());
+            status.setRunningInboundCount(metrics.getRunningInboundCount());
+            status.setActiveConnectionCount(metrics.getActiveConnectionCount());
+        }
+        workerStatusRepository.save(status);
+    }
+
     private void updateWorkerStatus(String workerId, WorkerPollRequest request, LocalDateTime now) {
         WorkerStatus status = workerStatusRepository.findById(workerId).orElseGet(WorkerStatus::new);
         status.setWorkerId(workerId);

@@ -8,6 +8,7 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -29,9 +30,14 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.congcong.common.dto.AccessLog;
+import org.congcong.common.dto.AuthLog;
 import org.congcong.common.dto.WorkerManagementMessage;
 import org.congcong.common.dto.WorkerManagementMessageType;
+import org.congcong.common.dto.WorkerMetricsDTO;
+import org.congcong.common.dto.WorkerManagementHeartbeat;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -42,19 +48,22 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * HTTPS/WebSocket endpoint hosted by a worker. The controller initiates the
- * connection; the worker uses that connected socket to poll for configuration.
+ * connection; the worker uses that connected socket to poll for configuration,
+ * publish heartbeats and flush buffered logs.
  */
 @Slf4j
 public final class WorkerManagementWebSocketServer {
     private static final String PATH = "/management/ws";
     private static final int MAX_HTTP_CONTENT_LENGTH = 64 * 1024;
     private static final int MAX_FRAME_SIZE = 4 * 1024 * 1024;
+    private static final int MAX_LOGS_PER_FRAME = 100;
 
     private final ProxyWorkerConfig config;
     private final AggregateConfigService configService;
     private final String token;
     private final ObjectMapper objectMapper;
     private final AtomicReference<Channel> controllerChannel = new AtomicReference<>();
+    private final WorkerMetricsCollector metricsCollector;
     private final EventLoopGroup bossGroup = new NioEventLoopGroup(1);
     private final EventLoopGroup workerGroup = new NioEventLoopGroup();
     private final ScheduledExecutorService pollScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -67,6 +76,7 @@ public final class WorkerManagementWebSocketServer {
     public WorkerManagementWebSocketServer(AggregateConfigService configService) {
         this.config = ProxyWorkerConfig.getInstance();
         this.configService = configService;
+        this.metricsCollector = new WorkerMetricsCollector(configService::getManagedPollingConfigHash);
         this.token = ManagementTokenStore.loadOrCreate(config.getManagementTokenFile());
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
@@ -135,15 +145,44 @@ public final class WorkerManagementWebSocketServer {
     private void sendConfigPoll() {
         Channel active = controllerChannel.get();
         if (active == null || !active.isActive()) return;
+        WorkerManagementHeartbeat heartbeat = new WorkerManagementHeartbeat();
+        heartbeat.setHostname(metricsCollector.getHostname());
+        heartbeat.setStartedAt(metricsCollector.getStartedAt().toString());
+        heartbeat.setFetchedConfigHash(configService.getFetchedConfigHash());
+        WorkerControlService.ConfigApplicationStatus applicationStatus = configService.getApplicationStatus();
+        if (applicationStatus != null) {
+            heartbeat.setAppliedConfigHash(applicationStatus.appliedConfigHash());
+            heartbeat.setApplySuccess(applicationStatus.success());
+            heartbeat.setApplyError(applicationStatus.errorSummary());
+            heartbeat.setAppliedAt(applicationStatus.appliedAt() == null ? null : applicationStatus.appliedAt().toString());
+        }
+        WorkerMetricsDTO metrics = metricsCollector.collect();
+        heartbeat.setMetrics(metrics);
+
+        java.util.List<AccessLog> accessLogs = AccessLogUtil.drainAccessLogs(MAX_LOGS_PER_FRAME);
+        java.util.List<AuthLog> authLogs = AccessLogUtil.drainAuthLogs(MAX_LOGS_PER_FRAME);
         WorkerManagementMessage message = new WorkerManagementMessage(
                 WorkerManagementMessageType.CONFIG_POLL,
                 config.getWorkerId(),
                 configService.getManagedPollingConfigHash(),
-                null);
+                null,
+                heartbeat,
+                accessLogs.isEmpty() ? null : accessLogs,
+                authLogs.isEmpty() ? null : authLogs);
         try {
             String json = objectMapper.writeValueAsString(message);
-            active.eventLoop().execute(() -> active.writeAndFlush(new TextWebSocketFrame(json)));
+            active.eventLoop().execute(() -> {
+                ChannelFuture future = active.writeAndFlush(new TextWebSocketFrame(json));
+                future.addListener(result -> {
+                    if (!result.isSuccess()) {
+                        AccessLogUtil.requeueAccessLogs(accessLogs);
+                        AccessLogUtil.requeueAuthLogs(authLogs);
+                    }
+                });
+            });
         } catch (Exception e) {
+            AccessLogUtil.requeueAccessLogs(accessLogs);
+            AccessLogUtil.requeueAuthLogs(authLogs);
             log.warn("发送配置轮询消息失败: {}", e.toString());
         }
     }
