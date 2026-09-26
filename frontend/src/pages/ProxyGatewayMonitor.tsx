@@ -38,7 +38,10 @@ const formatUptime = (seconds?: number) => {
 
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
-  return value.replace('T', ' ').slice(0, 19);
+  // Worker status timestamps are LocalDateTime values written by the
+  // controller JVM in UTC. Add the UTC designator before local formatting.
+  const utcValue = value.endsWith('Z') ? value : `${value}Z`;
+  return new Date(utcValue).toLocaleString('zh-CN', { hour12: false });
 };
 
 const shortHash = (value?: string, length = 8) => value ? value.slice(0, length) : '-';

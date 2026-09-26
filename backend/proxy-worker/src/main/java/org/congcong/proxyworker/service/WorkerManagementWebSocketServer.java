@@ -219,7 +219,9 @@ public final class WorkerManagementWebSocketServer {
                 log.warn("忽略 workerId 不匹配的管理消息");
                 return;
             }
-            if (message.getType() == WorkerManagementMessageType.CONFIG && message.getConfig() != null) {
+            if (message.getType() == WorkerManagementMessageType.WOL_WAKE && message.getTaskPayload() != null) {
+                new WolTaskExecutor().execute(new org.congcong.common.dto.WorkerTaskDTO(null, WolTaskExecutor.TASK_TYPE, message.getTaskPayload()));
+            } else if (message.getType() == WorkerManagementMessageType.CONFIG && message.getConfig() != null) {
                 configService.acceptManagedConfig(message.getConfig());
             }
         }

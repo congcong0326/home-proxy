@@ -16,11 +16,17 @@ public class WolService {
 
     private final WolConfigService wolConfigService;
     private final WorkerControlService workerControlService;
+    private final WorkerManagementConnectionService managementConnectionService;
 
     @Autowired
-    public WolService(WolConfigService wolConfigService, WorkerControlService workerControlService) {
+    public WolService(WolConfigService wolConfigService, WorkerControlService workerControlService, WorkerManagementConnectionService managementConnectionService) {
         this.wolConfigService = wolConfigService;
         this.workerControlService = workerControlService;
+        this.managementConnectionService = managementConnectionService;
+    }
+
+    public WolService(WolConfigService wolConfigService, WorkerControlService workerControlService) {
+        this(wolConfigService, workerControlService, null);
     }
 
     /**
@@ -69,26 +75,32 @@ public class WolService {
      * 发送WOL魔术包（原有方法，保持兼容性）
      */
     public String sendWolPacket(String macAddress, String broadcastIp, int port) {
-        return sendWolPacket(macAddress, broadcastIp, port, "未知设备");
+        return sendWolPacket(macAddress, broadcastIp, port, "未知设备", "default");
     }
 
     private String sendWolPacket(WolConfig config) {
         String broadcastIp = resolveBroadcastAddress(config.getIpAddress(), config.getSubnetMask());
         log.debug("解析WOL广播地址: 设备IP={}, 子网掩码={}, 广播地址={}",
                 config.getIpAddress(), config.getSubnetMask(), broadcastIp);
-        return sendWolPacket(config.getMacAddress(), broadcastIp, config.getWolPort(), config.getName());
+        return sendWolPacket(config.getMacAddress(), broadcastIp, config.getWolPort(), config.getName(), config.getWorkerId());
     }
 
     /**
      * 发送WOL魔术包的核心实现
      */
-    private String sendWolPacket(String macAddress, String broadcastIp, int port, String deviceName) {
+    private String sendWolPacket(String macAddress, String broadcastIp, int port, String deviceName, String configWorkerId) {
         try {
             log.info("准备派发WOL唤醒任务到设备: {} (MAC: {}, 广播地址: {}, 端口: {})",
                     deviceName, macAddress, broadcastIp, port);
 
             WolWakeTaskPayload payload = new WolWakeTaskPayload(deviceName, macAddress, broadcastIp, port);
-            workerControlService.createTask(WorkerControlService.TASK_TYPE_WOL_WAKE, payload);
+            try {
+                if (managementConnectionService == null) throw new IllegalStateException("WSS unavailable");
+                managementConnectionService.sendWol(configWorkerId, payload);
+            } catch (IllegalStateException unavailable) {
+                if ("default".equals(configWorkerId)) workerControlService.createTask(WorkerControlService.TASK_TYPE_WOL_WAKE, payload);
+                else workerControlService.createTask(configWorkerId, WorkerControlService.TASK_TYPE_WOL_WAKE, payload);
+            }
 
             log.info("WOL唤醒任务已派发到设备: {} (MAC: {})", deviceName, macAddress);
             return String.format("WOL唤醒请求已提交: %s", deviceName);

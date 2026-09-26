@@ -23,6 +23,7 @@ public class WorkerManagementMessage {
     private List<AccessLog> accessLogs;
     /** Authentication logs buffered by the worker and delivered over the management socket. */
     private List<AuthLog> authLogs;
+    private java.util.Map<String, Object> taskPayload;
 
     public WorkerManagementMessage(WorkerManagementMessageType type,
                                    String workerId,

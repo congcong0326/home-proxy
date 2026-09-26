@@ -150,6 +150,19 @@ public class WorkerManagementConnectionService {
                 });
     }
 
+    /** Sends a direct management command to a connected worker. */
+    public void sendWol(String workerId, org.congcong.common.dto.WolWakeTaskPayload payload) {
+        Connection connection = connections.get(workerId);
+        if (connection == null) throw new IllegalStateException("worker 未连接: " + workerId);
+        try {
+            WorkerManagementMessage message = new WorkerManagementMessage();
+            message.setType(WorkerManagementMessageType.WOL_WAKE);
+            message.setWorkerId(workerId);
+            message.setTaskPayload(objectMapper.convertValue(payload, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>>() {}));
+            connection.webSocket().sendText(objectMapper.writeValueAsString(message), true);
+        } catch (Exception e) { throw new IllegalStateException("发送 WOL 到 worker 失败", e); }
+    }
+
     private void handleMessage(String expectedWorkerId, WebSocket socket, String json) {
         try {
             WorkerManagementMessage request = objectMapper.readValue(json, WorkerManagementMessage.class);

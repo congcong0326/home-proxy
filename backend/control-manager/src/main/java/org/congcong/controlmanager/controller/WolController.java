@@ -203,6 +203,7 @@ public class WolController {
         WolConfigDTO dto = new WolConfigDTO();
         dto.setId(config.getId());
         dto.setName(config.getName());
+        dto.setWorkerId(config.getWorkerId());
         dto.setIpAddress(config.getIpAddress());
         dto.setSubnetMask(config.getSubnetMask());
         dto.setMacAddress(config.getMacAddress());
@@ -223,6 +224,7 @@ public class WolController {
     private WolConfig convertFromCreateRequest(WolConfigCreateRequest request) {
         WolConfig config = new WolConfig();
         config.setName(request.getName());
+        config.setWorkerId(request.getWorkerId() == null || request.getWorkerId().isBlank() ? "default" : request.getWorkerId());
         config.setIpAddress(request.getIpAddress());
         config.setSubnetMask(request.getSubnetMask());
         config.setMacAddress(request.getMacAddress());
@@ -235,6 +237,7 @@ public class WolController {
     private WolConfig convertFromUpdateRequest(WolConfigUpdateRequest request) {
         WolConfig config = new WolConfig();
         config.setName(request.getName());
+        config.setWorkerId(request.getWorkerId() == null || request.getWorkerId().isBlank() ? "default" : request.getWorkerId());
         config.setIpAddress(request.getIpAddress());
         config.setSubnetMask(request.getSubnetMask());
         config.setMacAddress(request.getMacAddress());

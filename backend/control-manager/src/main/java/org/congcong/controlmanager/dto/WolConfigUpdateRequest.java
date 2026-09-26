@@ -8,8 +8,10 @@ import lombok.Data;
 
 @Data
 public class WolConfigUpdateRequest {
-    
+
     @NotBlank(message = "设备名称不能为空")
+    private String workerId = "default";
+
     private String name;
     
     @NotBlank(message = "IP地址不能为空")

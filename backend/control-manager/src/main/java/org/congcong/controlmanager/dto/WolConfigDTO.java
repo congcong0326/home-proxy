@@ -5,8 +5,10 @@ import java.time.LocalDateTime;
 
 @Data
 public class WolConfigDTO {
-    
+
     private Long id;
+
+    private String workerId = "default";
     
     private String name;
     

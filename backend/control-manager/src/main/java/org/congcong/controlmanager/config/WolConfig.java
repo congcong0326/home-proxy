@@ -11,12 +11,14 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "wol_configs")
 public class WolConfig {
-    
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     
     @Column(nullable = false, length = 64)
+    private String workerId = "default";
+
     private String name;
     
     @Column(name = "ip_address", nullable = false, length = 64)
