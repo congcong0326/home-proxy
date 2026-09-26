@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -62,6 +61,7 @@ import './RuleSetManagement.css';
 const { Text, Title, Paragraph } = Typography;
 const { TextArea } = Input;
 const DETAIL_DEFAULT_PAGE_SIZE = 50;
+const RULE_SET_EDITOR_PAGE_SIZE = 500;
 
 interface RuleSetFormValues {
   ruleKey: string;
@@ -114,6 +114,27 @@ const parseSourceConfig = (sourceConfig?: string): { sourceUrl?: string; sourceF
   }
 };
 
+const loadAllRuleSetItems = async (ruleSetId: number): Promise<RuleSetItem[]> => {
+  const firstPage = await apiService.getRuleSetItems(ruleSetId, {
+    page: 1,
+    size: RULE_SET_EDITOR_PAGE_SIZE,
+  });
+  const pageSize = firstPage.pageSize > 0 ? firstPage.pageSize : RULE_SET_EDITOR_PAGE_SIZE;
+  const pageCount = Math.ceil(firstPage.total / pageSize);
+
+  if (pageCount <= 1) {
+    return firstPage.items;
+  }
+
+  const remainingPages = await Promise.all(
+    Array.from({ length: pageCount - 1 }, (_, index) => apiService.getRuleSetItems(ruleSetId, {
+      page: index + 2,
+      size: pageSize,
+    }))
+  );
+  return [firstPage.items, ...remainingPages.map((page) => page.items)].flat();
+};
+
 const RuleSetManagement: React.FC = () => {
   const [form] = Form.useForm<RuleSetFormValues>();
   const [ruleSets, setRuleSets] = useState<RuleSetSummaryDTO[]>([]);
@@ -143,12 +164,6 @@ const RuleSetManagement: React.FC = () => {
 
   const currentSourceType = Form.useWatch('sourceType', form) ?? RuleSetSourceType.MANUAL;
   const isManual = currentSourceType === RuleSetSourceType.MANUAL;
-  const preserveExistingManualItems = Boolean(
-    editingRuleSet &&
-    editingRuleSet.sourceType === RuleSetSourceType.MANUAL &&
-    currentSourceType === RuleSetSourceType.MANUAL
-  );
-  const showManualItemEditor = isManual && !preserveExistingManualItems;
 
   const loadRuleSets = useCallback(async () => {
     setLoading(true);
@@ -211,6 +226,9 @@ const RuleSetManagement: React.FC = () => {
       setLatestBatchResults([]);
       form.resetFields();
       const source = parseSourceConfig(ruleSet.sourceConfig);
+      const items = ruleSet.sourceType === RuleSetSourceType.MANUAL
+        ? await loadAllRuleSetItems(ruleSet.id)
+        : [];
       form.setFieldsValue({
         ruleKey: ruleSet.ruleKey,
         name: ruleSet.name,
@@ -222,7 +240,7 @@ const RuleSetManagement: React.FC = () => {
         enabled: ruleSet.enabled,
         published: ruleSet.published,
         description: ruleSet.description,
-        items: [emptyRuleItem()],
+        items: items.length > 0 ? items : [emptyRuleItem()],
       });
       setModalOpen(true);
     } catch (error) {
@@ -258,14 +276,10 @@ const RuleSetManagement: React.FC = () => {
         description: values.description?.trim(),
       };
 
-      if (!editingRuleSet) {
+      if (!editingRuleSet || values.sourceType === RuleSetSourceType.MANUAL) {
         payload.items = values.sourceType === RuleSetSourceType.MANUAL ? manualItems : [];
       } else if (editingRuleSet.sourceType === RuleSetSourceType.MANUAL) {
-        if (values.sourceType !== RuleSetSourceType.MANUAL) {
-          payload.items = [];
-        }
-      } else if (values.sourceType === RuleSetSourceType.MANUAL) {
-        payload.items = manualItems;
+        payload.items = [];
       }
 
       if (editingRuleSet) {
@@ -740,17 +754,7 @@ const RuleSetManagement: React.FC = () => {
             <TextArea rows={3} placeholder="说明这个规则集的用途、来源和分流策略" />
           </Form.Item>
 
-          {preserveExistingManualItems && (
-            <Alert
-              type="info"
-              showIcon
-              message="当前编辑页不加载规则项"
-              description={`该手工规则集现有 ${editingRuleSet?.itemCount ?? 0} 条规则项，保存时会保留现有数据；如需查看明细，请打开详情页。`}
-              style={{ marginBottom: 16 }}
-            />
-          )}
-
-          {showManualItemEditor && (
+          {isManual && (
             <>
               <Divider orientation="left">规则项</Divider>
               <Form.List name="items">
