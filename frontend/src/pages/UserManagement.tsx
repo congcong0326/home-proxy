@@ -20,6 +20,7 @@ import {
   Dropdown,
   MenuProps,
   Grid,
+  Descriptions,
 } from 'antd';
 import {
   UserOutlined,
@@ -124,6 +125,10 @@ const UserManagement: React.FC = () => {
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [credentialModalVisible, setCredentialModalVisible] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserDTO | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailUser, setDetailUser] = useState<UserDTO | null>(null);
+  const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const screens = Grid.useBreakpoint();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
@@ -402,43 +407,52 @@ const UserManagement: React.FC = () => {
     form.setFieldsValue({ [fieldName]: generateStrongCredential() });
   };
 
+  const renderDetailValue = (value: string | number | null | undefined) =>
+    value === null || value === undefined || value === '' ? '-' : value;
+
+  const renderDetailDate = (value: string | null | undefined) =>
+    value ? new Date(value).toLocaleString('zh-CN') : '-';
+
   const renderUserDetail = (user: UserDTO, credentialLoadFailed = false) => (
-    <div>
-      <p><strong>ID:</strong> {user.id}</p>
-      <p><strong>用户名:</strong> {user.username}</p>
-      <p><strong>用户凭证:</strong></p>
-      <Input.Password
-        value={user.credential || ''}
-        readOnly
-        placeholder={credentialLoadFailed ? '凭证加载失败，请稍后重试' : '未设置凭证'}
-        visibilityToggle
-      />
-      <p><strong>设备IP:</strong> {user.ipAddress || '-'}</p>
-      <p><strong>状态:</strong> {USER_STATUS_LABELS[user.status as UserStatus]}</p>
-      <p><strong>创建时间:</strong> {new Date(user.createdAt).toLocaleString('zh-CN')}</p>
-      <p><strong>更新时间:</strong> {new Date(user.updatedAt).toLocaleString('zh-CN')}</p>
-      {user.remark && <p><strong>备注:</strong> {user.remark}</p>}
-    </div>
+    <Descriptions bordered column={1} size="small" className="user-detail-descriptions">
+      <Descriptions.Item label="ID">{renderDetailValue(user.id)}</Descriptions.Item>
+      <Descriptions.Item label="用户名">{renderDetailValue(user.username)}</Descriptions.Item>
+      <Descriptions.Item label="设备IP">{renderDetailValue(user.ipAddress)}</Descriptions.Item>
+      <Descriptions.Item label="状态">
+        {USER_STATUS_LABELS[user.status as UserStatus] || renderDetailValue(user.status)}
+      </Descriptions.Item>
+      <Descriptions.Item label="备注">{renderDetailValue(user.remark)}</Descriptions.Item>
+      <Descriptions.Item label="创建时间">{renderDetailDate(user.createdAt)}</Descriptions.Item>
+      <Descriptions.Item label="更新时间">{renderDetailDate(user.updatedAt)}</Descriptions.Item>
+      <Descriptions.Item label="用户凭证">
+        {user.credential ? (
+          <Input.Password
+            value={user.credential}
+            readOnly
+            visibilityToggle
+          />
+        ) : (
+          credentialLoadFailed ? '凭证加载失败，请稍后重试' : '-'
+        )}
+      </Descriptions.Item>
+    </Descriptions>
   );
 
   const openUserDetailModal = async (user: UserDTO) => {
-    const modal = Modal.info({
-      title: '用户详情',
-      content: <Text type="secondary">正在加载用户详情...</Text>,
-      width: 520,
-    });
+    setDetailUser(user);
+    setDetailModalVisible(true);
+    setDetailLoading(true);
+    setDetailLoadFailed(false);
 
     try {
       const detail = await apiService.getUserById(user.id);
-      modal.update({
-        content: renderUserDetail(detail),
-      });
+      setDetailUser(detail);
     } catch (error) {
       console.error('加载用户详情失败:', error);
       message.error('加载用户详情失败');
-      modal.update({
-        content: renderUserDetail(user, true),
-      });
+      setDetailLoadFailed(true);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -523,6 +537,7 @@ const UserManagement: React.FC = () => {
               type="text"
               size="small"
               icon={<EyeOutlined />}
+              aria-label="查看详情"
               onClick={() => openUserDetailModal(record)}
             />
           </Tooltip>
@@ -597,6 +612,7 @@ const UserManagement: React.FC = () => {
               type="text"
               size="small"
               icon={<EyeOutlined />}
+              aria-label="查看详情"
               onClick={() => openUserDetailModal(record)}
             />
           </Tooltip>
@@ -802,6 +818,27 @@ const UserManagement: React.FC = () => {
           />
         </Card>
       </div>
+
+      {/* 用户详情模态框 */}
+      <Modal
+        title="用户详情"
+        open={detailModalVisible}
+        onCancel={() => {
+          setDetailModalVisible(false);
+          setDetailUser(null);
+          setDetailLoadFailed(false);
+        }}
+        footer={null}
+        width={560}
+        className="user-modal"
+      >
+        {detailUser && (
+          <>
+            {detailLoading && <Text type="secondary">正在加载最新详情...</Text>}
+            {renderUserDetail(detailUser, detailLoadFailed)}
+          </>
+        )}
+      </Modal>
 
       {/* 创建用户模态框 */}
       <Modal

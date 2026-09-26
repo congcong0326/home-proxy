@@ -11,10 +11,10 @@ export interface User {
 export interface UserDTO {
   id: number;
   username: string;
-  credential?: string;
-  ipAddress?: string;
+  credential?: string | null;
+  ipAddress?: string | null;
   status: number;
-  remark?: string;
+  remark?: string | null;
   createdAt: string;
   updatedAt: string;
 }
