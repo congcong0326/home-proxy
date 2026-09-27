@@ -5,7 +5,6 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.validator.routines.InetAddressValidator;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.*;
@@ -16,8 +15,11 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+import org.congcong.proxyworker.security.DestinationAddressPolicy;
+import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
+import java.net.InetAddress;
 import java.util.*;
 
 @ChannelHandler.Sharable
@@ -35,9 +37,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     private static class Holder {
         private static final RouterService INSTANCE = new RouterService();
     }
-
-    private static final InetAddressValidator inetAddressValidator = InetAddressValidator.getInstance();
-
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
@@ -62,6 +61,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         }
         ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
         proxyTunnelRequest.setRouteConfig(matchedRoute);
+        rejectNonPublicClientLiteral(proxyTunnelRequest, matchedRoute);
         log.info("SNI 分流: user={}, domain={}, targetPort={}, route={}, policy={}, outbound={}, destination={}:{}",
                 proxyContext.getUserName(),
                 targetHost,
@@ -163,7 +163,34 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     }
 
     private boolean isIp(String value) {
-        return value != null && inetAddressValidator.isValid(value);
+        return DestinationAddressPolicy.parseLiteral(value).isPresent();
+    }
+
+    /**
+     * A destination override connects only to an administrator-configured
+     * endpoint, so the original client target is not used as a destination.
+     * All other protected tunnel routes reject non-public IP literals before
+     * an outbound connector can perform any name resolution.
+     */
+    private void rejectNonPublicClientLiteral(ProxyTunnelRequest request, RouteConfig route) {
+        if (!DestinationAddressPolicy.isProtectedInbound(request.getProtocolType())
+                || route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE
+                || route.getPolicy() == RoutePolicy.BLOCK
+                || route.getPolicy() == RoutePolicy.DNS_REWRITING) {
+            return;
+        }
+        DestinationAddressPolicy.parseLiteral(request.getTargetHost())
+                .filter(address -> !DestinationAddressPolicy.isPubliclyRoutable(address))
+                .ifPresent(address -> blockClientLiteral(request, address));
+    }
+
+    private void blockClientLiteral(ProxyTunnelRequest request, InetAddress address) {
+        PrivateDestinationBlockedException blocked =
+                PrivateDestinationBlockedException.forLiteral(request.getTargetHost(), request.getTargetPort(), address);
+        request.setDestinationAddressBlocked(blocked);
+        log.warn("Blocked non-public client destination: protocol={}, target={}:{}, route={}",
+                request.getProtocolType(), request.getTargetHost(), request.getTargetPort(),
+                request.getRouteConfig().getName());
     }
 
     private RouteConfig fallbackRoute(InboundConfig inboundConfig, ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) {

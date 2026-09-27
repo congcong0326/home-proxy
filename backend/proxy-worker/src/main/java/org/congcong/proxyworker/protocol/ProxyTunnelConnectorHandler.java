@@ -11,6 +11,7 @@ import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
 import org.congcong.proxyworker.outbound.block.BlockOutboundConnector;
+import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 import org.congcong.proxyworker.server.RelayHandler;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
@@ -55,16 +56,17 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         ChannelFuture connect = connector.connect(inboundChannel, proxyTunnelRequest, relayPromise);
         //
         connect.addListener((ChannelFutureListener) future -> {
-            //
-            SocketAddress socketAddress = future.channel().remoteAddress();
-            if (socketAddress instanceof InetSocketAddress remoteAddress) {
-                String hostOrIp = remoteAddress.getHostString();
-                proxyContext.setRealTargetIp(hostOrIp);
-            }
             // 第一次请求的生命周期结束
             proxyTimeContext.setConnectTargetEndTime(System.currentTimeMillis());
             proxyTunnelRequest.setStatus(ProxyTunnelRequest.Status.finish);
-            if (!future.isSuccess()) {
+            if (future.isSuccess()) {
+                proxyTunnelRequest.setConnectSucceeded(true);
+                SocketAddress socketAddress = future.channel().remoteAddress();
+                if (socketAddress instanceof InetSocketAddress remoteAddress) {
+                    String hostOrIp = remoteAddress.getHostString();
+                    proxyContext.setRealTargetIp(hostOrIp);
+                }
+            } else {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应
                 if (!relayPromise.isDone()) {
                     relayPromise.setFailure(future.cause());
@@ -75,8 +77,19 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                     proxyTunnelRequest.setInitialPayload(null);
                 }
                 // 连接目标服务器失败
-                AccessLogUtil.logFailure(channelHandlerContext.channel(), 500, "NETWORK_ERROR", future.cause().getMessage());
-                if (!(future.cause() instanceof BlockOutboundConnector.BlockedByPolicyException)) {
+                boolean privateDestinationBlocked = future.cause() instanceof PrivateDestinationBlockedException;
+                String errorCode = privateDestinationBlocked ? "PRIVATE_ADDRESS_BLOCKED" : "NETWORK_ERROR";
+                AccessLogUtil.logFailure(channelHandlerContext.channel(), privateDestinationBlocked ? 403 : 500,
+                        errorCode, future.cause().getMessage());
+                if (privateDestinationBlocked) {
+                    log.warn("Blocked non-public destination: protocol={}, user={}, route={}, target={}:{}, reason={}",
+                            proxyTunnelRequest.getProtocolType(),
+                            proxyContext.getUserName(),
+                            proxyTunnelRequest.getRouteConfig().getName(),
+                            proxyTunnelRequest.getTargetHost(),
+                            proxyTunnelRequest.getTargetPort(),
+                            future.cause().getMessage());
+                } else if (!(future.cause() instanceof BlockOutboundConnector.BlockedByPolicyException)) {
                     log.warn("{} 连接目标服务器 {} 失败 {}", proxyTunnelRequest.getRouteConfig().getName(), proxyTunnelRequest.getTargetHost(), future.cause().getMessage());
                 }
                 // 确保释放出站资源
@@ -88,9 +101,7 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         });
         //
         channelHandlerContext.channel().closeFuture().addListener(f -> {
-            if (f.isSuccess()) {
-                // todo block策略会导致两条重复日志
-                // 只有在正常关闭的情况下才记录成功日志
+            if (f.isSuccess() && proxyTunnelRequest.isConnectSucceeded()) {
                 AccessLogUtil.logSuccess(channelHandlerContext.channel());
             }
         });

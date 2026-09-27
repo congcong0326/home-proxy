@@ -3,7 +3,10 @@ package org.congcong.proxyworker.protocol.http;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
+import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+
+import java.nio.charset.StandardCharsets;
 
 /**
  * HTTPS CONNECT 协议策略：在出站连接成功后，回写 200 响应并进入中继。
@@ -20,9 +23,13 @@ public class HttpsConnectProtocolStrategy implements ProtocolStrategy {
 
     @Override
     public void onConnectFailure(ChannelHandlerContext inboundChannelContext, Channel outboundChannel, ProxyTunnelRequest request, Throwable cause) {
-        String resp = "HTTP/1.1 502 Bad Gateway\r\n" +
-                "Connection: close\r\n" +
+        String resp = cause instanceof PrivateDestinationBlockedException
+                ? "HTTP/1.1 403 Forbidden\r\n"
+                : "HTTP/1.1 502 Bad Gateway\r\n";
+        resp += "Connection: close\r\n" +
                 "Content-Length: 0\r\n\r\n";
-        inboundChannelContext.writeAndFlush(inboundChannelContext.alloc().buffer().writeBytes(resp.getBytes()));
+        inboundChannelContext.writeAndFlush(inboundChannelContext.alloc().buffer()
+                        .writeBytes(resp.getBytes(StandardCharsets.US_ASCII)))
+                .addListener(future -> inboundChannelContext.close());
     }
 }

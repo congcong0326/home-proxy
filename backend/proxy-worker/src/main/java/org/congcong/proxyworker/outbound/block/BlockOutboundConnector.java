@@ -8,16 +8,25 @@ import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 public class BlockOutboundConnector implements OutboundConnector {
 
+      private final Throwable cause;
+
+      public BlockOutboundConnector() {
+          this.cause = null;
+      }
+
+      public BlockOutboundConnector(Throwable cause) {
+          this.cause = cause;
+      }
+
       @Override
       public ChannelFuture connect(Channel inboundChannel,
                                    ProxyTunnelRequest request,
                                    Promise<Channel> relayPromise) {
-          BlockedByPolicyException cause =
-                  new BlockedByPolicyException(request.getTargetHost(), request.getTargetPort());
+          Throwable failure = cause == null
+                  ? new BlockedByPolicyException(request.getTargetHost(), request.getTargetPort())
+                  : cause;
           // 让 TcpTunnelConnectorHandler 的失败分支生效，触发 onConnectFailure() 响应
-          ChannelFuture failed = inboundChannel.newFailedFuture(cause);
-          failed.addListener(f -> inboundChannel.close());
-          return failed;
+          return inboundChannel.newFailedFuture(failure);
       }
 
       public static class BlockedByPolicyException extends Exception {

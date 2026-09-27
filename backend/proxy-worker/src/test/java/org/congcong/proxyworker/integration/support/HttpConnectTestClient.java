@@ -48,6 +48,29 @@ public final class HttpConnectTestClient {
         }
     }
 
+    public static int connectStatus(int proxyPort,
+                                    String username,
+                                    String password,
+                                    String targetHost,
+                                    int targetPort) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", proxyPort), (int) Duration.ofSeconds(5).toMillis());
+            socket.setSoTimeout((int) Duration.ofSeconds(5).toMillis());
+            InputStream in = socket.getInputStream();
+            OutputStream out = socket.getOutputStream();
+            String token = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+            out.write(("CONNECT " + targetHost + ":" + targetPort + " HTTP/1.1\r\n"
+                    + "Host: " + targetHost + ":" + targetPort + "\r\n"
+                    + "Proxy-Authorization: Basic " + token + "\r\n"
+                    + "Connection: keep-alive\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+            out.flush();
+            String headers = readHeaders(in);
+            return Integer.parseInt(headers.substring("HTTP/1.1 ".length(), "HTTP/1.1 ".length() + 3));
+        } catch (IOException e) {
+            throw new IllegalStateException("HTTP CONNECT status request failed", e);
+        }
+    }
+
     private static String readHeaders(InputStream in) throws IOException {
         byte[] marker = new byte[] {'\r', '\n', '\r', '\n'};
         java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();

@@ -50,6 +50,10 @@ public final class ProxyWorkerIntegrationFixtures {
         return route(3001L, "direct", RoutePolicy.DIRECT, ProtocolType.NONE, null, null);
     }
 
+    public static RouteConfig destinationOverrideRoute(String host, int port) {
+        return route(3005L, "destination-override", RoutePolicy.DESTINATION_OVERRIDE, ProtocolType.NONE, host, port);
+    }
+
     public static RouteConfig blockRoute(String domain) {
         RouteConfig route = route(3002L, "block", RoutePolicy.BLOCK, ProtocolType.NONE, null, null);
         route.setRules(List.of(domainRule(domain)));

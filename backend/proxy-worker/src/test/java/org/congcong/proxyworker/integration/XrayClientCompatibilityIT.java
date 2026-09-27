@@ -21,11 +21,11 @@ class XrayClientCompatibilityIT {
     void xraySocksClientCanUseWorkerSocksInbound() {
         int workerPort = PortAllocator.tcpPort();
         int xrayClientPort = PortAllocator.tcpPort();
-        RouteConfig direct = ProxyWorkerIntegrationFixtures.directRoute();
 
         try (HttpEchoServer echo = HttpEchoServer.start();
              WorkerServerHarness ignoredWorker = WorkerServerHarness.start(
-                     ProxyWorkerIntegrationFixtures.socksInbound(workerPort, List.of(), direct));
+                     ProxyWorkerIntegrationFixtures.socksInbound(workerPort, List.of(),
+                             ProxyWorkerIntegrationFixtures.destinationOverrideRoute("127.0.0.1", echo.port())));
              XrayProcess ignoredXray = XrayProcess.start("xray-client-worker-socks",
                      XrayConfigs.socksClientToWorkerSocks(xrayClientPort,
                              workerPort,
@@ -37,8 +37,8 @@ class XrayClientCompatibilityIT {
             String response = Socks5TestClient.httpGet(xrayClientPort,
                     null,
                     null,
-                    "127.0.0.1",
-                    echo.port(),
+                    "echo.internal.example",
+                    80,
                     "/xray-client-socks");
 
             assertTrue(response.contains("echo:/xray-client-socks"), response);
@@ -50,11 +50,11 @@ class XrayClientCompatibilityIT {
     void xraySocksClientCanUseWorkerHttpConnectInbound() {
         int workerPort = PortAllocator.tcpPort();
         int xrayClientPort = PortAllocator.tcpPort();
-        RouteConfig direct = ProxyWorkerIntegrationFixtures.directRoute();
 
         try (HttpEchoServer echo = HttpEchoServer.start();
              WorkerServerHarness ignoredWorker = WorkerServerHarness.start(
-                     ProxyWorkerIntegrationFixtures.httpInbound(workerPort, List.of(), direct));
+                     ProxyWorkerIntegrationFixtures.httpInbound(workerPort, List.of(),
+                             ProxyWorkerIntegrationFixtures.destinationOverrideRoute("127.0.0.1", echo.port())));
              XrayProcess ignoredXray = XrayProcess.start("xray-client-worker-http",
                      XrayConfigs.socksClientToWorkerHttp(xrayClientPort,
                              workerPort,
@@ -66,8 +66,8 @@ class XrayClientCompatibilityIT {
             String response = Socks5TestClient.httpGet(xrayClientPort,
                     null,
                     null,
-                    "127.0.0.1",
-                    echo.port(),
+                    "echo.internal.example",
+                    80,
                     "/xray-client-http");
 
             assertTrue(response.contains("echo:/xray-client-http"), response);

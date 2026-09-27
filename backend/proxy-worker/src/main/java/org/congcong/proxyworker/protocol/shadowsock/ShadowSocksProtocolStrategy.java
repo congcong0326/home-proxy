@@ -13,6 +13,7 @@ public class ShadowSocksProtocolStrategy implements ProtocolStrategy  {
 
     @Override
     public void onConnectFailure(ChannelHandlerContext inboundChannelContext, Channel outboundChannel, ProxyTunnelRequest request, Throwable cause) {
-
+        // Shadowsocks has no request-level error response; close the tunnel.
+        inboundChannelContext.close();
     }
 }

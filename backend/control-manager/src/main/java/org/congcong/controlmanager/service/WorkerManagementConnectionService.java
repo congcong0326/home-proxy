@@ -47,6 +47,7 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class WorkerManagementConnectionService {
     private static final long RECONCILE_INTERVAL_SECONDS = 3L;
+    private static final long HEARTBEAT_TIMEOUT_SECONDS = 15L;
 
     static {
         // Must be set before java.net.http initializes its SSL hostname verifier.
@@ -99,9 +100,18 @@ public class WorkerManagementConnectionService {
                 }
                 configuredWorkerIds.add(worker.getWorkerId());
                 Connection existing = connections.get(worker.getWorkerId());
-                if (existing != null && existing.matches(worker)) continue;
+                boolean stale = existing != null && existing.isStale();
+                if (existing != null && existing.matches(worker) && !stale
+                        && !existing.webSocket().isInputClosed() && !existing.webSocket().isOutputClosed()
+                        && !existing.listener().closed) continue;
                 if (existing != null && connections.remove(worker.getWorkerId(), existing)) {
-                    existing.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "worker connection changed");
+                    if (stale) {
+                        log.warn("worker WSS 超过 {} 秒未收到心跳, workerId={}, 重新连接",
+                                HEARTBEAT_TIMEOUT_SECONDS, worker.getWorkerId());
+                        existing.webSocket().abort();
+                    } else {
+                        existing.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "worker connection changed");
+                    }
                 }
                 connect(worker);
             }
@@ -145,7 +155,7 @@ public class WorkerManagementConnectionService {
                         log.warn("worker WSS 握手后连接已关闭, workerId={}, 将重试", workerId);
                         return;
                     }
-                    connections.put(workerId, new Connection(worker.getManagementUrl(), token, socket));
+                    connections.put(workerId, new Connection(worker.getManagementUrl(), token, socket, listener));
                     log.info("已连接 worker WSS 管理端, workerId={}", workerId);
                 });
     }
@@ -153,7 +163,10 @@ public class WorkerManagementConnectionService {
     /** Sends a direct management command to a connected worker. */
     public void sendWol(String workerId, org.congcong.common.dto.WolWakeTaskPayload payload) {
         Connection connection = connections.get(workerId);
-        if (connection == null) throw new IllegalStateException("worker 未连接: " + workerId);
+        if (connection == null || connection.isStale() || connection.listener().closed
+                || connection.webSocket().isInputClosed() || connection.webSocket().isOutputClosed()) {
+            throw new IllegalStateException("worker 未连接: " + workerId);
+        }
         try {
             WorkerManagementMessage message = new WorkerManagementMessage();
             message.setType(WorkerManagementMessageType.WOL_WAKE);
@@ -163,7 +176,8 @@ public class WorkerManagementConnectionService {
         } catch (Exception e) { throw new IllegalStateException("发送 WOL 到 worker 失败", e); }
     }
 
-    private void handleMessage(String expectedWorkerId, WebSocket socket, String json) {
+    private void handleMessage(WorkerWebSocketListener listener, WebSocket socket, String json) {
+        String expectedWorkerId = listener.workerId;
         try {
             WorkerManagementMessage request = objectMapper.readValue(json, WorkerManagementMessage.class);
             if (request.getType() != WorkerManagementMessageType.CONFIG_POLL
@@ -171,6 +185,7 @@ public class WorkerManagementConnectionService {
                 log.warn("收到无效 worker WSS 管理消息, workerId={}", expectedWorkerId);
                 return;
             }
+            listener.lastPollNanos = System.nanoTime();
             WorkerManagementHeartbeat heartbeat = request.getHeartbeat();
             if (heartbeat != null) {
                 workerControlService.recordManagementPoll(expectedWorkerId, toPollRequest(heartbeat));
@@ -256,15 +271,22 @@ public class WorkerManagementConnectionService {
         return value == null || value.isBlank();
     }
 
-    private record Connection(String managementUrl, String managementToken, WebSocket webSocket) {
+    private record Connection(String managementUrl, String managementToken, WebSocket webSocket,
+                              WorkerWebSocketListener listener) {
         boolean matches(ProxyWorker worker) {
             return managementUrl.equals(worker.getManagementUrl()) && managementToken.equals(worker.getManagementToken());
+        }
+
+        boolean isStale() {
+            return System.nanoTime() - listener.lastPollNanos
+                    >= TimeUnit.SECONDS.toNanos(HEARTBEAT_TIMEOUT_SECONDS);
         }
     }
 
     private final class WorkerWebSocketListener implements WebSocket.Listener {
         private final String workerId;
         private final StringBuilder pendingText = new StringBuilder();
+        private volatile long lastPollNanos = System.nanoTime();
         private volatile boolean closed;
 
         private WorkerWebSocketListener(String workerId) {
@@ -273,6 +295,7 @@ public class WorkerManagementConnectionService {
 
         @Override
         public void onOpen(WebSocket webSocket) {
+            lastPollNanos = System.nanoTime();
             webSocket.request(1);
         }
 
@@ -282,7 +305,7 @@ public class WorkerManagementConnectionService {
             if (last) {
                 String message = pendingText.toString();
                 pendingText.setLength(0);
-                handleMessage(workerId, webSocket, message);
+                handleMessage(this, webSocket, message);
             }
             webSocket.request(1);
             return CompletableFuture.completedFuture(null);

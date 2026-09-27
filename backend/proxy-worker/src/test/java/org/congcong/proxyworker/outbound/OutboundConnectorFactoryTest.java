@@ -7,6 +7,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.reality.VlessRealityOutboundConnector;
+import org.congcong.proxyworker.outbound.block.BlockOutboundConnector;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.junit.jupiter.api.Test;
 
@@ -35,5 +36,19 @@ class OutboundConnectorFactoryTest {
         request.setRouteConfig(route);
 
         assertInstanceOf(VlessRealityOutboundConnector.class, OutboundConnectorFactory.create(request));
+    }
+
+    @Test
+    void blocksMissingOrUnsupportedOutboundConfigurationInsteadOfFallingBackToDirect() {
+        RouteConfig route = new RouteConfig();
+        route.setPolicy(RoutePolicy.OUTBOUND_PROXY);
+        route.setOutboundProxyType(ProtocolType.NONE);
+        route.setOutboundProxyHost("proxy.example.com");
+        route.setOutboundProxyPort(1080);
+        ProxyTunnelRequest request = new ProxyTunnelRequest(
+                ProtocolType.SOCKS5, "target.example.com", 443, null, null, null);
+        request.setRouteConfig(route);
+
+        assertInstanceOf(BlockOutboundConnector.class, OutboundConnectorFactory.create(request));
     }
 }

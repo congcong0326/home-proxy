@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class RouterServiceTest {
 
@@ -64,6 +66,27 @@ class RouterServiceTest {
 
         ProxyTunnelRequest routed = channel.readInbound();
         assertSame(privateIp, routed.getRouteConfig());
+        assertNotNull(routed.getDestinationAddressBlocked());
+        channel.finishAndReleaseAll();
+    }
+
+    @Test
+    void destinationOverrideTrustsConfiguredInternalTarget() {
+        UserConfig user = user();
+        RouteConfig override = route(1L, "trusted-override", RoutePolicy.DESTINATION_OVERRIDE, domainRule("*"));
+        override.setOutboundProxyHost("192.168.10.145");
+        override.setOutboundProxyPort(22);
+        InboundConfig inbound = inbound(user, List.of(), override);
+        ProxyTunnelRequest request = new ProxyTunnelRequest(
+                ProtocolType.SOCKS5, "192.168.10.145", 22, user, inbound, null);
+
+        EmbeddedChannel channel = new EmbeddedChannel(RouterService.getInstance());
+        ChannelAttributes.setProxyContext(channel, new ProxyContext());
+        channel.writeInbound(request);
+
+        ProxyTunnelRequest routed = channel.readInbound();
+        assertSame(override, routed.getRouteConfig());
+        assertNull(routed.getDestinationAddressBlocked());
         channel.finishAndReleaseAll();
     }
 

@@ -9,6 +9,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import org.congcong.proxyworker.protocol.ProtocolStrategy;
+import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 public class Socks5ProtocolStrategy implements ProtocolStrategy {
@@ -44,9 +45,11 @@ public class Socks5ProtocolStrategy implements ProtocolStrategy {
     @Override
     public void onConnectFailure(ChannelHandlerContext inboundChannelContext, Channel outboundChannel, ProxyTunnelRequest request, Throwable cause) {
         DefaultSocks5CommandResponse fail = new DefaultSocks5CommandResponse(
-                Socks5CommandStatus.FAILURE,
+                cause instanceof PrivateDestinationBlockedException
+                        ? Socks5CommandStatus.FORBIDDEN
+                        : Socks5CommandStatus.FAILURE,
                 Socks5AddressType.IPv4
         );
-        inboundChannelContext.writeAndFlush(fail);
+        inboundChannelContext.writeAndFlush(fail).addListener(future -> inboundChannelContext.close());
     }
 }

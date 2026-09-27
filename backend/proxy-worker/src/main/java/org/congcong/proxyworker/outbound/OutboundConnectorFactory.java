@@ -23,29 +23,45 @@ public final class OutboundConnectorFactory {
 
     public static OutboundConnector create(ProxyTunnelRequest request) {
         RouteConfig route = request.getRouteConfig();
-        ProtocolType outboundType = route.getOutboundProxyType();
-        // 消费路由策略
-        // 要么是直接连接
-        if (route.getPolicy() == RoutePolicy.DIRECT) {
-            return new DirectOutboundConnector();
+        if (request.getDestinationAddressBlocked() != null) {
+            return new BlockOutboundConnector(request.getDestinationAddressBlocked());
         }
-        // 要么阻断
-        if (route.getPolicy() == RoutePolicy.BLOCK) {
+        if (route == null || route.getPolicy() == null) {
             return new BlockOutboundConnector();
         }
-        // todo要么代替上游DNS服务器，返回一个特定的answer，返回的值为 route.getOutboundProxyHost()，暂时支持的是 IPV4
-        if (route.getPolicy() == RoutePolicy.DNS_REWRITING) {
-            return new DnsRewriteOutboundConnector();
+        return switch (route.getPolicy()) {
+            case DIRECT -> new DirectOutboundConnector();
+            // An override is an explicit administrator-trusted destination;
+            // DirectOutboundConnector intentionally skips public validation
+            // unless the policy is DIRECT.
+            case DESTINATION_OVERRIDE -> hasOutboundEndpoint(route)
+                    ? new DirectOutboundConnector()
+                    : new BlockOutboundConnector();
+            case BLOCK -> new BlockOutboundConnector();
+            case DNS_REWRITING -> new DnsRewriteOutboundConnector();
+            case OUTBOUND_PROXY -> createOutboundProxyConnector(route);
+        };
+    }
+
+    private static OutboundConnector createOutboundProxyConnector(RouteConfig route) {
+        if (!hasOutboundEndpoint(route) || route.getOutboundProxyType() == null) {
+            return new BlockOutboundConnector();
         }
-        // 要么是连接到其他服务器
-        // 支持通过上游 HTTP CONNECT 代理（当前实现为未完成，返回失败）
-        if (outboundType == ProtocolType.HTTPS_CONNECT) return new HttpProxyOutboundConnector();
-        if (outboundType == ProtocolType.SOCKS5) return new Socks5OutboundConnector();
-        if (outboundType == ProtocolType.SHADOW_SOCKS) return new ShadowSocksOutboundConnector();
-        if (outboundType == ProtocolType.VLESS_REALITY) return new VlessRealityOutboundConnector();
-        if (outboundType == ProtocolType.DOT)  return new DOTOutboundConnector();
-        if (outboundType == ProtocolType.DNS_SERVER) return new DNSConnector();
-        // 默认回退为直连，避免中断
-        return new DirectOutboundConnector();
+        return switch (route.getOutboundProxyType()) {
+            case HTTPS_CONNECT -> new HttpProxyOutboundConnector();
+            case SOCKS5 -> new Socks5OutboundConnector();
+            case SHADOW_SOCKS -> new ShadowSocksOutboundConnector();
+            case VLESS_REALITY -> new VlessRealityOutboundConnector();
+            case DOT -> new DOTOutboundConnector();
+            case DNS_SERVER -> new DNSConnector();
+            default -> new BlockOutboundConnector();
+        };
+    }
+
+    private static boolean hasOutboundEndpoint(RouteConfig route) {
+        return route.getOutboundProxyHost() != null && !route.getOutboundProxyHost().isBlank()
+                && route.getOutboundProxyPort() != null
+                && route.getOutboundProxyPort() > 0
+                && route.getOutboundProxyPort() <= 65535;
     }
 }

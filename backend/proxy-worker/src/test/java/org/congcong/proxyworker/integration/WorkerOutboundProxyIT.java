@@ -33,7 +33,7 @@ class WorkerOutboundProxyIT {
             String response = Socks5TestClient.httpGet(workerPort,
                     ProxyWorkerIntegrationFixtures.USERNAME,
                     ProxyWorkerIntegrationFixtures.PASSWORD,
-                    "127.0.0.1",
+                    "localhost",
                     echo.port(),
                     "/xray-socks-out");
 
@@ -57,7 +57,7 @@ class WorkerOutboundProxyIT {
             String response = Socks5TestClient.httpGet(workerPort,
                     ProxyWorkerIntegrationFixtures.USERNAME,
                     ProxyWorkerIntegrationFixtures.PASSWORD,
-                    "127.0.0.1",
+                    "localhost",
                     echo.port(),
                     "/xray-http-out");
 
@@ -85,7 +85,7 @@ class WorkerOutboundProxyIT {
             String response = Socks5TestClient.httpGet(workerPort,
                     ProxyWorkerIntegrationFixtures.USERNAME,
                     ProxyWorkerIntegrationFixtures.PASSWORD,
-                    "127.0.0.1",
+                    "localhost",
                     echo.port(),
                     "/xray-ss-out");
 

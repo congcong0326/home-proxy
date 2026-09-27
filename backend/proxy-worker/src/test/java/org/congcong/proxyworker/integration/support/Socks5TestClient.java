@@ -99,6 +99,24 @@ public final class Socks5TestClient {
         }
     }
 
+    public static int connectFailureStatus(int proxyPort,
+                                           String username,
+                                           String password,
+                                           String targetHost,
+                                           int targetPort) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", proxyPort), (int) Duration.ofSeconds(5).toMillis());
+            socket.setSoTimeout((int) Duration.ofSeconds(5).toMillis());
+            InputStream in = socket.getInputStream();
+            OutputStream out = socket.getOutputStream();
+            negotiate(in, out, username, password);
+            writeConnectRequest(out, targetHost, targetPort);
+            return readN(in, 4)[1] & 0xff;
+        } catch (IOException e) {
+            throw new IllegalStateException("SOCKS5 status request failed", e);
+        }
+    }
+
     private static void negotiate(InputStream in, OutputStream out, String username, String password) throws IOException {
         if (username == null) {
             out.write(new byte[] {0x05, 0x01, 0x00});

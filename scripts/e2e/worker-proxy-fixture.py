@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Small dependency-free HTTP target, SOCKS5 upstream, and SOCKS5 client for E2E."""
+"""Small HTTP target and protocol clients used by the E2E scripts."""
 
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import http.server
+import ipaddress
+import os
 import select
 import socket
 import socketserver
@@ -180,6 +184,94 @@ def _socks_client(args: argparse.Namespace) -> None:
         sys.stdout.write(body.decode())
 
 
+def _socks_connect_status(args: argparse.Namespace) -> None:
+    with socket.create_connection((args.proxy_host, args.proxy_port), timeout=8) as sock:
+        sock.settimeout(8)
+        _socks_negotiate(sock, args.username, args.password)
+        _write_socks_connect(sock, args.target_host, args.target_port)
+        response = _read_exact(sock, 4)
+        if response[0] != 5:
+            raise OSError(f"unexpected SOCKS5 version: {response[0]}")
+        sys.stdout.write(str(response[1]))
+
+
+def _socks_negotiate(sock: socket.socket, username: str, password: str) -> None:
+    sock.sendall(b"\x05\x01\x02")
+    if _read_exact(sock, 2) != b"\x05\x02":
+        raise OSError("SOCKS5 password negotiation failed")
+    username_bytes = username.encode()
+    password_bytes = password.encode()
+    sock.sendall(b"\x01" + bytes([len(username_bytes)]) + username_bytes + bytes([len(password_bytes)]) + password_bytes)
+    if _read_exact(sock, 2) != b"\x01\x00":
+        raise OSError("SOCKS5 authentication failed")
+
+
+def _write_socks_connect(sock: socket.socket, host: str, port: int) -> None:
+    target = host.encode("idna")
+    if _is_ipv4(host):
+        request = b"\x05\x01\x00\x01" + socket.inet_aton(host)
+    else:
+        request = b"\x05\x01\x00\x03" + bytes([len(target)]) + target
+    sock.sendall(request + struct.pack("!H", port))
+
+
+def _http_connect_status(args: argparse.Namespace) -> None:
+    with socket.create_connection((args.proxy_host, args.proxy_port), timeout=8) as sock:
+        sock.settimeout(8)
+        credentials = f"{args.username}:{args.password}".encode()
+        auth = base64.b64encode(credentials).decode("ascii")
+        sock.sendall(
+            f"CONNECT {args.target_host}:{args.target_port} HTTP/1.1\r\n"
+            f"Host: {args.target_host}:{args.target_port}\r\n"
+            f"Proxy-Authorization: Basic {auth}\r\n"
+            "Connection: close\r\n\r\n".encode("ascii")
+        )
+        status_line = _read_exact(sock, 9)
+        if not status_line.startswith(b"HTTP/1."):
+            raise OSError(f"unexpected HTTP CONNECT response: {status_line!r}")
+        status = _read_exact(sock, 3)
+        if not status.isdigit():
+            raise OSError(f"invalid HTTP CONNECT status: {status!r}")
+        sys.stdout.write(status.decode("ascii"))
+
+
+def _shadowsocks_expect_close(args: argparse.Namespace) -> None:
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+    except ImportError as error:
+        raise OSError("Shadowsocks E2E requires the Python cryptography package") from error
+
+    address = b"\x01" + ipaddress.IPv4Address(args.target_host).packed + struct.pack("!H", args.target_port)
+    master_key = _evp_bytes_to_key(args.password.encode("utf-8"), 16)
+    salt = os.urandom(16)
+    subkey = HKDF(algorithm=hashes.SHA1(), length=16, salt=salt, info=b"ss-subkey").derive(master_key)
+    cipher = AESGCM(subkey)
+    encrypted = salt
+    encrypted += cipher.encrypt(_shadowsocks_nonce(0), struct.pack("!H", len(address)), None)
+    encrypted += cipher.encrypt(_shadowsocks_nonce(1), address, None)
+
+    with socket.create_connection((args.proxy_host, args.proxy_port), timeout=8) as sock:
+        sock.settimeout(8)
+        sock.sendall(encrypted)
+        if sock.recv(1):
+            raise OSError("Shadowsocks private-address request unexpectedly received tunnel data")
+
+
+def _evp_bytes_to_key(password: bytes, key_length: int) -> bytes:
+    material = b""
+    previous = b""
+    while len(material) < key_length:
+        previous = hashlib.md5(previous + password).digest()
+        material += previous
+    return material[:key_length]
+
+
+def _shadowsocks_nonce(counter: int) -> bytes:
+    return counter.to_bytes(8, byteorder="little") + b"\x00" * 4
+
+
 def _skip_bound_address(sock: socket.socket, atyp: int) -> None:
     if atyp == 1:
         _read_exact(sock, 6)
@@ -236,6 +328,32 @@ def _parser() -> argparse.ArgumentParser:
     client.add_argument("--username", required=True)
     client.add_argument("--password", required=True)
     client.set_defaults(run=_socks_client)
+
+    socks_status = subparsers.add_parser("socks-connect-status")
+    socks_status.add_argument("--proxy-host", default="127.0.0.1")
+    socks_status.add_argument("--proxy-port", type=int, required=True)
+    socks_status.add_argument("--target-host", required=True)
+    socks_status.add_argument("--target-port", type=int, required=True)
+    socks_status.add_argument("--username", required=True)
+    socks_status.add_argument("--password", required=True)
+    socks_status.set_defaults(run=_socks_connect_status)
+
+    http_status = subparsers.add_parser("http-connect-status")
+    http_status.add_argument("--proxy-host", default="127.0.0.1")
+    http_status.add_argument("--proxy-port", type=int, required=True)
+    http_status.add_argument("--target-host", required=True)
+    http_status.add_argument("--target-port", type=int, required=True)
+    http_status.add_argument("--username", required=True)
+    http_status.add_argument("--password", required=True)
+    http_status.set_defaults(run=_http_connect_status)
+
+    shadowsocks = subparsers.add_parser("shadowsocks-expect-close")
+    shadowsocks.add_argument("--proxy-host", default="127.0.0.1")
+    shadowsocks.add_argument("--proxy-port", type=int, required=True)
+    shadowsocks.add_argument("--target-host", required=True)
+    shadowsocks.add_argument("--target-port", type=int, required=True)
+    shadowsocks.add_argument("--password", required=True)
+    shadowsocks.set_defaults(run=_shadowsocks_expect_close)
     return parser
 
 

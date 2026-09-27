@@ -12,6 +12,7 @@ import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
 import org.congcong.proxyworker.protocol.RequestAppendHandler;
+import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 
 import java.net.InetSocketAddress;
 
@@ -48,6 +49,13 @@ public class ProxyTunnelRequest {
     @Getter
     @Setter
     private ProxyTimeContext proxyTimeContext;
+    /** Set when a client-supplied non-public IP literal is rejected before connect. */
+    @Getter
+    @Setter
+    private PrivateDestinationBlockedException destinationAddressBlocked;
+    @Getter
+    @Setter
+    private boolean connectSucceeded;
 
     public String getFinalTargetHost() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {

@@ -37,12 +37,12 @@ class ProxyContextRuntimeRefreshTest {
     void preservesEstablishedTcpTunnelAndUsesUpdatedSnapshotForNewConnections() throws Exception {
         System.setProperty("proxyworker.netty.epoll.enabled", "false");
         int workerPort = freePort();
-        InboundConfig first = socksInbound(workerPort, ProxyWorkerIntegrationFixtures.PASSWORD);
-        InboundConfig second = socksInbound(workerPort, "updated-password");
-        second.setName("socks-runtime-updated");
-        second.setSniffEnabled(false);
 
         try (TcpEchoServer echo = TcpEchoServer.start()) {
+            InboundConfig first = socksInbound(workerPort, ProxyWorkerIntegrationFixtures.PASSWORD, echo.port());
+            InboundConfig second = socksInbound(workerPort, "updated-password", echo.port());
+            second.setName("socks-runtime-updated");
+            second.setSniffEnabled(false);
             assertTrue(context.refresh(List.of(first)).success());
 
             try (Socket establishedClient = connect(workerPort)) {
@@ -70,8 +70,8 @@ class ProxyContextRuntimeRefreshTest {
     @Test
     void restartsListenerWhenPortChanges() throws Exception {
         System.setProperty("proxyworker.netty.epoll.enabled", "false");
-        InboundConfig first = socksInbound(freePort(), ProxyWorkerIntegrationFixtures.PASSWORD);
-        InboundConfig second = socksInbound(freePort(), ProxyWorkerIntegrationFixtures.PASSWORD);
+        InboundConfig first = socksInbound(freePort(), ProxyWorkerIntegrationFixtures.PASSWORD, 1);
+        InboundConfig second = socksInbound(freePort(), ProxyWorkerIntegrationFixtures.PASSWORD, 1);
 
         assertTrue(context.refresh(List.of(first)).success());
         AbstractProxyServer originalServer = context.getServerForTest(first.getId());
@@ -80,11 +80,11 @@ class ProxyContextRuntimeRefreshTest {
         assertNotSame(originalServer, context.getServerForTest(first.getId()));
     }
 
-    private InboundConfig socksInbound(int port, String password) {
+    private InboundConfig socksInbound(int port, String password, int overridePort) {
         InboundConfig inbound = ProxyWorkerIntegrationFixtures.socksInbound(
                 port,
                 List.of(),
-                ProxyWorkerIntegrationFixtures.directRoute());
+                ProxyWorkerIntegrationFixtures.destinationOverrideRoute("127.0.0.1", overridePort));
         UserConfig user = ProxyWorkerIntegrationFixtures.user();
         user.setCredential(password);
         inbound.setUsersMap(Map.of(user.getUsername(), user));

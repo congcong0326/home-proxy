@@ -10,6 +10,7 @@ import org.congcong.proxyworker.protocol.dns.DnsRewritingProtocolStrategy;
 import org.congcong.proxyworker.protocol.shadowsock.ShadowSocksProtocolStrategy;
 import org.congcong.proxyworker.protocol.socks.Socks5ProtocolStrategy;
 import org.congcong.proxyworker.protocol.http.HttpsConnectProtocolStrategy;
+import org.congcong.proxyworker.protocol.tlssni.TlsSniProtocolStrategy;
 import org.congcong.proxyworker.protocol.transparent.TransparentProtocolStrategy;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -30,8 +31,7 @@ public class ProtocolStrategyRegistry {
         STRATEGIES.put(ProtocolType.HTTPS_CONNECT, new HttpsConnectProtocolStrategy());
         STRATEGIES.put(ProtocolType.SHADOW_SOCKS, new ShadowSocksProtocolStrategy());
         STRATEGIES.put(ProtocolType.TP_PROXY, new TransparentProtocolStrategy());
-        // TLS SNI is a raw TCP tunnel after the ClientHello is sniffed.
-        STRATEGIES.put(ProtocolType.TLS_SNI_TCP, new TransparentProtocolStrategy());
+        STRATEGIES.put(ProtocolType.TLS_SNI_TCP, new TlsSniProtocolStrategy());
     }
 
     private ProtocolStrategyRegistry() {}

@@ -103,7 +103,7 @@ public final class WorkerManagementWebSocketServer {
                     });
             serverChannel = bootstrap.bind(config.getManagementPort()).syncUninterruptibly().channel();
             long interval = Math.max(500L, config.getManagementPollIntervalMs());
-            pollScheduler.scheduleWithFixedDelay(this::sendConfigPoll, 0, interval, TimeUnit.MILLISECONDS);
+            pollScheduler.scheduleWithFixedDelay(this::safeSendConfigPoll, 0, interval, TimeUnit.MILLISECONDS);
             log.info("Worker WSS 管理端已启动, port={}, path={}", config.getManagementPort(), PATH);
         } catch (RuntimeException e) {
             stop();
@@ -139,7 +139,15 @@ public final class WorkerManagementWebSocketServer {
         Channel previous = controllerChannel.getAndSet(channel);
         if (previous != null && previous != channel) previous.close();
         log.info("Controller 已连接到 worker WSS 管理端, remote={}", channel.remoteAddress());
-        sendConfigPoll();
+        safeSendConfigPoll();
+    }
+
+    private void safeSendConfigPoll() {
+        try {
+            sendConfigPoll();
+        } catch (Throwable error) {
+            log.error("发送 worker WSS 心跳失败，下一周期继续重试", error);
+        }
     }
 
     private void sendConfigPoll() {
@@ -228,7 +236,9 @@ public final class WorkerManagementWebSocketServer {
 
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
-            controllerChannel.compareAndSet(ctx.channel(), null);
+            if (controllerChannel.compareAndSet(ctx.channel(), null)) {
+                log.info("Controller WSS 管理连接已断开, remote={}", ctx.channel().remoteAddress());
+            }
             super.channelInactive(ctx);
         }
 
