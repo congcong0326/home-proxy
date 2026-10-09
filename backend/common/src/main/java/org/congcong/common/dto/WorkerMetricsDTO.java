@@ -12,6 +12,7 @@ public class WorkerMetricsDTO {
     private Long heapMaxBytes;
     private Integer runningInboundCount;
     private Integer activeConnectionCount;
+    private org.congcong.common.telemetry.EstablishedConnectionsV1 establishedConnectionsV1;
     private Long fakeIpAllocations;
     private Long fakeIpEvictions;
     private Long fakeIpReverseMisses;

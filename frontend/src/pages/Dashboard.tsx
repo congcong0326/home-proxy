@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import TrafficOverview from './TrafficOverview';
+import { TrafficOverview } from './TrafficOverview';
 import WolManagement from './WolManagement';
 import { MobileStatusPanel } from '../components/MobileStatusPanel';
 import './Dashboard.css';

@@ -35,7 +35,8 @@ import java.util.stream.Collectors;
 public class ProxyWorkerService {
     private static final String TOKEN_PREFIX = "hpw_";
     private static final long ONLINE_THRESHOLD_SECONDS = 10L;
-    private static final ObjectMapper METRICS_MAPPER = new ObjectMapper();
+    private static final ObjectMapper METRICS_MAPPER = new ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     private final ProxyWorkerRepository proxyWorkerRepository;
     private final WorkerStatusRepository workerStatusRepository;

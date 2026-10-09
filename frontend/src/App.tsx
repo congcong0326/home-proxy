@@ -19,7 +19,7 @@ import InboundManagement from './pages/InboundManagement';
 import LogAudit from './pages/LogAudit';
 import AggregatedAnalysis from './pages/AggregatedAnalysis';
 import Dashboard from './pages/Dashboard';
-import TrafficOverview from './pages/TrafficOverview';
+import { TrafficOverview } from './pages/TrafficOverview';
 import WolManagement from './pages/WolManagement';
 import DiskMonitor from './pages/DiskMonitor';
 import MailGateway from './pages/MailGateway';

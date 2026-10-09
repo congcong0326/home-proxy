@@ -64,6 +64,10 @@ public class WorkerMetricsCollector {
         metrics.setRealDnsCacheHitsByRoute(dns.cacheHitsByRoute());
         metrics.setRejectedPoolAddresses(ProxySafetyCounters.rejectedPoolAddresses());
         metrics.setRejectedDestinationAddresses(ProxySafetyCounters.rejectedDestinationAddresses());
+        if (org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance().enabled()) {
+            metrics.setEstablishedConnectionsV1(org.congcong.proxyworker.telemetry.EstablishedConnectionRegistry
+                    .getInstance().snapshot(org.congcong.proxyworker.telemetry.TelemetryPublisher.INSTANCE_ID));
+        }
         return metrics;
     }
 

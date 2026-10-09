@@ -73,6 +73,19 @@ class ProxyWorkerServiceTest {
     }
 
     @Test
+    void workerListReadsEstablishedConnectionSnapshotWithInstant() {
+        WorkerStatus snapshot = status("edge-01", 2);
+        snapshot.setMetricsJson("{\"establishedConnectionsV1\":{\"workerInstanceId\":\"instance\","
+                + "\"sampledAt\":\"2026-10-09T10:00:00Z\",\"byCategory\":{\"EXTERNAL\":2},"
+                + "\"groups\":[],\"groupsTruncated\":false}}");
+        when(proxyWorkerRepository.findAll()).thenReturn(List.of(worker("edge-01", "Edge")));
+        when(workerStatusRepository.findAllById(List.of("edge-01"))).thenReturn(List.of(snapshot));
+        var metric = service.list().get(0).getStatus().getMetrics().getEstablishedConnectionsV1();
+        assertEquals(java.time.Instant.parse("2026-10-09T10:00:00Z"), metric.sampledAt());
+        assertEquals(2L, metric.byCategory().get(org.congcong.common.telemetry.TrafficCategory.EXTERNAL));
+    }
+
+    @Test
     void createsControllerInitiatedManagementConnectionWithoutLegacyToken() {
         WorkerCreateRequest request = new WorkerCreateRequest();
         request.setWorkerId("edge-01");

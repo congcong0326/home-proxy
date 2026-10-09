@@ -63,6 +63,11 @@ public class TelemetryStore implements ApplicationRunner {
         }
     }
 
+    public void requireQueryAvailable() {
+        if (!properties.isQueryEnabled()) throw new IllegalStateException("QUERY_DISABLED");
+        initialize();
+    }
+
     private synchronized void initialize() {
         if (ready) return;
         client.execute("CREATE DATABASE IF NOT EXISTS telemetry");

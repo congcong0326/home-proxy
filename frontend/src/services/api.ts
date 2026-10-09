@@ -1,3 +1,4 @@
+import { OverviewData, OverviewQuery, LiveConnections } from '../types/overview';
 import { TelemetryType, TelemetryQuery, TelemetryRecordV1, TelemetryStatusV1 } from '../types/observability';
 import {
   LoginRequest,
@@ -1058,6 +1059,18 @@ class ApiService {
   // Independent stage A API; existing log/statistics methods retain their data source.
   async getTelemetryStatus(workerId?: string): Promise<TelemetryStatusV1> {
     return this.request<TelemetryStatusV1>(`/observability/v1/status${workerId ? `?workerId=${encodeURIComponent(workerId)}` : ''}`);
+  }
+
+  async getObservabilityOverview(query: OverviewQuery): Promise<OverviewData> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
+    return this.request<OverviewData>(`/observability/v1/overview?${params}`);
+  }
+
+  async getObservabilityLive(query: OverviewQuery): Promise<LiveConnections> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
+    return this.request<LiveConnections>(`/observability/v1/overview/live?${params}`);
   }
 
   async queryTelemetry<T extends TelemetryRecordV1>(type: TelemetryType, query: TelemetryQuery): Promise<T[]> {

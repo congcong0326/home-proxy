@@ -21,7 +21,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-fake-ip-transparent e2e-fake-ip-persistent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup e2e-observability-stage-a e2e-observability-stage-a-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-fake-ip-transparent e2e-fake-ip-persistent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup e2e-observability-stage-a e2e-observability-stage-a-setup e2e-observability-overview e2e-observability-overview-live frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -76,6 +76,14 @@ e2e-observability-stage-a:
 
 e2e-observability-stage-a-setup:
 	python3 scripts/e2e/gateway-observability-stage-a-e2e.py --provision
+
+# Read-only aggregate comparison against retained V1 facts.
+e2e-observability-overview:
+	python3 scripts/e2e/gateway-observability-overview-e2e.py
+
+# Holds real fixture tunnels; keeps resulting logs and releases only temporary sockets/addresses.
+e2e-observability-overview-live:
+	python3 scripts/e2e/gateway-observability-overview-live-e2e.py
 
 frontend-install:
 	$(NPM) $(NPM_ARGS) --prefix $(FRONTEND_DIR) ci

@@ -149,3 +149,10 @@
 - `control-manager/telemetry`：独立 `telemetry.*_v1` 初始化、幂等 ingest/query、来源 GeoIP 与分析契约、`/api/observability/v1`。
 - `frontend/src/types/observability.ts` 与 `api.ts`：独立类型/API，现有页面保持旧查询。
 - [阶段 A 实施与保留数据 E2E](testing/gateway-observability-stage-a.md)：开关、协议、查询、兼容、回退与验收。
+
+## 流量概览增强预览（C2）
+
+- `frontend/src/pages/TrafficOverview.tsx`、`TrafficOverview.css`、`types/overview.ts`：默认外网；四个 ECharts 面板、来源／结果筛选、当前并发与来源排行；`LegacyTrafficOverview.tsx` 保留原页面作为回退入口，Dashboard 嵌入同一新版组件。
+- `control-manager/telemetry/OverviewController`、`OverviewQuery`、`OverviewService`、`ConcurrencyTimeline`：`/api/observability/v1/overview` 及 `/live`；从唯一 sessions／DNS／认证事实直接聚合，历史并发按相交连接区间扫描，不受审计分页限制。
+- `common/telemetry/EstablishedConnectionsV1`、`proxy-worker/telemetry/EstablishedConnectionRegistry`、`service/WorkerMetricsCollector`：已建立业务连接的分类／来源快照，经现有心跳 `metrics_json` 上报；不增加配置或日志表。
+- [实施、截图与验证](testing/gateway-observability-overview.md)：历史与当前口径、内外网筛选边界、空值与结果分组、真实连接 E2E、回退步骤。

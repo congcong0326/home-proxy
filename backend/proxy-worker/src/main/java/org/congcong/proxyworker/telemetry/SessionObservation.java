@@ -34,9 +34,10 @@ public final class SessionObservation {
     public SessionLogV1 summary() { return summary; }
     public void beginConnect() { connectNanos = System.nanoTime(); }
     public void connected() {
-        if (finished) return;
+        if (finished || closing) return;
         summary.setConnectOutcome(ConnectOutcome.CONNECTED);
         summary.setConnectedAt(Instant.now());
+        EstablishedConnectionRegistry.getInstance().connected(summary);
         summary.setChannelSetupDurationUs(Math.max(0, (System.nanoTime() - connectNanos) / 1000));
         if (summary.getErrorCode() == null) summary.setSessionOutcome(SessionOutcome.NORMAL_END);
         connectResult();
@@ -102,6 +103,7 @@ public final class SessionObservation {
     public void close() {
         if (closing || finished) return;
         closing = true;
+        EstablishedConnectionRegistry.getInstance().closed(summary.getConnectionId());
         finishIfReady();
     }
     private void finishIfReady() {
