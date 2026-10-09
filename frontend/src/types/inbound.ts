@@ -17,6 +17,7 @@ export interface InboundConfigDTO {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
+  fakeIpEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
   inboundRouteBindings?: InboundRouteBinding[];
   status: number;
@@ -37,6 +38,7 @@ export interface InboundConfigCreateRequest {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
+  fakeIpEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
   inboundRouteBindings: InboundRouteBinding[];
   status: number;
@@ -53,6 +55,7 @@ export interface InboundConfigUpdateRequest {
   port: number;
   tlsEnabled: boolean;
   sniffEnabled: boolean;
+  fakeIpEnabled: boolean;
   ssMethod?: ProxyEncAlgo;
   inboundRouteBindings: InboundRouteBinding[];
   status: number;

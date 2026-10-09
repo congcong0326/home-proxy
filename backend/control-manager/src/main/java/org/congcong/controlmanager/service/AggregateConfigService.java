@@ -34,11 +34,13 @@ public class AggregateConfigService {
     private final RouteRepository routeRepository;
     private final WorkerConfigDependencyResolver dependencyResolver;
     private final CanonicalConfigHasher canonicalConfigHasher;
+    private final FakeIpConfigValidator fakeIpConfigValidator;
     private final org.congcong.controlmanager.repository.ProxyWorkerRepository proxyWorkerRepository;
 
     /** Builds the minimal runtime configuration for exactly one authenticated worker. */
     public AggregateConfigResponse getAggregateConfig(String workerId) {
         List<InboundConfig> inboundEntities = inboundConfigRepository.findByWorkerIdAndStatusOrderByIdAsc(workerId, 1);
+        fakeIpConfigValidator.validate(inboundEntities);
         List<InboundConfigDTO> inbounds = inboundConfigService.getEnabledInboundConfigsForWorker(workerId);
         Set<Long> userIds = dependencyResolver.resolveUserIds(inboundEntities);
         Set<Long> routeIds = dependencyResolver.resolveRouteIds(inboundEntities);

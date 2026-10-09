@@ -20,5 +20,6 @@ public class WorkerStatusSnapshot {
     private Long heapMaxBytes;
     private Integer runningInboundCount;
     private Integer activeConnectionCount;
+    private WorkerMetricsDTO metrics;
     private Boolean online;
 }

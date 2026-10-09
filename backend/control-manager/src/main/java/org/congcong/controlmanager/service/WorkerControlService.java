@@ -131,6 +131,7 @@ public class WorkerControlService {
         status.setAppliedAt(safeRequest.getAppliedAt());
         WorkerMetricsDTO metrics = safeRequest.getMetrics();
         if (metrics != null) {
+            status.setMetricsJson(serializeMetrics(metrics));
             status.setUptimeSeconds(metrics.getUptimeSeconds());
             status.setHeapUsedBytes(metrics.getHeapUsedBytes());
             status.setHeapMaxBytes(metrics.getHeapMaxBytes());
@@ -154,6 +155,7 @@ public class WorkerControlService {
 
         WorkerMetricsDTO metrics = request.getMetrics();
         if (metrics != null) {
+            status.setMetricsJson(serializeMetrics(metrics));
             status.setUptimeSeconds(metrics.getUptimeSeconds());
             status.setHeapUsedBytes(metrics.getHeapUsedBytes());
             status.setHeapMaxBytes(metrics.getHeapMaxBytes());
@@ -213,6 +215,14 @@ public class WorkerControlService {
                 status.getActiveConnectionCount(),
                 online
         );
+    }
+
+    private String serializeMetrics(WorkerMetricsDTO metrics) {
+        try {
+            return objectMapper.writeValueAsString(metrics);
+        } catch (JsonProcessingException failure) {
+            throw new IllegalArgumentException("worker metrics cannot be serialized", failure);
+        }
     }
 
     private String firstNonBlank(String primary, String fallback) {

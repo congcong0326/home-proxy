@@ -109,6 +109,7 @@ public class ProxyWorkerApplication {
                     }
                     // 拷贝了部分字段
                     InboundConfig inboundConfig = mapper.convertValue(inbound, InboundConfig.class);
+                    inboundConfig.setConfigVersion(newConfig.getConfigHash());
 
                     // 关键的几个高效查询的字段
                     Map<String, UserConfig> userNameMap = new HashMap<>();

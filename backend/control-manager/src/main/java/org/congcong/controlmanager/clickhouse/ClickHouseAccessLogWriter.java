@@ -7,6 +7,7 @@ import org.congcong.common.util.geo.GeoIPUtil;
 import org.congcong.common.util.geo.GeoLocation;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.scheduling.annotation.Scheduled;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -79,6 +80,11 @@ public class ClickHouseAccessLogWriter {
         return false;
     }
 
+    @Scheduled(fixedDelayString = "${logs.clickhouse.flushCheckMs:5000}")
+    public void flushDue() {
+        if (shouldFlush(System.currentTimeMillis())) flush();
+    }
+
     private int flush() {
         if (!flushLock.tryLock()) return 0;
         long startTime = System.currentTimeMillis();
@@ -96,13 +102,13 @@ public class ClickHouseAccessLogWriter {
             String sql = "INSERT INTO default.access_log (" +
                     "ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, " +
                     "client_ip, client_port, src_geo_country, src_geo_city, " +
-                    "original_target_host, original_target_ip, original_target_port, " +
+                    "original_target_host, original_target_ip, final_connection_ip, logical_target_source, dns_route_id, config_version, original_target_port, " +
                     "rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, " +
                     "inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, " +
                     "bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, " +
                     "request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms" +
                     ") VALUES (" +
-                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
+                    "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?" +
                     ")";
             client.batchExecute(sql, params);
             return params.size();
@@ -113,7 +119,7 @@ public class ClickHouseAccessLogWriter {
     }
 
     private List<Object> toParams(AccessLog l) {
-        List<Object> p = new ArrayList<>(32);
+        List<Object> p = new ArrayList<>(36);
         p.add(toTimestamp(l.getTs()));
         p.add(l.getRequestId());
         p.add(nullToEmpty(l.getWorkerId()));
@@ -127,6 +133,10 @@ public class ClickHouseAccessLogWriter {
         p.add(nullToEmpty(l.getSrcGeoCity()));
         p.add(nullToEmpty(l.getOriginalTargetHost()));
         p.add(nullToEmpty(l.getOriginalTargetIP()));
+        p.add(nullToEmpty(l.getFinalConnectionIp()));
+        p.add(nullToEmpty(l.getLogicalTargetSource()));
+        p.add(nullToZero(l.getDnsRouteId()));
+        p.add(nullToEmpty(l.getConfigVersion()));
         p.add(nullToZero(l.getOriginalTargetPort()));
         p.add(nullToEmpty(l.getRewriteTargetHost()));
         p.add(nullToZero(l.getRewriteTargetPort()));

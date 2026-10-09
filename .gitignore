@@ -35,7 +35,7 @@ Thumbs.db
 /.superpowers/
 
 # Local reference checkouts
-.refenrence/
+/.reference/
 
 # Compiled classes
 **/*.class
@@ -63,6 +63,7 @@ mvnw.cmd
 # /dist/
 # **/*.zip
 # **/*.tar.gz
+/home-proxy-images.tar
 # Spring Boot static build artifacts
 /backend/control-manager/src/main/resources/static/
 /backend/proxy-worker/target/it-xray/

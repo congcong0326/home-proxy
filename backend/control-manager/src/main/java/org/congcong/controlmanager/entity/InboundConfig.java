@@ -40,6 +40,9 @@ public class InboundConfig {
     @Column(name = "sniff_enabled", nullable = false)
     private Boolean sniffEnabled = false;
 
+    @Column(name = "fake_ip_enabled", nullable = false)
+    private Boolean fakeIpEnabled = false;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "ss_method", length = 64)
     private ProxyEncAlgo ssMethod;

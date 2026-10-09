@@ -1,8 +1,10 @@
 package org.congcong.controlmanager.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.ProxyWorkerDTO;
 import org.congcong.common.dto.WorkerStatusSnapshot;
+import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.common.dto.WorkerTokenResponse;
 import org.congcong.controlmanager.dto.WorkerCreateRequest;
 import org.congcong.controlmanager.dto.WorkerUpdateRequest;
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 public class ProxyWorkerService {
     private static final String TOKEN_PREFIX = "hpw_";
     private static final long ONLINE_THRESHOLD_SECONDS = 10L;
+    private static final ObjectMapper METRICS_MAPPER = new ObjectMapper();
 
     private final ProxyWorkerRepository proxyWorkerRepository;
     private final WorkerStatusRepository workerStatusRepository;
@@ -193,6 +196,13 @@ public class ProxyWorkerService {
         dto.setHeapMaxBytes(status.getHeapMaxBytes());
         dto.setRunningInboundCount(status.getRunningInboundCount());
         dto.setActiveConnectionCount(status.getActiveConnectionCount());
+        if (status.getMetricsJson() != null) {
+            try {
+                dto.setMetrics(METRICS_MAPPER.readValue(status.getMetricsJson(), WorkerMetricsDTO.class));
+            } catch (com.fasterxml.jackson.core.JsonProcessingException invalidMetrics) {
+                throw new IllegalStateException("stored worker metrics are invalid", invalidMetrics);
+            }
+        }
         dto.setOnline(status.getLastSeenAt() != null && status.getLastSeenAt().isAfter(LocalDateTime.now().minusSeconds(ONLINE_THRESHOLD_SECONDS)));
         return dto;
     }

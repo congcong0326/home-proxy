@@ -9,6 +9,7 @@ import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
+import org.congcong.proxyworker.outbound.OutboundEndpointResolver;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 import java.util.Base64;
@@ -38,7 +39,8 @@ public class HttpProxyOutboundConnector extends AbstractOutboundConnector {
                 });
 
         // 连接上游 HTTP 代理（使用路由配置中的最终地址）
-        return b.connect(request.getFinalTargetHost(), request.getFinalTargetPort());
+        return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
+                request.getFinalTargetHost(), request.getFinalTargetPort(), b::connect);
     }
 
     private static class HttpProxyClientHandler extends SimpleChannelInboundHandler<Object> {

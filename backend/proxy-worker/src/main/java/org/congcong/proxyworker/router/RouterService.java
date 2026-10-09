@@ -12,7 +12,9 @@ import org.congcong.common.util.geo.*;
 import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
+import org.congcong.proxyworker.dns.DnsRouteSelector;
 import org.congcong.proxyworker.context.ProxyContextResolver;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.security.DestinationAddressPolicy;
@@ -42,6 +44,12 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
         ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
         InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
+        proxyContext.setConfigVersion(inboundConfig.getConfigVersion());
+        proxyContext.setLogicalTargetSource(proxyTunnelRequest.getLogicalTargetSource().name());
+        if (proxyTunnelRequest.getProtocolType() != ProtocolType.DNS_SERVER) {
+            proxyTunnelRequest.setDnsInboundConfig(
+                    channelHandlerContext.channel().attr(ChannelAttributes.DNS_INBOUND_CONFIG).get());
+        }
         // TLS SNI is an unauthenticated inbound: its routing identity is always
         // the anonymous user configured on the inbound. Keep this decision at
         // the routing boundary so bindings for that user are consistently used.
@@ -49,10 +57,16 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                 && inboundConfig.getAnonymousUser() != null
                 ? inboundConfig.getAnonymousUser().getId()
                 : proxyTunnelRequest.getUser() == null ? null : proxyTunnelRequest.getUser().getId();
-        List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
         String targetHost = proxyTunnelRequest.getTargetHost();
-        boolean hostIsIp = isIp(targetHost);
-        RouteConfig matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
+        RouteConfig matchedRoute;
+        if (proxyTunnelRequest.getProtocolType() == ProtocolType.DNS_SERVER) {
+            String clientIp = proxyContext.getClientIp();
+            matchedRoute = DnsRouteSelector.select(inboundConfig, clientIp, targetHost).route();
+        } else {
+            List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
+            boolean hostIsIp = isIp(targetHost);
+            matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
+        }
         if (matchedRoute == null) {
             matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
             if (matchedRoute == null) {

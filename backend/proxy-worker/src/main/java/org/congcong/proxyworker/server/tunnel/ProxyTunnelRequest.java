@@ -27,6 +27,12 @@ public class ProxyTunnelRequest {
     @Setter
     private String targetIp;
     @Setter
+    private String originalTargetIp;
+    @Setter
+    private String resolvedTargetIp;
+    @Setter
+    private LogicalTargetSource logicalTargetSource = LogicalTargetSource.INBOUND_REQUEST;
+    @Setter
     private RouteConfig routeConfig;
     @Setter
     private String country;
@@ -36,6 +42,9 @@ public class ProxyTunnelRequest {
     private boolean isLocationResolveSuccess;
     private final UserConfig user;
     private final InboundConfig inboundConfig;
+    private InboundConfig dnsInboundConfig;
+    private boolean dnsInboundConfigCaptured;
+
     @Setter
     private ByteBuf initialPayload; // 可选首包载荷（某些客户端可能会在握手后立即发送）
     @Getter
@@ -57,6 +66,12 @@ public class ProxyTunnelRequest {
     @Setter
     private boolean connectSucceeded;
 
+    public void setDnsInboundConfig(InboundConfig dnsInboundConfig) {
+        this.dnsInboundConfig = dnsInboundConfig;
+        // Captured absence must not fall back to a later global DNS snapshot.
+        this.dnsInboundConfigCaptured = true;
+    }
+
     public String getFinalTargetHost() {
         if (routeConfig != null && routeConfig.getPolicy() != RoutePolicy.DIRECT) {
             if (routeConfig.getOutboundProxyHost() != null) {
@@ -64,6 +79,7 @@ public class ProxyTunnelRequest {
             }
         }
         // targetHost;
+        if (resolvedTargetIp != null) return resolvedTargetIp;
         return targetIp == null ? targetHost : targetIp;
     }
     public int getFinalTargetPort() {
@@ -99,6 +115,7 @@ public class ProxyTunnelRequest {
         this.protocolType = protocolType;
         this.targetHost = targetHost;
         this.targetIp = targetIp;
+        this.originalTargetIp = targetIp;
         this.targetPort = targetPort;
         this.user = user;
         this.inboundConfig = inboundConfig;

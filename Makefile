@@ -21,7 +21,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-fake-ip-transparent e2e-fake-ip-persistent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -47,6 +47,14 @@ worker-it:
 # It builds isolated E2E images by default; set E2E_BUILD=0 to reuse them.
 e2e-transparent:
 	bash scripts/e2e/transparent-proxy-e2e.sh
+
+# Includes real DNS fixtures, cache/failure probes, audit and worker restart checks.
+e2e-fake-ip-transparent: e2e-transparent
+
+# Keeps local DNS/origin services, namespace and controller fixtures for log inspection.
+e2e-fake-ip-persistent:
+	python3 scripts/e2e/fake-ip-persistent-e2e.py setup
+	python3 scripts/e2e/fake-ip-persistent-e2e.py test
 
 # Starts an isolated control-manager and worker to verify DIRECT address safety
 # across SOCKS5, HTTP CONNECT, Shadowsocks, and TLS SNI TCP.

@@ -18,13 +18,16 @@ public abstract class AbstractProxyServer {
     protected volatile Channel serverChannel;
     protected volatile ChannelFuture bindFuture;
     private final AtomicBoolean running = new AtomicBoolean(false);
-    private final AtomicReference<InboundConfig> inboundConfig = new AtomicReference<>();
+    private final AtomicReference<RuntimeConfigSnapshot> runtimeConfig =
+            new AtomicReference<>(new RuntimeConfigSnapshot(null, null));
+
+    public record RuntimeConfigSnapshot(InboundConfig inboundConfig, InboundConfig dnsInboundConfig) {}
 
     protected AbstractProxyServer() {
     }
 
     protected AbstractProxyServer(InboundConfig inboundConfig) {
-        this.inboundConfig.set(inboundConfig);
+        runtimeConfig.set(new RuntimeConfigSnapshot(inboundConfig, null));
     }
 
     public abstract int getPort();
@@ -32,7 +35,11 @@ public abstract class AbstractProxyServer {
     public abstract String getServerName();
 
     public final InboundConfig getInboundConfig() {
-        return inboundConfig.get();
+        return runtimeConfig.get().inboundConfig();
+    }
+
+    public final RuntimeConfigSnapshot getRuntimeConfigSnapshot() {
+        return runtimeConfig.get();
     }
 
     /**
@@ -43,7 +50,14 @@ public abstract class AbstractProxyServer {
         if (newConfig == null) {
             throw new IllegalArgumentException("Inbound config is required");
         }
-        inboundConfig.set(newConfig);
+        runtimeConfig.updateAndGet(current -> new RuntimeConfigSnapshot(newConfig, current.dnsInboundConfig()));
+    }
+
+    public final void updateRuntimeConfig(InboundConfig newConfig, InboundConfig dnsConfig) {
+        if (newConfig == null) {
+            throw new IllegalArgumentException("Inbound config is required");
+        }
+        runtimeConfig.set(new RuntimeConfigSnapshot(newConfig, dnsConfig));
     }
 
     protected abstract void doStart() throws InterruptedException;
@@ -86,7 +100,8 @@ public abstract class AbstractProxyServer {
     }
 
     public boolean isRunning() {
-        return running.get();
+        Channel listener = serverChannel;
+        return running.get() && listener != null && listener.isActive();
     }
 
 }

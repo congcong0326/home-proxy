@@ -6,6 +6,7 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
+import org.congcong.proxyworker.server.tunnel.LogicalTargetSource;
 
 import java.net.InetSocketAddress;
 import java.util.HashSet;
@@ -64,6 +65,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
                 default:
                     // 没确认是 HTTP/HTTPS，直接走 4 层转发
                     proxyContext.setOriginalTargetHost(proxyContext.getOriginalTargetIP());
+                    ctx.channel().attr(ChannelAttributes.LOGICAL_TARGET_SOURCE).set(LogicalTargetSource.ORIGINAL_IP);
                     finishAndForward(ctx, in, out);
                     return;
             }
@@ -72,14 +74,14 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
         // 2. 已经确认是 HTTP 或 HTTPS，需要等待“足够多的字节”供解析
         switch (decidedProtocol) {
             case HTTPS:
-                if (!httpsSniffer.trySniff(in, proxyContext)) {
+                if (!httpsSniffer.trySniff(ctx, in, proxyContext)) {
                     // 数据还不够，继续等
                     return;
                 }
                 break;
 
             case HTTP:
-                if (!httpSniffer.trySniff(in, proxyContext)) {
+                if (!httpSniffer.trySniff(ctx, in, proxyContext)) {
                     // 数据还不够，继续等
                     return;
                 }
@@ -94,6 +96,7 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
         String originalTargetHost = proxyContext.getOriginalTargetHost();
         if (specialHost.contains(originalTargetHost)) {
             proxyContext.setOriginalTargetHost(proxyContext.getOriginalTargetIP());
+            ctx.channel().attr(ChannelAttributes.LOGICAL_TARGET_SOURCE).set(LogicalTargetSource.ORIGINAL_IP);
         }
 
         // 3. 能走到这里说明已经 sniff 完成（host 已经写进 ProxyContext）
@@ -349,13 +352,14 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
         /**
          * 返回 true 代表 sniff 完成（已写入 host），false 代表数据还不够，继续等
          */
-        boolean trySniff(ByteBuf in, ProxyContext proxyContext) {
+        boolean trySniff(ChannelHandlerContext ctx, ByteBuf in, ProxyContext proxyContext) {
             if (!hasCompleteTlsRecord(in)) {
                 return false;
             }
             String sniHost = extractSniHostFromClientHello(in);
             log.debug("https sniffer try host:{} ", sniHost);
             proxyContext.setOriginalTargetHost(sniHost);
+            if (sniHost != null) ctx.channel().attr(ChannelAttributes.LOGICAL_TARGET_SOURCE).set(LogicalTargetSource.TLS_SNI);
             return true;
         }
     }
@@ -365,15 +369,15 @@ public class ProtocolDetectHandler extends ByteToMessageDecoder {
         /**
          * 返回 true 代表 sniff 完成（已写入 host），false 代表数据还不够，继续等
          */
-        boolean trySniff(ByteBuf in, ProxyContext proxyContext) {
+        boolean trySniff(ChannelHandlerContext ctx, ByteBuf in, ProxyContext proxyContext) {
             if (!hasCompleteHttpHeader(in)) {
                 return false;
             }
             String host = extractHttpHost(in);
             log.debug("http sniffer try host:{} ", host);
             proxyContext.setOriginalTargetHost(host);
+            if (host != null) ctx.channel().attr(ChannelAttributes.LOGICAL_TARGET_SOURCE).set(LogicalTargetSource.HTTP_HOST);
             return true;
         }
     }
 }
-

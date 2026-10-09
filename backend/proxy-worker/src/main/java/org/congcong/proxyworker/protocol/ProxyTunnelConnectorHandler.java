@@ -65,6 +65,9 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 if (socketAddress instanceof InetSocketAddress remoteAddress) {
                     String hostOrIp = remoteAddress.getHostString();
                     proxyContext.setRealTargetIp(hostOrIp);
+                    if (remoteAddress.getAddress() != null) {
+                        proxyContext.setFinalConnectionIp(remoteAddress.getAddress().getHostAddress());
+                    }
                 }
             } else {
                 // 统一失败处理，交由 TcpTunnelConnectorHandler 的 promise listener 写回协议层响应

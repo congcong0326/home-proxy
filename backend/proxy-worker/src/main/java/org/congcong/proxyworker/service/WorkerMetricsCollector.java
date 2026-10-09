@@ -2,6 +2,9 @@ package org.congcong.proxyworker.service;
 
 import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.proxyworker.server.ProxyContext;
+import org.congcong.proxyworker.dns.DnsQueryService;
+import org.congcong.proxyworker.dns.FakeIpRegistry;
+import org.congcong.proxyworker.security.ProxySafetyCounters;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -43,13 +46,25 @@ public class WorkerMetricsCollector {
         Runtime runtime = Runtime.getRuntime();
         long heapMax = runtime.maxMemory();
         long heapUsed = runtime.totalMemory() - runtime.freeMemory();
-        return new WorkerMetricsDTO(
+        WorkerMetricsDTO metrics = new WorkerMetricsDTO(
                 Duration.between(startedAt, LocalDateTime.now()).toSeconds(),
                 heapUsed,
                 heapMax,
                 runningInboundCountSupplier.get(),
                 ProxyContext.getInstance().getActiveConnectionCount()
         );
+        FakeIpRegistry fakeIp = FakeIpRegistry.getInstance();
+        DnsQueryService dns = DnsQueryService.getInstance();
+        metrics.setFakeIpAllocations(fakeIp.allocations());
+        metrics.setFakeIpEvictions(fakeIp.evictions());
+        metrics.setFakeIpReverseMisses(fakeIp.reverseMisses());
+        metrics.setRealDnsQueriesByRoute(dns.queriesByRoute());
+        metrics.setRealDnsTimeoutsByRoute(dns.timeoutsByRoute());
+        metrics.setRealDnsTruncationsByRoute(dns.truncationsByRoute());
+        metrics.setRealDnsCacheHitsByRoute(dns.cacheHitsByRoute());
+        metrics.setRejectedPoolAddresses(ProxySafetyCounters.rejectedPoolAddresses());
+        metrics.setRejectedDestinationAddresses(ProxySafetyCounters.rejectedDestinationAddresses());
+        return metrics;
     }
 
     public LocalDateTime getStartedAt() {

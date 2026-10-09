@@ -13,6 +13,7 @@
 - 单元测试：`make backend-test`。
 - proxy-worker 集成测试：`make worker-it`。
 - 透明代理特权 E2E：`make e2e-transparent`。
+- Fake IP + 透明代理完整 E2E：`make e2e-fake-ip-transparent`，场景、断言与报告见 [测试说明](fake-ip-transparent-e2e.md)。
 - DIRECT 出站地址安全 E2E：`make e2e-direct-outbound-safety`。
 - 研发环境 worker 代理 E2E：`make e2e-worker-proxy`。
 - proxy-worker 打包验证：`make worker-build`。
@@ -59,6 +60,11 @@
 | DNS 重写 | 无效重写配置或 AAAA 查询得到错误应答 | `DnsRewritingProtocolStrategyTest` | 已覆盖 |
 | DNS 转发 id 映射 | 并发 DNS 响应返回给错误的客户端 id | `DnsForwardProtocolStrategyTest` | 已覆盖 |
 | DNS question 校验 | 缓存或不匹配的上游响应导致请求混淆 | `DnsForwardProtocolStrategyTest` | 已覆盖 |
+| DNS 名称兼容与 Fake IP 边界 | 把 DNS 名称当成严格主机名拒绝，或给下划线/根域名分配 Fake IP、抑制真实 AAAA；放宽后绕过 BLOCK/重写策略 | `DnsNamesTest`、`DnsQueryServiceTest`、`FakeIpRegistryTest` | 已覆盖 |
+| DNS 请求异常隔离 | 下划线/根域名未转发到真实上游；超长名称/坏报文关闭所有客户端共享的 UDP 监听；Fake IP 开关关闭后仍受影响 | `DnsServerResilienceTest` | 已覆盖（本地 UDP） |
+| DNS CNAME 名称兼容 | 上游 CNAME 目标含下划线或为根域名时解析失败；超长 CNAME 失败后遗留 pending/共享查询 | `DnsUpstreamPoolTest`、`DnsQueryServiceTest` | 已覆盖 |
+| 真实 DNS 上游恢复 | 写失败或连续超时后复用失效 socket，遗留 pending 查询，后续查询无法恢复 | `DnsUpstreamPoolTest` | 已覆盖 |
+| 监听存活状态 | DNS socket 已关闭但仍报告运行中，刷新配置时未释放旧事件循环 | `ProxyContextRuntimeRefreshTest` | 已覆盖 |
 
 ## 维护规则
 

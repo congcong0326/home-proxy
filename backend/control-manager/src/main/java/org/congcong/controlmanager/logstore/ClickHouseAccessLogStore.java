@@ -138,7 +138,7 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
 
     @Override
     public Optional<AccessLogDetail> getAccessLogDetail(String id) {
-        String sql = "SELECT ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, client_ip, client_port, src_geo_country, src_geo_city, original_target_host, original_target_ip, original_target_port, rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms FROM default.access_log WHERE request_id = ? LIMIT 1";
+        String sql = "SELECT ts, request_id, worker_id, user_id, username, proxy_name, inbound_id, client_ip, client_port, src_geo_country, src_geo_city, original_target_host, original_target_ip, final_connection_ip, logical_target_source, dns_route_id, config_version, original_target_port, rewrite_target_host, rewrite_target_port, dst_geo_country, dst_geo_city, inbound_protocol_type, outbound_protocol_type, route_policy_name, route_policy_id, bytes_in, bytes_out, status, error_code, error_msg, dns_answer_ips, request_duration_ms, dns_duration_ms, connect_duration_ms, connect_target_duration_ms FROM default.access_log WHERE request_id = ? LIMIT 1";
         List<Map<String,Object>> rows = client.query(sql, id);
         if (rows.isEmpty()) return Optional.empty();
         Map<String,Object> r = rows.get(0);
@@ -156,6 +156,10 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
                 toStr(r.get("src_geo_city")),
                 toStr(r.get("original_target_host")),
                 toStr(r.get("original_target_ip")),
+                toStr(r.get("final_connection_ip")),
+                toStr(r.get("logical_target_source")),
+                toLong(r.get("dns_route_id")),
+                toStr(r.get("config_version")),
                 toInt(r.get("original_target_port")),
                 toStr(r.get("rewrite_target_host")),
                 toInt(r.get("rewrite_target_port")),

@@ -32,6 +32,7 @@ public class InboundConfigService {
     private final InboundConfigRepository inboundConfigRepository;
     private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
     private final UserRepository userRepository;
+    private final FakeIpConfigValidator fakeIpConfigValidator;
 
     /**
      * 分页查询入站配置列表
@@ -63,6 +64,7 @@ public class InboundConfigService {
         // 业务校验
         validateInboundConfigEntity(inboundConfig);
         workerConfigDependencyResolver.validateInboundReferences(inboundConfig);
+        validateWorkerCombination(inboundConfig);
         
         InboundConfig savedInboundConfig = inboundConfigRepository.save(inboundConfig);
 
@@ -76,6 +78,7 @@ public class InboundConfigService {
     public InboundConfigDTO updateInboundConfig(Long id, InboundConfigUpdateRequest request) {
         InboundConfig existingInboundConfig = inboundConfigRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "入站配置不存在: " + id));
+        String previousWorkerId = existingInboundConfig.getWorkerId();
 
         // 从请求DTO更新实体
         updateInboundConfigFromRequest(existingInboundConfig, request);
@@ -83,6 +86,16 @@ public class InboundConfigService {
         // 业务校验
         validateInboundConfigEntity(existingInboundConfig);
         workerConfigDependencyResolver.validateInboundReferences(existingInboundConfig);
+        validateWorkerCombination(existingInboundConfig);
+        if (!previousWorkerId.equals(existingInboundConfig.getWorkerId())) {
+            List<InboundConfig> oldWorkerInbounds = inboundConfigRepository.findByWorkerIdOrderByIdAsc(previousWorkerId)
+                    .stream().filter(other -> !id.equals(other.getId())).toList();
+            try {
+                fakeIpConfigValidator.validate(oldWorkerInbounds);
+            } catch (IllegalArgumentException error) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage(), error);
+            }
+        }
 
         InboundConfig savedInboundConfig = inboundConfigRepository.save(existingInboundConfig);
 
@@ -94,8 +107,14 @@ public class InboundConfigService {
      */
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
     public void deleteInboundConfig(Long id) {
-        if (!inboundConfigRepository.existsById(id)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "入站配置不存在: " + id);
+        InboundConfig inbound = inboundConfigRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "入站配置不存在: " + id));
+        List<InboundConfig> remaining = inboundConfigRepository.findByWorkerIdOrderByIdAsc(inbound.getWorkerId())
+                .stream().filter(other -> !id.equals(other.getId())).toList();
+        try {
+            fakeIpConfigValidator.validate(remaining);
+        } catch (IllegalArgumentException error) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage(), error);
         }
         inboundConfigRepository.deleteById(id);
     }
@@ -177,12 +196,25 @@ public class InboundConfigService {
         }
     }
 
+    private void validateWorkerCombination(InboundConfig candidate) {
+        List<InboundConfig> proposed = new java.util.ArrayList<>(inboundConfigRepository
+                .findByWorkerIdOrderByIdAsc(candidate.getWorkerId()));
+        proposed.removeIf(existing -> candidate.getId() != null && candidate.getId().equals(existing.getId()));
+        proposed.add(candidate);
+        try {
+            fakeIpConfigValidator.validate(proposed);
+        } catch (IllegalArgumentException error) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, error.getMessage(), error);
+        }
+    }
+
     /**
      * 将创建请求DTO转换为InboundConfig实体
      */
     private InboundConfig convertFromCreateRequest(InboundConfigCreateRequest request) {
         InboundConfig inboundConfig = new InboundConfig();
         BeanUtils.copyProperties(request, inboundConfig);
+        inboundConfig.setFakeIpEnabled(Boolean.TRUE.equals(request.getFakeIpEnabled()));
         return inboundConfig;
     }
 
@@ -199,6 +231,7 @@ public class InboundConfigService {
         inboundConfig.setPort(request.getPort());
         inboundConfig.setTlsEnabled(request.getTlsEnabled());
         inboundConfig.setSniffEnabled(request.getSniffEnabled());
+        inboundConfig.setFakeIpEnabled(Boolean.TRUE.equals(request.getFakeIpEnabled()));
         inboundConfig.setSsMethod(request.getSsMethod());
         inboundConfig.setStatus(request.getStatus());
         inboundConfig.setNotes(request.getNotes());

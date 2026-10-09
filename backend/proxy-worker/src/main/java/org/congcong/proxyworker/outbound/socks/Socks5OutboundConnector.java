@@ -10,6 +10,7 @@ import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
+import org.congcong.proxyworker.outbound.OutboundEndpointResolver;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
 @Slf4j
@@ -35,7 +36,8 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
                     }
                 });
 
-        return b.connect(request.getFinalTargetHost(), request.getFinalTargetPort());
+        return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
+                request.getFinalTargetHost(), request.getFinalTargetPort(), b::connect);
     }
 
     private static class Socks5ClientHandler extends SimpleChannelInboundHandler<Object> {

@@ -22,6 +22,11 @@ services:
     image: clickhouse/clickhouse-server:24.8
     container_name: home-proxy-clickhouse
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}

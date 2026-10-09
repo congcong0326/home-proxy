@@ -41,6 +41,7 @@ services:
       CLICKHOUSE_USERNAME: default
       CLICKHOUSE_PASSWORD: ${E2E_CLICKHOUSE_PASSWORD}
       LOGS_PERSISTENCE: clickhouse
+      SPRING_APPLICATION_JSON: '{"logs":{"clickhouse":{"maxDelayMs":1000}}}'
       ADMIN_AUTH_JWT_SECRET: ${E2E_JWT_SECRET}
       WORKER_AUTH_LEGACY_ENABLED: "false"
     ports:

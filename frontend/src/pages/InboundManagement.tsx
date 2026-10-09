@@ -116,6 +116,34 @@ const InboundManagement: React.FC = () => {
   // 监听协议选择，便于基于协议调整表单项可见性与默认值
   const createProtocolWatch = Form.useWatch('protocol', createForm);
   const editProtocolWatch = Form.useWatch('protocol', editForm);
+  const createWorkerWatch = Form.useWatch('workerId', createForm);
+  const editWorkerWatch = Form.useWatch('workerId', editForm);
+  const [transparentByWorker, setTransparentByWorker] = useState<Record<string, boolean | 'error'>>({});
+
+  useEffect(() => {
+    const workerId = createVisible && createProtocolWatch === ProtocolType.DNS_SERVER
+      ? createWorkerWatch
+      : editVisible && editProtocolWatch === ProtocolType.DNS_SERVER ? editWorkerWatch : undefined;
+    if (!workerId) return;
+    let current = true;
+    apiService.getInbounds({ workerId, protocol: ProtocolType.TP_PROXY, status: 1, page: 1, pageSize: 1 })
+      .then(result => {
+        if (current) setTransparentByWorker(previous => ({ ...previous, [workerId]: result.total > 0 }));
+      })
+      .catch(() => {
+        if (current) setTransparentByWorker(previous => ({ ...previous, [workerId]: 'error' }));
+      });
+    return () => { current = false; };
+  }, [createVisible, editVisible, createProtocolWatch, editProtocolWatch, createWorkerWatch, editWorkerWatch]);
+
+  const fakeIpHint = (workerId?: string) => {
+    const status = !workerId ? '请选择代理节点以检查透明代理状态。'
+      : transparentByWorker[workerId] === undefined ? '正在检查同节点透明代理状态。'
+      : transparentByWorker[workerId] === 'error' ? '暂时无法检查同节点透明代理状态。'
+      : transparentByWorker[workerId] ? '同节点已有启用的透明代理。'
+      : '同节点尚无启用的透明代理，打开 Fake IP 前需先创建。';
+    return `${status}客户端 DNS 查询及 Fake IP 的 TCP 流量都必须进入该节点。`;
+  };
 
   // 非 SOCKS5 协议不展示 TLS，提交时也保持关闭
   useEffect(() => {
@@ -304,6 +332,7 @@ const InboundManagement: React.FC = () => {
       listenIp: normalizedRecord.listenIp,
       port: normalizedRecord.port,
       tlsEnabled: normalizedRecord.tlsEnabled,
+      fakeIpEnabled: normalizedRecord.fakeIpEnabled ?? false,
       ssMethod: normalizedRecord.ssMethod,
       inboundRouteBindings: normalizedRecord.inboundRouteBindings,
       status: normalizedRecord.status,
@@ -356,6 +385,7 @@ const InboundManagement: React.FC = () => {
         ...values,
         tlsEnabled: supportsTls(values.protocol) ? values.tlsEnabled : false,
         sniffEnabled: true, // 默认开启嗅探以兼容后端字段
+        fakeIpEnabled: values.protocol === ProtocolType.DNS_SERVER && Boolean(values.fakeIpEnabled),
       };
       await apiService.createInbound(payload);
       setCreateVisible(false);
@@ -374,6 +404,7 @@ const InboundManagement: React.FC = () => {
         ...values,
         tlsEnabled: supportsTls(values.protocol) ? values.tlsEnabled : false,
         sniffEnabled: editingItem.sniffEnabled ?? true, // 编辑时保留原值（默认开启）
+        fakeIpEnabled: values.protocol === ProtocolType.DNS_SERVER && Boolean(values.fakeIpEnabled),
       };
       await apiService.updateInbound(editingItem.id, payload);
       setEditVisible(false);
@@ -575,7 +606,7 @@ const InboundManagement: React.FC = () => {
             onOk={handleCreate}
             okText="创建"
           >
-        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
+        <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, fakeIpEnabled: false, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="workerId" label="代理节点" rules={[{ required: true }]}><Select options={workerSelectOptions} /></Form.Item></Col>
             <Col span={12}><Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="配置名称" /></Form.Item></Col>
@@ -595,10 +626,16 @@ const InboundManagement: React.FC = () => {
             {supportsTls(createProtocolWatch) && (
               <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
             )}
+            {createProtocolWatch === ProtocolType.DNS_SERVER && (
+              <Col span={12}><Form.Item name="fakeIpEnabled" label="启用 Fake IP" valuePropName="checked"><Switch /></Form.Item></Col>
+            )}
             <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>
+          {createProtocolWatch === ProtocolType.DNS_SERVER && (
+            <Typography.Paragraph type="secondary">{fakeIpHint(createWorkerWatch)}</Typography.Paragraph>
+          )}
           <Form.Item shouldUpdate noStyle>
             {() => (
               createForm.getFieldValue('protocol') === ProtocolType.SS ? (
@@ -679,10 +716,16 @@ const InboundManagement: React.FC = () => {
             {supportsTls(editProtocolWatch) && (
               <Col span={12}><Form.Item name="tlsEnabled" label="启用TLS" valuePropName="checked"><Switch /></Form.Item></Col>
             )}
+            {editProtocolWatch === ProtocolType.DNS_SERVER && (
+              <Col span={12}><Form.Item name="fakeIpEnabled" label="启用 Fake IP" valuePropName="checked"><Switch /></Form.Item></Col>
+            )}
             <Col span={12}><Form.Item name="status" label="状态" rules={[{ required: true }]}> 
               <Select options={statusSelectOptions} />
             </Form.Item></Col>
           </Row>
+          {editProtocolWatch === ProtocolType.DNS_SERVER && (
+            <Typography.Paragraph type="secondary">{fakeIpHint(editWorkerWatch)}</Typography.Paragraph>
+          )}
 
           <Form.Item shouldUpdate noStyle>
             {() => (

@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.server.netty;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
@@ -39,12 +40,17 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         init(ch);
         // 路由处理器
         ch.pipeline().addLast(RouterService.getInstance());
+        initAfterRoute(ch);
         // 处理握手请求还携带payload的场景，每个连接在连上目标服务器前最多暂存1M
         ch.pipeline().addLast(new RequestAppendHandler(1_048_576));
         // 连接目标服务器
         ch.pipeline().addLast(ProxyTunnelConnectorHandler.getInstance());
         // 兜底异常消费
-        ch.pipeline().addLast(TerminalExceptionHandler.getInstance());
+        ch.pipeline().addLast(getTerminalExceptionHandler());
+    }
+
+    protected ChannelHandler getTerminalExceptionHandler() {
+        return TerminalExceptionHandler.getInstance();
     }
 
     private void trackTcpConnection(Channel ch) {
@@ -58,6 +64,10 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
     }
 
     protected abstract void init(Channel socketChannel);
+
+    protected void initAfterRoute(Channel channel) {
+        // Protocols can inspect the selected route before outbound connect.
+    }
 
 
     protected void processSSL(Channel socketChannel) {

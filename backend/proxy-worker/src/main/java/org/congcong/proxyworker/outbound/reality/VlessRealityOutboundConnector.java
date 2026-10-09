@@ -8,6 +8,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.util.concurrent.Promise;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
+import org.congcong.proxyworker.outbound.OutboundEndpointResolver;
 import org.congcong.proxyworker.outbound.reality.config.RealityClientConfig;
 import org.congcong.proxyworker.outbound.reality.config.VlessRealityOutboundConfig;
 import org.congcong.proxyworker.outbound.reality.session.RealityHandshakeHandler;
@@ -58,6 +59,7 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                     }
                 });
 
-        return bootstrap.connect(outboundConfig.host(), outboundConfig.port());
+        return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
+                outboundConfig.host(), outboundConfig.port(), bootstrap::connect);
     }
 }

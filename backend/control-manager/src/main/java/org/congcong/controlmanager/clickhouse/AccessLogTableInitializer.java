@@ -32,6 +32,10 @@ public class AccessLogTableInitializer implements ApplicationRunner {
 
                     original_target_host       LowCardinality(String),
                     original_target_ip         String,
+                    final_connection_ip        String,
+                    logical_target_source      LowCardinality(String),
+                    dns_route_id               UInt64,
+                    config_version             String,
                     original_target_port       UInt16,
                     rewrite_target_host        LowCardinality(String),
                     rewrite_target_port        UInt16,
@@ -63,6 +67,10 @@ public class AccessLogTableInitializer implements ApplicationRunner {
         client.execute(createTable);
         client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS worker_id LowCardinality(String) AFTER request_id");
         client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS dns_answer_ips Array(String)");
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS final_connection_ip String");
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS logical_target_source LowCardinality(String)");
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS dns_route_id UInt64");
+        client.execute("ALTER TABLE default.access_log ADD COLUMN IF NOT EXISTS config_version String");
         client.execute("""
                 CREATE TABLE IF NOT EXISTS default.auth_log
                 (

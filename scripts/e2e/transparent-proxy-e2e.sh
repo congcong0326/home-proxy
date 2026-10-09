@@ -14,15 +14,20 @@ COMPOSE_FILE="$ROOT_DIR/scripts/e2e/transparent-proxy.compose.yml"
 CONTROL_PORT="${E2E_CONTROL_PORT:-28443}"
 MANAGEMENT_PORT="${E2E_MANAGEMENT_PORT:-28444}"
 TPORT="${E2E_TPROXY_PORT:-29080}"
+DNS_PORT="${E2E_DNS_PORT:-29553}"
+DNS_UPSTREAM_PORT="${E2E_DNS_UPSTREAM_PORT:-29554}"
 HTTP_ORIGIN_PORT="${E2E_HTTP_ORIGIN_PORT:-29090}"
 HTTP_OVERRIDE_PORT="${E2E_HTTP_OVERRIDE_PORT:-29091}"
 TLS_ORIGIN_PORT="${E2E_TLS_ORIGIN_PORT:-29490}"
 TLS_OVERRIDE_PORT="${E2E_TLS_OVERRIDE_PORT:-29491}"
+GREETING_PORT="${E2E_GREETING_PORT:-29092}"
+ECHO_PORT="${E2E_ECHO_PORT:-29093}"
+SOCKS_PORT="${E2E_SOCKS_PORT:-29094}"
 
-ORIGIN_IP="${E2E_ORIGIN_IP:-198.18.1.2}"
-OVERRIDE_IP="${E2E_OVERRIDE_IP:-198.18.1.3}"
-CLIENT_GATEWAY_IP="${E2E_CLIENT_GATEWAY_IP:-198.18.0.1}"
-CLIENT_IP="${E2E_CLIENT_IP:-198.18.0.2}"
+ORIGIN_IP="${E2E_ORIGIN_IP:-192.0.2.102}"
+OVERRIDE_IP="${E2E_OVERRIDE_IP:-192.0.2.103}"
+CLIENT_GATEWAY_IP="${E2E_CLIENT_GATEWAY_IP:-192.0.2.1}"
+CLIENT_IP="${E2E_CLIENT_IP:-192.0.2.2}"
 MARK="${E2E_TPROXY_MARK:-0x91}"
 ROUTE_TABLE="${E2E_ROUTE_TABLE:-290}"
 RULE_PRIORITY="${E2E_RULE_PRIORITY:-1290}"
@@ -58,6 +63,8 @@ HTTP_RULE_ADDED=0
 TLS_RULE_ADDED=0
 POLICY_RULE_ADDED=0
 POLICY_ROUTE_ADDED=0
+FAKE_RULE_ADDED=0
+DNS_UPSTREAM_PID=""
 
 fail() {
     echo "E2E failure: $*" >&2
@@ -95,11 +102,19 @@ cleanup() {
         if (( COMPOSE_STARTED )); then
             docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" logs --no-color >&2
         fi
+        if [[ -f "$TEMP_DIR/dns-upstream.log" ]]; then cat "$TEMP_DIR/dns-upstream.log" >&2; fi
+        if [[ -f "$TEMP_DIR/fake-ip-report.json" ]]; then cat "$TEMP_DIR/fake-ip-report.json" >&2; fi
     fi
 
     if (( WORKER_STARTED )); then docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1; fi
     if (( ORIGIN_STARTED )); then docker rm -f "$ORIGIN_CONTAINER" >/dev/null 2>&1; fi
     if (( OVERRIDE_STARTED )); then docker rm -f "$OVERRIDE_CONTAINER" >/dev/null 2>&1; fi
+    if [[ -n "$DNS_UPSTREAM_PID" ]]; then kill "$DNS_UPSTREAM_PID" >/dev/null 2>&1; wait "$DNS_UPSTREAM_PID" >/dev/null 2>&1; fi
+
+    if (( FAKE_RULE_ADDED )); then
+        run_privileged iptables -t mangle -D PREROUTING -i "$HOST_IF" -p tcp -d 198.18.0.0/15 \
+            -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK" >/dev/null 2>&1
+    fi
 
     if (( TLS_RULE_ADDED )); then
         run_privileged iptables -t mangle -D PREROUTING -i "$HOST_IF" -p tcp -d "$ORIGIN_IP" --dport "$TLS_ORIGIN_PORT" \
@@ -149,7 +164,7 @@ target_ready() {
 worker_status_ready() {
     local status
     status="$(curl -ksS -H "Authorization: Bearer ${ADMIN_TOKEN}" "$CONTROL_BASE/api/workers/$WORKER_ID/status" 2>/dev/null || true)"
-    [[ -n "$status" ]] && jq -e '.online == true and .applySuccess == true and .runningInboundCount == 1' >/dev/null <<<"$status"
+    [[ -n "$status" ]] && jq -e '.online == true and .applySuccess == true and .runningInboundCount == 2' >/dev/null <<<"$status"
 }
 
 api_get() {
@@ -190,7 +205,7 @@ assert_blocked() {
 
 preflight() {
     [[ "$(uname -s)" == "Linux" ]] || fail "transparent E2E requires Linux"
-    for command in docker curl jq openssl ip iptables ss awk grep sed; do require_command "$command"; done
+    for command in docker curl jq openssl ip iptables ss awk grep sed python3; do require_command "$command"; done
     docker info >/dev/null || fail "Docker daemon is unavailable"
     docker compose version >/dev/null || fail "Docker Compose v2 is unavailable"
     if [[ "${E2E_BUILD:-1}" != "0" ]]; then require_command mvn; fi
@@ -203,7 +218,13 @@ preflight() {
 
     [[ ${#HOST_IF} -le 15 && ${#CLIENT_IF} -le 15 ]] || fail "generated veth interface name exceeds Linux's 15-character limit"
     ! listener_ready || fail "TPROXY test port ${TPORT} is already listening"
+    ! ss -lun | awk '{print $5}' | grep -q ":${DNS_PORT}$" || fail "DNS test port ${DNS_PORT} is already listening"
+    ! ss -lun | awk '{print $5}' | grep -q ":${DNS_UPSTREAM_PORT}$" || fail "DNS upstream test port ${DNS_UPSTREAM_PORT} is already listening"
     ! ss -ltn | awk '{print $4}' | grep -q ":${MANAGEMENT_PORT}$" || fail "worker management port ${MANAGEMENT_PORT} is already listening"
+    local port
+    for port in "$GREETING_PORT" "$ECHO_PORT" "$SOCKS_PORT"; do
+        ! ss -ltn | awk '{print $4}' | grep -q ":${port}$" || fail "fixture port ${port} is already listening"
+    done
     ! run_privileged ip netns list | grep -q "^${CLIENT_NS}" || fail "test network namespace already exists"
     ! run_privileged ip rule show | grep -q "^${RULE_PRIORITY}:" || fail "policy-rule priority ${RULE_PRIORITY} is already in use"
     ! run_privileged ip route show table "$ROUTE_TABLE" 2>/dev/null | grep -q . || fail "route table ${ROUTE_TABLE} is not empty"
@@ -302,15 +323,37 @@ setup_control_plane() {
     ADMIN_TOKEN="$(jq -er '.token' <<<"$setup_response")"
 }
 
+start_dns_upstream() {
+    jq -n --arg origin "$ORIGIN_IP" --arg override "$OVERRIDE_IP" \
+        --arg gateway "$CLIENT_GATEWAY_IP" --arg client "$CLIENT_IP" \
+        --argjson dns "$DNS_PORT" --argjson upstream "$DNS_UPSTREAM_PORT" \
+        --argjson http "$HTTP_ORIGIN_PORT" --argjson overrideHttp "$HTTP_OVERRIDE_PORT" --argjson tls "$TLS_ORIGIN_PORT" \
+        --argjson greeting "$GREETING_PORT" --argjson echo "$ECHO_PORT" --argjson socks "$SOCKS_PORT" \
+        --arg namespace "$CLIENT_NS" --arg container "$WORKER_CONTAINER" \
+        --arg worker "$WORKER_ID" --arg control "$CONTROL_BASE" \
+        --arg events "$TEMP_DIR/fixture-events.jsonl" --arg report "$TEMP_DIR/fake-ip-report.json" \
+        '{origin:$origin,override:$override,gateway:$gateway,client:$client,dns:$dns,upstream:$upstream,
+          http:$http,overrideHttp:$overrideHttp,tls:$tls,greeting:$greeting,echo:$echo,socks:$socks,namespace:$namespace,
+          container:$container,worker:$worker,control:$control,events:$events,report:$report}' \
+        > "$TEMP_DIR/fake-ip-config.json"
+    python3 "$ROOT_DIR/scripts/e2e/fake-ip-transparent-e2e.py" serve "$TEMP_DIR/fake-ip-config.json" \
+        > "$TEMP_DIR/dns-upstream.log" 2>&1 &
+    DNS_UPSTREAM_PID=$!
+    sleep 0.2
+    kill -0 "$DNS_UPSTREAM_PID" 2>/dev/null || fail "fake DNS upstream failed to start"
+}
+
 create_runtime_config() {
-    local anonymous_id fallback_route_id block_id direct_id http_override_id tls_override_id
+    local anonymous_id fallback_route_id block_id direct_id fake_direct_id http_override_id tls_override_id dns_route_id
     anonymous_id="$(api_get '/api/users?pageSize=200&sortBy=id&sortDir=asc' | jq -er '.items[] | select(.username == "Anonymous user") | .id')"
     fallback_route_id="$(api_get '/api/routes?pageSize=200&sortBy=id&sortDir=asc' | jq -er '.items[] | select(.name == "兜底直连路由规则") | .id')"
 
     block_id="$(api_post /api/routes '{"name":"e2e-tproxy-block","rules":[{"conditionType":"DOMAIN","op":"IN","value":"blocked-http.tproxy-e2e.test"},{"conditionType":"DOMAIN","op":"IN","value":"blocked-tls.tproxy-e2e.test"}],"policy":"BLOCK","status":1}' | jq -er '.id')"
     direct_id="$(api_post /api/routes '{"name":"e2e-tproxy-direct","rules":[{"conditionType":"DOMAIN","op":"IN","value":"direct-http.tproxy-e2e.test"},{"conditionType":"DOMAIN","op":"IN","value":"direct-tls.tproxy-e2e.test"}],"policy":"DIRECT","status":1}' | jq -er '.id')"
+    fake_direct_id="$(api_post /api/routes '{"name":"e2e-tproxy-fake-direct","rules":[{"conditionType":"DOMAIN","op":"IN","value":"fake-direct.tproxy-e2e.test"}],"policy":"DIRECT","status":1}' | jq -er '.id')"
     http_override_id="$(api_post /api/routes "$(jq -n --arg host "$OVERRIDE_IP" --argjson port "$HTTP_OVERRIDE_PORT" '{name:"e2e-tproxy-http-override",rules:[{conditionType:"DOMAIN",op:"IN",value:"http-override.tproxy-e2e.test"}],policy:"DESTINATION_OVERRIDE",outboundProxyHost:$host,outboundProxyPort:$port,status:1}')" | jq -er '.id')"
     tls_override_id="$(api_post /api/routes "$(jq -n --arg host "$OVERRIDE_IP" --argjson port "$TLS_OVERRIDE_PORT" '{name:"e2e-tproxy-tls-override",rules:[{conditionType:"DOMAIN",op:"IN",value:"tls-override.tproxy-e2e.test"}],policy:"DESTINATION_OVERRIDE",outboundProxyHost:$host,outboundProxyPort:$port,status:1}')" | jq -er '.id')"
+    dns_route_id="$(api_post /api/routes "$(jq -n --argjson port "$DNS_UPSTREAM_PORT" '{name:"e2e-tproxy-real-dns",rules:[{conditionType:"DOMAIN",op:"IN",value:"*"}],policy:"OUTBOUND_PROXY",outboundProxyType:"DNS_SERVER",outboundProxyHost:"127.0.0.1",outboundProxyPort:$port,status:1}')" | jq -er '.id')"
 
     local worker_token inbound
     worker_token="hpw_$(openssl rand -hex 32)"
@@ -324,8 +367,12 @@ create_runtime_config() {
           managementUrl:$url,managementToken:$token}')" >/dev/null
 
     inbound="$(jq -n --arg worker "$WORKER_ID" --argjson fallback "$fallback_route_id" --argjson anonymous "$anonymous_id" --argjson tport "$TPORT" \
-        --argjson block "$block_id" --argjson direct "$direct_id" --argjson httpOverride "$http_override_id" --argjson tlsOverride "$tls_override_id" \
-        '{workerId:$worker,fallbackRouteId:$fallback,anonymousUserId:$anonymous,name:"e2e-tproxy-inbound",protocol:"TP_PROXY",listenIp:"0.0.0.0",port:$tport,tlsEnabled:false,sniffEnabled:true,inboundRouteBindings:[{userIds:[$anonymous],routeIds:[$block,$direct,$httpOverride,$tlsOverride]}],status:1,notes:"ephemeral privileged E2E inbound"}')"
+        --argjson block "$block_id" --argjson direct "$direct_id" --argjson fakeDirect "$fake_direct_id" --argjson httpOverride "$http_override_id" --argjson tlsOverride "$tls_override_id" \
+        '{workerId:$worker,fallbackRouteId:$fallback,anonymousUserId:$anonymous,name:"e2e-tproxy-inbound",protocol:"TP_PROXY",listenIp:"0.0.0.0",port:$tport,tlsEnabled:false,sniffEnabled:true,inboundRouteBindings:[{userIds:[$anonymous],routeIds:[$block,$direct,$fakeDirect,$httpOverride,$tlsOverride]}],status:1,notes:"ephemeral privileged E2E inbound"}')"
+    api_post /api/inbounds "$inbound" >/dev/null
+
+    inbound="$(jq -n --arg worker "$WORKER_ID" --argjson fallback "$dns_route_id" --argjson anonymous "$anonymous_id" --argjson port "$DNS_PORT" \
+        '{workerId:$worker,fallbackRouteId:$fallback,anonymousUserId:$anonymous,name:"e2e-fake-ip-dns",protocol:"DNS_SERVER",listenIp:"0.0.0.0",port:$port,tlsEnabled:false,sniffEnabled:false,fakeIpEnabled:true,inboundRouteBindings:[],status:1,notes:"Fake IP E2E DNS listener"}')"
     api_post /api/inbounds "$inbound" >/dev/null
 
     docker run -d --rm --name "$WORKER_CONTAINER" --network host --cap-add NET_ADMIN \
@@ -366,6 +413,9 @@ setup_network() {
     run_privileged iptables -t mangle -A PREROUTING -i "$HOST_IF" -p tcp -d "$ORIGIN_IP" --dport "$TLS_ORIGIN_PORT" \
         -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK"
     TLS_RULE_ADDED=1
+    run_privileged iptables -t mangle -A PREROUTING -i "$HOST_IF" -p tcp -d 198.18.0.0/15 \
+        -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK"
+    FAKE_RULE_ADDED=1
     run_privileged ip rule add priority "$RULE_PRIORITY" fwmark "$MARK/$MARK" lookup "$ROUTE_TABLE"
     POLICY_RULE_ADDED=1
     run_privileged ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
@@ -381,6 +431,10 @@ run_assertions() {
     assert_response 'TLS SNI destination override' TLS_OVERRIDE_E2E client_curl --resolve "tls-override.tproxy-e2e.test:${TLS_ORIGIN_PORT}:${ORIGIN_IP}" "https://tls-override.tproxy-e2e.test:${TLS_ORIGIN_PORT}/"
     assert_blocked 'TLS SNI block' client_curl --resolve "blocked-tls.tproxy-e2e.test:${TLS_ORIGIN_PORT}:${ORIGIN_IP}" "https://blocked-tls.tproxy-e2e.test:${TLS_ORIGIN_PORT}/"
 
+    (umask 077; printf '%s' "$ADMIN_TOKEN" > "$TEMP_DIR/admin-token")
+    run_privileged python3 "$ROOT_DIR/scripts/e2e/fake-ip-transparent-e2e.py" \
+        run "$TEMP_DIR/fake-ip-config.json"
+
     local counters packets
     counters="$(run_privileged iptables-save -c -t mangle | grep -- "$RULE_COMMENT")"
     packets="$(sed -En 's/^\[([0-9]+):[0-9]+\].*/\1/p' <<<"$counters" | awk '{ sum += $1 } END { print sum + 0 }')"
@@ -394,6 +448,7 @@ main() {
     setup_control_plane
     create_runtime_config
     setup_network
+    start_dns_upstream
     create_target_files
     start_targets
     run_assertions

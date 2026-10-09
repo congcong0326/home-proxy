@@ -17,6 +17,10 @@ public class ProxyContext {
     private String originalTargetHost;
     private String originalTargetIP;
     private String realTargetIp;
+    private String finalConnectionIp;
+    private String logicalTargetSource;
+    private Long dnsRouteId;
+    private String configVersion;
     private Integer originalTargetPort;
     // 改写目标
     private String rewriteTargetHost;

@@ -18,6 +18,8 @@ public class InboundConfig {
     private Integer port;
     private Boolean tlsEnabled;
     private Boolean sniffEnabled;
+    private Boolean fakeIpEnabled;
+    private String configVersion;
     private ProxyEncAlgo ssMethod;
 
     // 路由规则，基于设备

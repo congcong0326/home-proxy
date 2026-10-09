@@ -12,6 +12,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.proxyworker.config.InboundConfig;
+import org.congcong.proxyworker.server.netty.ChannelAttributes;
 
 @Slf4j
 public abstract class TcpProxyServer extends AbstractProxyServer {
@@ -25,12 +26,13 @@ public abstract class TcpProxyServer extends AbstractProxyServer {
         return new ChannelInitializer<>() {
             @Override
             protected void initChannel(Channel channel) {
-                InboundConfig snapshot = getInboundConfig();
-                if (snapshot == null) {
+                RuntimeConfigSnapshot snapshot = getRuntimeConfigSnapshot();
+                if (snapshot.inboundConfig() == null) {
                     throw new IllegalStateException("Inbound runtime config is missing");
                 }
                 // Build a dedicated pipeline from one immutable snapshot per connection.
-                channel.pipeline().addLast(createChildHandler(snapshot));
+                channel.attr(ChannelAttributes.DNS_INBOUND_CONFIG).set(snapshot.dnsInboundConfig());
+                channel.pipeline().addLast(createChildHandler(snapshot.inboundConfig()));
             }
         };
     }

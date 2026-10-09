@@ -138,6 +138,10 @@ public class AccessLogUtil {
         // 目标地址信息（原始与改写）
         accessLog.setOriginalTargetHost(proxyContext.getOriginalTargetHost());
         accessLog.setOriginalTargetIP(proxyContext.getOriginalTargetIP() == null ? proxyContext.getRealTargetIp() : proxyContext.getOriginalTargetIP());
+        accessLog.setFinalConnectionIp(proxyContext.getFinalConnectionIp());
+        accessLog.setLogicalTargetSource(proxyContext.getLogicalTargetSource());
+        accessLog.setDnsRouteId(proxyContext.getDnsRouteId());
+        accessLog.setConfigVersion(proxyContext.getConfigVersion());
         accessLog.setOriginalTargetPort(proxyContext.getOriginalTargetPort());
         accessLog.setRewriteTargetHost(proxyContext.getRewriteTargetHost());
         accessLog.setRewriteTargetPort(proxyContext.getRewriteTargetPort());

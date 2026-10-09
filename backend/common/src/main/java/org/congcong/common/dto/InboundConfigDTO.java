@@ -22,6 +22,7 @@ public class InboundConfigDTO {
     private Integer port;
     private Boolean tlsEnabled;
     private Boolean sniffEnabled;
+    private Boolean fakeIpEnabled;
     private ProxyEncAlgo ssMethod;
     private Integer status;
     private String notes;

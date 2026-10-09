@@ -62,6 +62,9 @@ public class WorkerStatus {
     @Column(name = "active_connection_count")
     private Integer activeConnectionCount;
 
+    @Column(name = "metrics_json", columnDefinition = "json")
+    private String metricsJson;
+
     @PrePersist
     @PreUpdate
     void ensureCapabilitiesJson() {

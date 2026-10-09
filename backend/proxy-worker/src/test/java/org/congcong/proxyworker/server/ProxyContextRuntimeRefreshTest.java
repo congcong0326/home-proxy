@@ -2,6 +2,10 @@ package org.congcong.proxyworker.server;
 
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
+import org.congcong.proxyworker.config.RouteConfig;
+import org.congcong.proxyworker.dns.FakeIpRegistry;
+import org.congcong.common.enums.ProtocolType;
+import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.integration.support.ProxyWorkerIntegrationFixtures;
 import org.congcong.proxyworker.integration.support.TcpEchoServer;
 import org.junit.jupiter.api.AfterEach;
@@ -22,15 +26,186 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ProxyContextRuntimeRefreshTest {
 
+    @Test
+    void invalidFakeDnsConfigurationKeepsRunningSnapshotAndLeases() throws Exception {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        int port = freePort();
+        InboundConfig first = socksInbound(port, ProxyWorkerIntegrationFixtures.PASSWORD, 1);
+        assertTrue(context.refresh(List.of(first)).success());
+        String fake = FakeIpRegistry.getInstance().getOrAllocate("refresh-keeps-lease.example");
+
+        InboundConfig invalidDns = new InboundConfig();
+        invalidDns.setId(99999L);
+        invalidDns.setProtocol(ProtocolType.DNS_SERVER);
+        invalidDns.setFakeIpEnabled(true);
+        assertFalse(context.refresh(List.of(first, invalidDns)).success());
+        assertEquals("refresh-keeps-lease.example", FakeIpRegistry.getInstance().reverseLookup(fake).orElseThrow());
+        try (Socket client = connect(port)) {
+            authenticate(client.getInputStream(), client.getOutputStream(), ProxyWorkerIntegrationFixtures.PASSWORD);
+        }
+    }
+
+    @Test
+    void listenerBindFailureRestoresPreviousRunningConfiguration() throws Exception {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        int originalPort = freePort();
+        InboundConfig first = socksInbound(originalPort, ProxyWorkerIntegrationFixtures.PASSWORD, 1);
+        assertTrue(context.refresh(List.of(first)).success());
+        try (ServerSocket occupied = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            InboundConfig replacement = socksInbound(occupied.getLocalPort(), "replacement", 1);
+            assertFalse(context.refresh(List.of(replacement)).success());
+            try (Socket client = connect(originalPort)) {
+                authenticate(client.getInputStream(), client.getOutputStream(), ProxyWorkerIntegrationFixtures.PASSWORD);
+            }
+        }
+    }
+
     private final ProxyContext context = ProxyContext.getInstance();
+
+    @Test
+    void closedListenerIsReportedDownAndRecreatedWithoutLeakingItsEventLoops() throws Exception {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        InboundConfig dns = dnsInbound("listener-recovery");
+        assertTrue(context.refresh(List.of(dns)).success());
+        AbstractProxyServer original = context.getServerForTest(dns.getId());
+        original.serverChannel.close().sync();
+        assertFalse(original.isRunning());
+        assertEquals(0, context.getRunningServerCount());
+
+        assertTrue(context.refresh(List.of(dns)).success());
+        AbstractProxyServer replacement = context.getServerForTest(dns.getId());
+        assertNotSame(original, replacement);
+        assertTrue(replacement.isRunning());
+        assertTrue(original.workerGroup.isTerminated());
+    }
+
+    @Test
+    void publishesDnsSnapshotOnRefreshAndClearsItOnRemovalAndShutdown() {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        InboundConfig first = dnsInbound("first");
+        assertTrue(context.refresh(List.of(first)).success());
+        assertSame(first, context.getEnabledDnsInbound().orElseThrow());
+
+        InboundConfig second = dnsInbound("second");
+        AbstractProxyServer server = context.getServerForTest(first.getId());
+        assertTrue(context.refresh(List.of(second)).success());
+        assertSame(server, context.getServerForTest(second.getId()));
+        assertSame(second, context.getEnabledDnsInbound().orElseThrow());
+
+        assertTrue(context.refresh(List.of()).success());
+        assertTrue(context.getEnabledDnsInbound().isEmpty());
+
+        assertTrue(context.refresh(List.of(first)).success());
+        context.closeAll();
+        assertTrue(context.getEnabledDnsInbound().isEmpty());
+    }
+
+    @Test
+    void invalidRefreshKeepsPublishedDnsSnapshot() {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        InboundConfig first = dnsInbound("first");
+        assertTrue(context.refresh(List.of(first)).success());
+
+        InboundConfig duplicate = dnsInbound("duplicate");
+        duplicate.setId(first.getId() + 1);
+        assertFalse(context.refresh(List.of(first, duplicate)).success());
+        assertSame(first, context.getEnabledDnsInbound().orElseThrow());
+    }
+
+    @Test
+    void failedRefreshRestoresPublishedDnsSnapshot() throws Exception {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        InboundConfig first = dnsInbound("first");
+        assertTrue(context.refresh(List.of(first)).success());
+
+        try (ServerSocket occupied = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            InboundConfig replacement = dnsInbound("replacement");
+            InboundConfig failingTcp = socksInbound(occupied.getLocalPort(), "replacement", 1);
+            assertFalse(context.refresh(List.of(replacement, failingTcp)).success());
+            assertSame(first, context.getEnabledDnsInbound().orElseThrow());
+            assertTrue(context.getServerForTest(first.getId()).isRunning());
+        }
+    }
+
+    private InboundConfig dnsInbound(String version) {
+        InboundConfig inbound = new InboundConfig();
+        inbound.setId(99999L);
+        inbound.setName("dns-snapshot");
+        inbound.setProtocol(ProtocolType.DNS_SERVER);
+        inbound.setListenIp("127.0.0.1");
+        inbound.setPort(0);
+        inbound.setConfigVersion(version);
+        return inbound;
+    }
 
     @AfterEach
     void tearDown() {
         context.closeAll();
         System.clearProperty("proxyworker.netty.epoll.enabled");
+    }
+
+    @Test
+    void delayedSocksRequestKeepsAcceptedDnsSnapshotAcrossRefresh() throws Exception {
+        assertDelayedRequestKeepsDnsSnapshot(true);
+    }
+
+    @Test
+    void delayedSocksRequestDoesNotAdoptDnsEnabledAfterAccept() throws Exception {
+        assertDelayedRequestKeepsDnsSnapshot(false);
+    }
+
+    private void assertDelayedRequestKeepsDnsSnapshot(boolean initiallyHasDns) throws Exception {
+        System.setProperty("proxyworker.netty.epoll.enabled", "false");
+        int port = freePort();
+        try (TcpEchoServer echo = TcpEchoServer.start()) {
+            InboundConfig first = socksInbound(port, ProxyWorkerIntegrationFixtures.PASSWORD, echo.port());
+            first.setConfigVersion("delayed-v1");
+            first.getDefaultRouteConfig().setOutboundProxyHost("localhost");
+            InboundConfig firstDns = dnsRouteInbound("delayed-v1", RoutePolicy.DNS_REWRITING);
+            assertTrue(context.refresh(initiallyHasDns ? List.of(first, firstDns) : List.of(first)).success());
+            try (Socket client = connect(port)) {
+                client.setSoTimeout(3_000);
+                InputStream in = client.getInputStream();
+                OutputStream out = client.getOutputStream();
+                // Wait until the connection has captured its snapshot, but delay
+                // authentication and the tunnel request until after refresh.
+                out.write(new byte[]{0x05, 0x01, 0x02});
+                out.flush();
+                assertArrayEquals(new byte[]{0x05, 0x02}, readFully(in, 2));
+
+                InboundConfig second = socksInbound(port, "new-password", echo.port());
+                second.setConfigVersion("delayed-v2");
+                InboundConfig secondDns = dnsRouteInbound("delayed-v2", RoutePolicy.BLOCK);
+                assertTrue(context.refresh(List.of(second, secondDns)).success());
+                assertSame(secondDns, context.getEnabledDnsInbound().orElseThrow());
+                assertSame(secondDns, context.getServerForTest(second.getId())
+                        .getRuntimeConfigSnapshot().dnsInboundConfig());
+
+                authenticateCredentials(in, out, ProxyWorkerIntegrationFixtures.PASSWORD);
+                connectTunnel(in, out, echo.port());
+                assertEcho(in, out, "delayed-after-refresh");
+            }
+        }
+    }
+
+    private InboundConfig dnsRouteInbound(String version, RoutePolicy policy) {
+        InboundConfig dns = dnsInbound(version);
+        UserConfig anonymous = new UserConfig();
+        anonymous.setId(99L);
+        dns.setAnonymousUser(anonymous);
+        dns.setDeviceIpMapUser(Map.of());
+        dns.setRoutesMap(Map.of());
+        RouteConfig route = new RouteConfig();
+        route.setId(999L);
+        route.setPolicy(policy);
+        route.setOutboundProxyHost("127.0.0.1");
+        dns.setDefaultRouteConfig(route);
+        return dns;
     }
 
     @Test
@@ -103,6 +278,10 @@ class ProxyContextRuntimeRefreshTest {
         out.flush();
         assertArrayEquals(new byte[] {0x05, 0x02}, readFully(in, 2));
 
+        authenticateCredentials(in, out, password);
+    }
+
+    private void authenticateCredentials(InputStream in, OutputStream out, String password) throws IOException {
         byte[] username = ProxyWorkerIntegrationFixtures.USERNAME.getBytes(StandardCharsets.UTF_8);
         byte[] credential = password.getBytes(StandardCharsets.UTF_8);
         out.write(0x01);

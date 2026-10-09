@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.protocol.dns;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.dns.DatagramDnsQueryDecoder;
 import io.netty.handler.codec.dns.DatagramDnsResponseEncoder;
@@ -33,6 +34,16 @@ public class DnsServerInitializer extends AbstractChannelInitializer {
         ch.pipeline().addLast(new DatagramDnsQueryDecoder());
         ch.pipeline().addLast(new UdpDnsQueryHandler(inboundConfigSupplier));
         ch.pipeline().addLast(new DatagramDnsResponseEncoder());
+    }
+
+    @Override
+    protected void initAfterRoute(Channel channel) {
+        channel.pipeline().addLast(new FakeIpDnsAnswerHandler());
+    }
+
+    @Override
+    protected ChannelHandler getTerminalExceptionHandler() {
+        return DnsExceptionHandler.INSTANCE;
     }
 
     protected void processSSL(SocketChannel socketChannel) {

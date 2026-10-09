@@ -19,6 +19,9 @@ ENABLE_TPROXY=1              # 1 = TCP 走 TPROXY -> 本机 ${TPORT}
 
 ENABLE_PROXY_443=1           # 0 = 443 不代理（直连），1 = 443 走代理
 
+ENABLE_LOCAL_FAKE_IP=1       # 1 = 本机访问 Fake IP 的 TCP 也走透明代理
+FAKE_IP_CIDR="198.18.0.0/15" # 必须与 worker 的 Fake IP 地址池一致
+
 ENABLE_DNS_UDP53=0           # 0 = 不劫持 UDP/53，1 = 劫持到本机 DNS
 DNS_LOCAL_PORT=53            # 本机上运行的 DNS 端口，一般就是 53
 
@@ -85,6 +88,17 @@ ip route flush table ${TABLE_ID} 2>/dev/null || true
 ############################
 
 echo "[*] 清理旧 mangle 规则与链 ${CHAIN_LAN}..."
+# 即使关闭透明代理或本机 Fake IP 引流，也要删除上次创建的规则。
+while iptables -t mangle -D OUTPUT \
+  -p tcp ! -s "${FAKE_IP_CIDR}" -d "${FAKE_IP_CIDR}" \
+  -m comment --comment "${CHAIN_LAN}_local_fake_ip" \
+  -j MARK --set-mark "${MARK}" 2>/dev/null; do :; done
+while iptables -t mangle -D PREROUTING \
+  -i lo -p tcp -d "${FAKE_IP_CIDR}" \
+  -m comment --comment "${CHAIN_LAN}_local_fake_ip" \
+  -j TPROXY --on-ip 127.0.0.1 --on-port "${TPORT}" \
+  --tproxy-mark "${MARK}/${MARK}" 2>/dev/null; do :; done
+
 iptables -t mangle -D PREROUTING -i ${LAN_IF} -s ${LAN_CIDR} -p tcp -j ${CHAIN_LAN} 2>/dev/null || true
 iptables -t mangle -F ${CHAIN_LAN} 2>/dev/null || true
 iptables -t mangle -X ${CHAIN_LAN} 2>/dev/null || true
@@ -147,6 +161,21 @@ if [ "${ENABLE_TPROXY}" -eq 1 ]; then
   # 其余 TCP 走 TPROXY
   iptables -t mangle -A ${CHAIN_LAN} -p tcp \
     -j TPROXY --on-port ${TPORT} --tproxy-mark ${MARK}/${MARK}
+
+  if [ "${ENABLE_LOCAL_FAKE_IP}" -eq 1 ]; then
+    echo "[*] 本机访问 ${FAKE_IP_CIDR} 的 TCP 将走透明代理"
+    # 先接住经策略路由回送 lo 的连接，再启用 OUTPUT 打标。
+    iptables -t mangle -I PREROUTING 1 \
+      -i lo -p tcp -d "${FAKE_IP_CIDR}" \
+      -m comment --comment "${CHAIN_LAN}_local_fake_ip" \
+      -j TPROXY --on-ip 127.0.0.1 --on-port "${TPORT}" \
+      --tproxy-mark "${MARK}/${MARK}"
+    # 只接管假地址目标，排除透明代理回包；真实上游连接仍正常出站。
+    iptables -t mangle -I OUTPUT 1 \
+      -p tcp ! -s "${FAKE_IP_CIDR}" -d "${FAKE_IP_CIDR}" \
+      -m comment --comment "${CHAIN_LAN}_local_fake_ip" \
+      -j MARK --set-mark "${MARK}"
+  fi
 else
   echo "[*] ENABLE_TPROXY=0，不创建 TPROXY 规则"
 fi
@@ -202,7 +231,8 @@ echo " TABLE_ID         = ${TABLE_ID}"
 echo " TPROXY_PORT      = ${TPORT}"
 echo " ENABLE_TPROXY    = ${ENABLE_TPROXY}"
 echo " ENABLE_PROXY_443 = ${ENABLE_PROXY_443}"
+echo " ENABLE_LOCAL_FAKE_IP = ${ENABLE_LOCAL_FAKE_IP}"
+echo " FAKE_IP_CIDR     = ${FAKE_IP_CIDR}"
 echo " ENABLE_DNS_UDP53 = ${ENABLE_DNS_UDP53}"
 echo " BYPASS_TCP_PORTS = ${BYPASS_TCP_PORTS}"
 echo " CHAIN_LAN        = ${CHAIN_LAN}"
-

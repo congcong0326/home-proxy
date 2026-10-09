@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
+import org.congcong.proxyworker.outbound.OutboundEndpointResolver;
 import org.congcong.proxyworker.protocol.shadowsock.EncryptedSocksHandler;
 import org.congcong.proxyworker.protocol.shadowsock.DecryptedSocksHandler;
 import org.congcong.proxyworker.protocol.shadowsock.ShadowSocks2022ClientChunkEncoder;
@@ -76,7 +77,8 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
                     }
                 });
 
-        return b.connect(outboundProxyHost, outboundProxyPort);
+        return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
+                outboundProxyHost, outboundProxyPort, b::connect);
     }
 
     private static class ShadowSocksClientHandler extends SimpleChannelInboundHandler<ByteBuf> {

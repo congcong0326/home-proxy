@@ -57,6 +57,8 @@ public class InboundConfigUpdateRequest {
      */
     private Boolean sniffEnabled;
 
+    private Boolean fakeIpEnabled = false;
+
     /**
      * Shadowsocks加密方法
      */

@@ -7,18 +7,21 @@ import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
+import org.congcong.proxyworker.server.tunnel.LogicalTargetSource;
 
 public final class ChannelAttributes {
 
     private ChannelAttributes() {}
 
     public static final AttributeKey<InboundConfig> INBOUND_CONFIG = AttributeKey.valueOf("inboundConfig");
+    public static final AttributeKey<InboundConfig> DNS_INBOUND_CONFIG = AttributeKey.valueOf("dnsInboundConfig");
     public static final AttributeKey<UserConfig> AUTHENTICATED_USER = AttributeKey.valueOf("authenticatedUser");
 
     public static final AttributeKey<ProxyContext> PROXY_CONTEXT_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_CONTEXT_ATTRIBUTE_KEY");
     public static final AttributeKey<ProxyTimeContext> PROXY_TIME_ATTRIBUTE_KEY = AttributeKey.valueOf("PROXY_TIME_ATTRIBUTE_KEY");
 
     public static final AttributeKey<ProxyTunnelRequest> ProxyTunnelRequest = AttributeKey.valueOf("ProxyTunnelRequest");
+    public static final AttributeKey<LogicalTargetSource> LOGICAL_TARGET_SOURCE = AttributeKey.valueOf("LOGICAL_TARGET_SOURCE");
     public static final AttributeKey<byte[]> SHADOWSOCKS_2022_REQUEST_SALT = AttributeKey.valueOf("SHADOWSOCKS_2022_REQUEST_SALT");
 
     public static ProxyTunnelRequest getProxyTunnelRequest(Channel channel) {

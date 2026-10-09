@@ -21,6 +21,10 @@ public class AccessLogDetail {
     private String srcGeoCity;
     private String originalTargetHost;
     private String originalTargetIP;
+    private String finalConnectionIp;
+    private String logicalTargetSource;
+    private Long dnsRouteId;
+    private String configVersion;
     private Integer originalTargetPort;
     private String rewriteTargetHost;
     private Integer rewriteTargetPort;

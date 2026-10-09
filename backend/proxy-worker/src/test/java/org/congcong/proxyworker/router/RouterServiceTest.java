@@ -20,8 +20,49 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RouterServiceTest {
+
+    @Test
+    void attachesDnsSnapshotCapturedOnTheChannel() {
+        UserConfig user = user();
+        InboundConfig inbound = inbound(user, List.of(), route(9L, "fallback", RoutePolicy.BLOCK, domainRule("*")));
+        inbound.setConfigVersion("accepted-v1");
+        InboundConfig dns = new InboundConfig();
+        dns.setConfigVersion("accepted-v1");
+        EmbeddedChannel channel = new EmbeddedChannel(RouterService.getInstance());
+        try {
+            ChannelAttributes.setProxyContext(channel, new ProxyContext());
+            channel.attr(ChannelAttributes.DNS_INBOUND_CONFIG).set(dns);
+            ProxyTunnelRequest request = new ProxyTunnelRequest(ProtocolType.SOCKS5, "example.com", 443,
+                    user, inbound, null);
+            channel.writeInbound(request);
+            ProxyTunnelRequest routed = channel.readInbound();
+            assertSame(dns, routed.getDnsInboundConfig());
+            assertTrue(routed.isDnsInboundConfigCaptured());
+        } finally {
+            channel.finishAndReleaseAll();
+        }
+    }
+
+    @Test
+    void recordsAbsenceOfDnsInAcceptedSnapshot() {
+        UserConfig user = user();
+        InboundConfig inbound = inbound(user, List.of(), route(9L, "fallback", RoutePolicy.BLOCK, domainRule("*")));
+        EmbeddedChannel channel = new EmbeddedChannel(RouterService.getInstance());
+        try {
+            ChannelAttributes.setProxyContext(channel, new ProxyContext());
+            ProxyTunnelRequest request = new ProxyTunnelRequest(ProtocolType.SOCKS5, "example.com", 443,
+                    user, inbound, null);
+            channel.writeInbound(request);
+            ProxyTunnelRequest routed = channel.readInbound();
+            assertNull(routed.getDnsInboundConfig());
+            assertTrue(routed.isDnsInboundConfigCaptured());
+        } finally {
+            channel.finishAndReleaseAll();
+        }
+    }
 
     @Test
     void geoRouteDoesNotMatchDomainTargets() {
