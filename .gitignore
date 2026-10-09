@@ -37,6 +37,9 @@ Thumbs.db
 # Local reference checkouts
 /.reference/
 
+# Local workspace files
+/workspace/
+
 # Compiled classes
 **/*.class
 
