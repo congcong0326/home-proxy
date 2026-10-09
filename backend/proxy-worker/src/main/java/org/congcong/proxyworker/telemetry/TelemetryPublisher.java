@@ -14,6 +14,7 @@ public final class TelemetryPublisher {
     private static final TelemetryPublisher INSTANCE = new TelemetryPublisher();
     private final boolean enabled = Boolean.parseBoolean(System.getProperty("observability.enabled",
             System.getenv().getOrDefault("OBSERVABILITY_ENABLED", "true")));
+    private volatile boolean logReportingEnabled = true;
     private final boolean authEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_AUTH_ENABLED", "true"));
     private final boolean eventsEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_EVENTS_ENABLED", "true"));
     private final int capacity = Integer.parseInt(System.getenv().getOrDefault("OBSERVABILITY_BUFFER_CAPACITY", "5000"));
@@ -26,12 +27,14 @@ public final class TelemetryPublisher {
 
     private TelemetryPublisher() { }
     public static TelemetryPublisher getInstance() { return INSTANCE; }
-    public boolean enabled() { return enabled; }
-    public boolean authEnabled() { return enabled && authEnabled; }
-    public boolean eventsEnabled() { return enabled && eventsEnabled; }
+    /** Existing per-worker setting now controls V1 collection and transport. */
+    public void setLogReportingEnabled(Boolean enabled) { logReportingEnabled = enabled == null || enabled; }
+    public boolean enabled() { return enabled && logReportingEnabled; }
+    public boolean authEnabled() { return enabled() && authEnabled; }
+    public boolean eventsEnabled() { return enabled() && eventsEnabled; }
 
     public void publish(TelemetryRecordV1 record) {
-        if (!enabled) return;
+        if (!enabled()) return;
         try {
             record.setWorkerId(ProxyWorkerConfig.getInstance().getWorkerId());
             record.setWorkerInstanceId(INSTANCE_ID);
@@ -43,6 +46,7 @@ public final class TelemetryPublisher {
 
     /** Independent sender reads a stable batch; no file I/O or recovery is involved. */
     public TelemetryBatchV1 peek() {
+        if (!enabled()) return null;
         try { return buffer.peek(); }
         catch (Exception error) {
             serializationFailures.incrementAndGet();
@@ -55,7 +59,7 @@ public final class TelemetryPublisher {
     }
     public void retried() { retries.incrementAndGet(); }
     public Map<String, Object> status() {
-        return Map.ofEntries(Map.entry("enabled", enabled), Map.entry("instanceId", INSTANCE_ID),
+        return Map.ofEntries(Map.entry("enabled", enabled()), Map.entry("instanceId", INSTANCE_ID),
                 Map.entry("bufferMode", "MEMORY"), Map.entry("restartRecoverySupported", false),
                 Map.entry("queueDepth", buffer.depth()), Map.entry("bufferBytes", buffer.bytesUsed()),
                 Map.entry("bufferCapacity", capacity), Map.entry("bufferMaxBytes", maxBytes),

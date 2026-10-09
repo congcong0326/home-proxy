@@ -67,7 +67,7 @@
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。
-- `audit/AccessLogUtil` + `audit/impl/WebSocketLogPublisher`：把访问日志缓冲后随 worker 管理 WSS 批量上报。
+- `telemetry/TelemetryPublisher`：新版四类日志缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集已固定停用。
 
 ## 前端 frontend
 
@@ -86,7 +86,7 @@
 - `RouteManagement.tsx` + `components/RouteForm.tsx`：路由策略管理。
 - `InboundManagement.tsx`：入站监听配置。
 - `RateLimitManagement.tsx`：限流配置。
-- `LogAudit.tsx`、`AggregatedAnalysis.tsx`：访问日志审计和聚合分析。
+- `LogAudit.tsx`、`AggregatedAnalysis.tsx`：保留的旧访问日志审计和聚合分析源码；“访问概览”入口已屏蔽，原地址跳转对应新版页面。
 - `WolManagement.tsx`、`DiskMonitor.tsx`、`MailGateway.tsx`：WOL、磁盘监控、邮件网关。
 - `types/*`：前端接口类型，通常需要和后端 DTO、请求对象同步更新。
 
@@ -107,13 +107,13 @@
 3. `RouterService` 按用户绑定的路由和域名/Geo/广告规则选择路由。
 4. `OutboundConnectorFactory` 创建出站连接器。
 5. `ProxyTunnelConnectorHandler` 建立出站连接、写回协议响应、设置双向 relay。
-6. 连接结束后 `AccessLogUtil` 上报访问日志。
+6. 连接结束后 `telemetry/SessionObservation` 生成唯一汇总并交给 `TelemetryPublisher`；旧 `AccessLogUtil` 调用保留但不再采集。
 
 日志与看板链路：
 
-1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带心跳指标和缓冲的访问/认证日志。
-2. `control-manager` 的 `WorkerManagementConnectionService` 调用 `LogService` 写入当前日志 store；现状是 ClickHouse。旧 `/api/logs/access`、`/api/logs/auth` 端点保留给兼容 worker。
-3. 看板页面通过 `LogController`、`UserTrafficStatsController` 查询明细、TopN、时间序列和聚合统计；网关监控读取同一条 WSS 心跳落库的 `worker_status`。
+1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
+2. `control-manager` 的 telemetry ingest/writer 将新版四类日志写入 ClickHouse 的独立表；旧 `WorkerManagementConnectionService` → `LogService` 路径及 `/api/logs/access`、`/api/logs/auth` 端点保留给兼容 worker。
+3. 新版看板／审计页面查询 `/api/observability/v1`；保留的旧源消费者通过 `LogController`、`UserTrafficStatsController` 读取历史数据；网关监控读取 WSS 心跳落库的 `worker_status`。
 
 认证链路：
 
@@ -178,6 +178,13 @@
 
 ## 网关观测：访问分布预览
 
-- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：独立六维度 TopN，连接数／上行／下行／总流量，全量分母与其余项目；旧聚合分析入口保留。
+- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：独立六维度 TopN，连接数／上行／下行／总流量，全量分母与其余项目；旧聚合分析链接已隐藏。
 - `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、UInt128 累加、93 天范围、缺失维度计数与节点历史起点；不改采集和旧 API。
 - [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。
+
+## 仅上报新版日志与旧页面屏蔽
+
+- `frontend/src/App.tsx`、`pages/ProxyConfig.tsx`：隐藏“访问概览”，旧审计／聚合地址跳转新版；保留旧页面源码、后端 API 与数据。
+- `frontend/src/pages/WorkerManagement.tsx`：原“代理网关日志上报”沿用 `logReportingEnabled`，通过聚合配置动态控制 `TelemetryPublisher` 的 V1 四类日志采集／发送；与 `OBSERVABILITY_ENABLED` 部署总开关共同生效。
+- `AccessLogUtil` 的旧采集固定关闭，`WorkerManagementWebSocketServer` 心跳帧不携带旧日志；旧代码／API／历史数据保留。
+- [配置与生效边界](testing/gateway-observability-stage-a.md#仅上报新版日志)：关闭暂停新版待确认批次，重新开启继续发送；恢复旧采集需回退 Worker 版本。

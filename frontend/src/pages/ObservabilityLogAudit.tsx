@@ -8,6 +8,8 @@ import { ProxyWorkerDTO } from '../types/worker';
 import { PROTOCOL_TYPE_LABELS } from '../types/route';
 import './ObservabilityLogAudit.css';
 
+const PAGE_SIZE = 20;
+
 const kinds: { key: TelemetryType; label: string }[] = [
   { key: 'sessions', label: '连接记录' }, { key: 'dns', label: 'DNS 查询' },
   { key: 'events', label: '诊断事件' }, { key: 'credential-auth', label: '认证审计' },
@@ -187,7 +189,7 @@ function AuditList({ type, query, onDetail }: { type: TelemetryType; query: Tele
   useEffect(() => {
     let active = true;
     setLoading(true); setError(''); setPage(undefined);
-    apiService.queryTelemetryPage(type, { ...query, limit: 50, offset }).then(value => {
+    apiService.queryTelemetryPage(type, { ...query, limit: PAGE_SIZE, offset }).then(value => {
       if (active) setPage(value);
     }).catch(reason => { if (active) setError(errorText(reason)); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -213,10 +215,10 @@ function AuditList({ type, query, onDetail }: { type: TelemetryType; query: Tele
   ];
   return <>
     {error && <Alert type="error" showIcon message="查询失败" description={error} action={<Button onClick={() => setReload(v => v + 1)}>重试</Button>} />}
-    {page && <Typography.Paragraph type="secondary">共 {groupDigits(page.total)} 条{Number(page.total) > 10050 && '；已达浏览上限，请缩小时间或筛选范围。'}</Typography.Paragraph>}
+    {page && <Typography.Paragraph type="secondary">共 {groupDigits(page.total)} 条{Number(page.total) > page.maxOffset + PAGE_SIZE && '；已达浏览上限，请缩小时间或筛选范围。'}</Typography.Paragraph>}
     <Table rowKey="recordId" size="small" columns={columns} dataSource={page?.items ?? []} loading={loading} scroll={{ x: type === 'sessions' ? 1350 : 1100 }}
       locale={{ emptyText: error ? '查询失败' : '暂无日志' }}
-      pagination={{ current: offset / 50 + 1, pageSize: 50, total: Math.min(Number(page?.total ?? 0), 10050), showSizeChanger: false, onChange: p => setOffset((p - 1) * 50) }} />
+      pagination={{ current: offset / PAGE_SIZE + 1, pageSize: PAGE_SIZE, total: Math.min(Number(page?.total ?? 0), (page?.maxOffset ?? 10000) + PAGE_SIZE), showSizeChanger: false, onChange: p => setOffset((p - 1) * PAGE_SIZE) }} />
   </>;
 }
 
@@ -358,7 +360,7 @@ export function ObservabilityLogAudit() {
     setQuery({ workerId, from: from.toISOString(), to: to.toISOString(), ...filters });
   };
   return <div className="observability-audit">
-    <Typography.Title level={2}>新版日志审计</Typography.Title>
+    <Typography.Title level={2}>日志审计</Typography.Title>
     <Card size="small" title="筛选条件">
       <Space wrap style={{ marginBottom: 12 }}><span>Worker</span><Select aria-label="Worker" style={{ minWidth: 260 }} value={workerId || undefined} placeholder="选择 Worker" onChange={setWorkerId} options={workers.map(w => ({ value: w.workerId, label: `${w.displayName}（${w.workerId}）` }))} /><Button onClick={() => setReload(v => v + 1)}>刷新</Button></Space>
       <Tabs activeKey={type} onChange={key => setType(key as TelemetryType)} items={kinds} />

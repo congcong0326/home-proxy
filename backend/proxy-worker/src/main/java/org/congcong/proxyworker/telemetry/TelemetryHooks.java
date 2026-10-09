@@ -16,7 +16,7 @@ import java.net.InetSocketAddress;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Additive hooks; no dependence on the legacy log-reporting flag or legacy counters. */
+/** V1 hooks controlled by the node's log-reporting setting; counters remain independent. */
 public final class TelemetryHooks {
     private static final AttributeKey<SessionObservation> CONTEXT = AttributeKey.valueOf("telemetrySessionV1");
     private TelemetryHooks() { }

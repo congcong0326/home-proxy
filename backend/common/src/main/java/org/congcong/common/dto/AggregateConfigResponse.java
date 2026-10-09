@@ -18,7 +18,7 @@ import java.util.List;
 public class AggregateConfigResponse {
     /** Worker that is authorized to consume this response. */
     private String workerId;
-    /** 是否启用代理网关访问日志上报，默认开启。 */
+    /** 是否启用代理网关 V1 日志采集与上报，默认开启；旧版日志固定停用。 */
     private Boolean logReportingEnabled = true;
     /** Worker runtime logging level; configurations without this field use INFO. */
     private LogLevel logLevel = LogLevel.INFO;

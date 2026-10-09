@@ -19,6 +19,7 @@ import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.service.AggregateConfigService;
 import org.congcong.proxyworker.service.LoggingLevelService;
 import org.congcong.proxyworker.service.WorkerManagementWebSocketServer;
+import org.congcong.proxyworker.telemetry.TelemetryPublisher;
 
 import java.util.*;
 import java.util.function.Function;
@@ -93,7 +94,7 @@ public class ProxyWorkerApplication {
                 return ConfigApplyResult.failure(null, new IllegalArgumentException("配置 workerId 与本节点不一致"));
             }
             loggingLevelService.apply(newConfig.getLogLevel());
-            AccessLogUtil.setLogReportingEnabled(newConfig.getLogReportingEnabled());
+            TelemetryPublisher.getInstance().setLogReportingEnabled(newConfig.getLogReportingEnabled());
             ObjectNode proxyConfig = mapper.valueToTree(newConfig);
             proxyConfig.remove(List.of("logLevel", "logReportingEnabled", "version", "generatedAt", "configHash"));
             // Logging-only updates must not refresh listeners, Fake IP DNS or rule sets.

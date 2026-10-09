@@ -101,7 +101,7 @@ export const WorkerManagement: React.FC = () => {
         <Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item>
         <Form.Item name="managementUrl" label="Worker WSS 地址" extra="填写 Worker 启动后监听的 wss:// 地址" rules={[{ required: true, pattern: /^wss:\/\/.+/, message: '请输入有效的 wss:// 地址' }]}><Input placeholder="wss://worker.example.com:18444/management/ws" /></Form.Item>
         <Form.Item name="managementToken" label="Worker 管理 Token" extra="Token 由 Worker 生成，读取 worker.management.tokenFile 后粘贴到这里" rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
-        <Form.Item name="logReportingEnabled" label="代理网关日志上报" valuePropName="checked" initialValue={true}><Switch checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item>
+        <Form.Item name="logReportingEnabled" label="代理网关日志上报" extra="控制新版连接、DNS、诊断事件与认证日志的采集和上报；旧版日志已固定停用。" valuePropName="checked" initialValue={true}><Switch checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item>
         <Form.Item name="logLevel" label="日志级别" initialValue="INFO" rules={[{ required: true }]}>
           <Select options={['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'OFF'].map(level => ({ label: level, value: level }))} />
         </Form.Item>

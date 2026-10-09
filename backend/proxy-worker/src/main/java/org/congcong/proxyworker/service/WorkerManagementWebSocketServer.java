@@ -8,7 +8,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -30,14 +29,11 @@ import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.SelfSignedCertificate;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.common.dto.AccessLog;
-import org.congcong.common.dto.AuthLog;
 import org.congcong.common.dto.WorkerManagementMessage;
 import org.congcong.common.dto.WorkerManagementMessageType;
 import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.common.dto.WorkerManagementHeartbeat;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -56,7 +52,6 @@ public final class WorkerManagementWebSocketServer {
     private static final String PATH = "/management/ws";
     private static final int MAX_HTTP_CONTENT_LENGTH = 64 * 1024;
     private static final int MAX_FRAME_SIZE = 4 * 1024 * 1024;
-    private static final int MAX_LOGS_PER_FRAME = 100;
 
     private final ProxyWorkerConfig config;
     private final AggregateConfigService configService;
@@ -183,30 +178,19 @@ public final class WorkerManagementWebSocketServer {
         WorkerMetricsDTO metrics = metricsCollector.collect();
         heartbeat.setMetrics(metrics);
 
-        java.util.List<AccessLog> accessLogs = AccessLogUtil.drainAccessLogs(MAX_LOGS_PER_FRAME);
-        java.util.List<AuthLog> authLogs = AccessLogUtil.drainAuthLogs(MAX_LOGS_PER_FRAME);
+        // CONFIG_POLL carries only config/heartbeat; legacy logs are never sent.
         WorkerManagementMessage message = new WorkerManagementMessage(
                 WorkerManagementMessageType.CONFIG_POLL,
                 config.getWorkerId(),
                 configService.getManagedPollingConfigHash(),
                 null,
                 heartbeat,
-                accessLogs.isEmpty() ? null : accessLogs,
-                authLogs.isEmpty() ? null : authLogs);
+                null,
+                null);
         try {
             String json = objectMapper.writeValueAsString(message);
-            active.eventLoop().execute(() -> {
-                ChannelFuture future = active.writeAndFlush(new TextWebSocketFrame(json));
-                future.addListener(result -> {
-                    if (!result.isSuccess()) {
-                        AccessLogUtil.requeueAccessLogs(accessLogs);
-                        AccessLogUtil.requeueAuthLogs(authLogs);
-                    }
-                });
-            });
+            active.eventLoop().execute(() -> active.writeAndFlush(new TextWebSocketFrame(json)));
         } catch (Exception e) {
-            AccessLogUtil.requeueAccessLogs(accessLogs);
-            AccessLogUtil.requeueAuthLogs(authLogs);
             log.warn("发送配置轮询消息失败: {}", e.toString());
         }
     }
@@ -243,7 +227,10 @@ public final class WorkerManagementWebSocketServer {
         }
         nextTelemetrySend = now + Math.max(5000, telemetryBackoffMs);
         String json = objectMapper.writeValueAsString(message);
-        active.eventLoop().execute(() -> active.writeAndFlush(new TextWebSocketFrame(json)));
+        active.eventLoop().execute(() -> {
+            // A config update can disable reporting after this frame was prepared.
+            if (publisher.enabled()) active.writeAndFlush(new TextWebSocketFrame(json));
+        });
     }
 
     private final class ManagementFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {

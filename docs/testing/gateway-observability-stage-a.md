@@ -8,7 +8,7 @@
 
 新增 `common.telemetry` 四种事实 DTO、认证分析契约、分类枚举、批次和 ACK，管理端独立 `telemetry` 数据库/初始化/writer/query，以及 Worker 独立上下文、不可变快照和有界内存缓冲。基础埋点覆盖 TCP 接收、路由快照、通道就绪/失败、唯一关闭汇总、成功载荷写回调、SOCKS5 PASSWORD、HTTP Basic 和客户端 A/AAAA 应答路径。
 
-现有 AccessLog/AuthLog、队列、WSS 旧字段、writer/store、default.access_log/auth_log、旧 API 和页面均保留。新计数器独立于旧计数器和旧日志开关，不改变密码检查、锁定、协议响应和 BLOCK 过滤。前端仅新增独立类型与 client 方法，无新页面/截图。
+阶段 A 实施时保留现有 AccessLog/AuthLog、队列、WSS 旧字段、writer/store、default.access_log/auth_log、旧 API 和页面，新计数器独立于旧计数器和旧日志开关，前端仅新增独立类型与 client 方法。2026-10-09 后续按用户要求停止旧采集／发送并将现有日志开关接入 V1，当前行为见下文“仅上报新版日志”；密码检查、锁定和协议响应不变。
 
 未观测字段保持 null/UNKNOWN，包括 DNS 缓存、真实上游尝试、连接细分阶段耗时、限流/背压、代理握手确认等。没有完整恢复失败事件、非 A/AAAA 或内部 DNS 覆盖。普通上游代理的真实目标 IP 保持未知，业务分类按 OUTBOUND_PROXY_ROUTE 为 EXTERNAL；connector 就绪使用本机实际完成边界。目标重写至 RFC1918/ULA 才属于 INTERNAL_REWRITE；回环、基准测试、保留地址为 UNKNOWN。
 
@@ -16,10 +16,11 @@
 
 ## 开关与部署
 
-新采集/ingest/query 默认开启，独立于旧 logReportingEnabled。2026-10-09 按用户要求将代码与 Compose 默认值从 false 调整为 true，避免仅更新镜像但沿用旧部署配置时出现 QUERY_DISABLED；显式设为 false 仍可独立关闭。管理端开关由 Spring Boot 的 observability.ingest-enabled/query-enabled 绑定，Worker 采集读取环境变量（或优先使用 JVM observability.enabled 属性），不增加配置数据库字段或 Flyway 迁移，不修改既有配置 CRUD/hash。
+新采集/ingest/query 默认开启。2026-10-09 按用户要求将代码与 Compose 默认值从 false 调整为 true，避免仅更新镜像但沿用旧部署配置时出现 QUERY_DISABLED；显式设为 false 仍可关闭。随后将已有逐节点 `logReportingEnabled` 接入新版日志，V1 有效开关为 `OBSERVABILITY_ENABLED && logReportingEnabled`（JVM `observability.enabled` 优先于环境变量）。管理端开关由 Spring Boot 的 observability.ingest-enabled/query-enabled 绑定；不增加配置数据库字段或 Flyway 迁移，不修改既有配置 CRUD/hash。
 
 | 配置 | 默认 | 用途 |
 | --- | --- | --- |
+| 节点 logReportingEnabled | true | 管理台“代理网关日志上报”，动态控制 V1 采集／发送 |
 | Worker OBSERVABILITY_ENABLED | true | 每 Worker 打开新采集 |
 | Worker OBSERVABILITY_AUTH_ENABLED | true | 总开关下独立凭据认证采集 |
 | Worker OBSERVABILITY_EVENTS_ENABLED | true | 总开关下独立事件采集 |
@@ -39,6 +40,20 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 ```
 
 已移除 OBSERVABILITY_SPOOL_DIR/MAX_BYTES 配置及 TelemetrySpool。Worker 新日志不读写 /data/proxy-worker/telemetry-v1；原数据卷仍供管理 Token/配置使用，既有目录不自动清理。一次 shell 环境变量仅影响该次部署，应在本地环境文件或流水线保存长期配置。
+
+### 仅上报新版日志
+
+2026-10-09 按用户要求屏蔽旧“访问概览”：隐藏菜单和访问分布中的旧版聚合分析链接，原 `/config/overview/log-audit`、`/config/overview/aggregate` 分别跳转新版日志审计、访问分布。旧源码、API、表和历史数据保留；页面变更不会自动修改节点配置。
+
+旧版日志在 Worker 中固定停用，不需要用户逐节点关闭旧开关：`AccessLogUtil` 不再采集成功／失败／DNS 日志，`CONFIG_POLL` 心跳帧的 `accessLogs`／`authLogs` 固定为空，即使旧队列中存在记录也不会发送。旧页面源码、日志 DTO、后端 API、表和历史数据继续保留。
+
+新版日志沿用原“系统运维 → 代理节点 → 编辑 → 代理网关日志上报”，对应数据库和聚合配置中的 `logReportingEnabled`，字段名、默认值与配置 hash 均不变。开启后采集／上报新版连接、DNS、诊断事件、认证日志，关闭后停止新事实入队与 telemetry 发送。保存后由已有配置通道动态下发，无需重启，也不会因仅修改此开关重启代理监听；各节点独立设置，缺失或 null 按开启处理。以前将该开关设为 false 的节点升级后新版日志也会停止，需在页面打开才能恢复。
+
+`OBSERVABILITY_ENABLED` 保留为部署层总开关，认证／事件仍受 `OBSERVABILITY_AUTH_ENABLED`／`OBSERVABILITY_EVENTS_ENABLED` 子开关控制；管理端 ingest/query 开关保持原语义。以上默认均为 true，页面开关不能覆盖部署层禁用；环境变量改变需重建容器或重启进程。
+
+关闭页面开关后，已有新版待确认批次保留在有界内存中并暂停发送，重新开启继续发送；已发出的帧仍可能落库和返回 ACK，运行进程重启仍会丢失未确认记录。关闭期间不补采新事实，跨越关闭窗口的连接统计不能作为完整覆盖。配置下发和基本心跳不受日志开关影响，控制台／文件运行日志由另一个 `logLevel` 设置控制。
+
+旧源只反映 Worker 升级停用旧采集前的历史，页面开关不能恢复旧日志；若需要恢复旧采集，需回退 Worker 版本，不能承诺仅靠配置回退到旧源。此变更不删除任何日志表或已有数据。
 
 ## V1 协议与内存缓冲
 
@@ -107,7 +122,7 @@ python3 scripts/e2e/fake-ip-persistent-e2e.py test
 
 旧 BLOCK 日志继续过滤，新汇总记录 BLOCK；新凭据认证在检查时记录，未建隧道的成功也保留；新流量只累加成功载荷且唯一收尾。累计表数包含调试、多轮兼容和合成夹具，不能替代单次时间窗口分母。
 
-OBSERVABILITY_ENABLED=false 并重建 Worker 可停止新采集/发送；重建会丢弃未确认内存批次，重新开启从新事实开始。管理端 INGEST_ENABLED=false 时 Worker 不协商/发送新协议，当前进程仍按容量暂存；QUERY_ENABLED=false 可独立关闭查询。回退不改旧日志开关/API/页面/表，禁止 down -v、DROP/TRUNCATE 作为本阶段测试或回退步骤。
+优先关闭节点的“代理网关日志上报”（`logReportingEnabled=false`）动态停止新采集／发送；已有内存批次暂停，重新开启继续发送。`OBSERVABILITY_ENABLED=false` 并重建 Worker 也可停止新采集／发送，但重建会丢弃未确认内存批次，重新开启从新事实开始。管理端 INGEST_ENABLED=false 时 Worker 不协商／发送新协议，当前进程仍按容量暂存；QUERY_ENABLED=false 可独立关闭查询。当前 Worker 的旧采集／发送固定停用，恢复旧采集需回退版本；禁止 down -v、DROP/TRUNCATE 作为测试或回退步骤。
 
 ## 本次内存版本最终结果
 

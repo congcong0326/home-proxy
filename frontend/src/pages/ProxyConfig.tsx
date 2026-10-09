@@ -136,17 +136,8 @@ const ProxyConfig: React.FC = () => {
       icon: <ApiOutlined />,
       label: '网关观测',
       children: [
-        { key: '/config/observability/log-audit', icon: <DatabaseOutlined />, label: '新版日志审计' },
+        { key: '/config/observability/log-audit', icon: <DatabaseOutlined />, label: '日志审计' },
         { key: '/config/observability/distribution', icon: <AreaChartOutlined />, label: '访问分布' },
-      ],
-    },
-    {
-      key: 'access-overview',
-      icon: <GlobalOutlined />,
-      label: '访问概览',
-      children: [
-        { key: '/config/overview/log-audit', icon: <LogoutOutlined />, label: '日志审计' },
-        { key: '/config/overview/aggregate', icon: <AreaChartOutlined />, label: '聚合分析' },
       ],
     },
   ];
@@ -161,7 +152,7 @@ const ProxyConfig: React.FC = () => {
       theme="dark"
       mode="inline"
       selectedKeys={[location.pathname]}
-      defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview', 'observability']}
+      defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'observability']}
       className="proxy-config-menu"
       items={menuItems}
       onClick={({ key }) => {
@@ -381,10 +372,8 @@ const getCardDescription = (key: string): string => {
       return '设置路由规则与流量分发策略';
     case '/config/rule-sets':
       return '统一管理 AI / GEO 等规则集与外部规则源同步';
-    case '/config/overview/log-audit':
-      return '查看访问日志，支持查询、过滤与详情';
-    case '/config/overview/aggregate':
-      return '综合用户与应用TopN聚合分析';
+    case '/config/observability/log-audit':
+      return '查看连接、DNS、诊断事件与认证日志';
     case '/config/observability/distribution':
       return '分析用户、目标、来源 IP 与路由的连接和流量分布';
     case '/config/dashboard/mail-gateway':

@@ -23,7 +23,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   api.getWorkers.mockResolvedValue([{ workerId: 'home-01', displayName: 'Home', enabled: true }]);
   api.getTelemetryStatus.mockResolvedValue(status);
-  api.queryTelemetryPage.mockResolvedValue({ items: [record], total: '101', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' });
+  api.queryTelemetryPage.mockResolvedValue({ items: [record], total: '101', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' });
   api.getTelemetryDetail.mockResolvedValue(record);
 });
 
@@ -47,10 +47,11 @@ test('formats null durations and submillisecond values without rounding integers
 
 test('submits backend filters and paginates; applying filters resets the offset', async () => {
   render(<ObservabilityLogAudit />);
+  expect(screen.getByRole('heading', { name: '日志审计' })).toBeInTheDocument();
   expect(await screen.findByText('8 PB')).toHaveAttribute('title', '9,007,199,254,740,993 B');
   expect(screen.getByText('0 B')).toHaveAttribute('title', '0 B');
   fireEvent.click(screen.getByTitle('2'));
-  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith('sessions', expect.objectContaining({ offset: 50, limit: 50 })));
+  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith('sessions', expect.objectContaining({ offset: 20, limit: 20 })));
   fireEvent.change(screen.getByRole('textbox', { name: '用户' }), { target: { value: 'alice' } });
   fireEvent.change(screen.getByRole('textbox', { name: '来源 IP' }), { target: { value: '192.168.1.2' } });
   fireEvent.click(screen.getByRole('button', { name: '查 询' }));
@@ -60,7 +61,7 @@ test('submits backend filters and paginates; applying filters resets the offset'
 });
 
 test('fetches stable ID details and related facts without inheriting list filters', async () => {
-  api.queryTelemetryPage.mockImplementation(async (type, query) => ({ items: query.connectionId ? [] : [record], total: query.connectionId ? '0' : '1', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
+  api.queryTelemetryPage.mockImplementation(async (type, query) => ({ items: query.connectionId ? [] : [record], total: query.connectionId ? '0' : '1', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   render(<ObservabilityLogAudit />);
   await screen.findByRole('button', { name: /查\s*看/ });
   fireEvent.change(screen.getByRole('textbox', { name: '用户' }), { target: { value: 'alice' } });
@@ -80,7 +81,7 @@ test('fetches stable ID details and related facts without inheriting list filter
 
 test('keeps four units independent and lets credential failures open without a destination', async () => {
   const auth = { ...record, recordId: 'auth-record', attemptedUsername: 'unknown-account', authOutcome: 'FAILURE', authMethod: 'HTTP_BASIC', analysis: null } as AuditRecordV1;
-  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'credential-auth' ? [auth] : [], total: type === 'credential-auth' ? '1' : '0', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
+  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'credential-auth' ? [auth] : [], total: type === 'credential-auth' ? '1' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   api.getTelemetryDetail.mockResolvedValue(auth);
   render(<ObservabilityLogAudit />);
   await screen.findByText('暂无日志');
@@ -104,7 +105,7 @@ test('shows query disabled without displaying collection diagnostics', async () 
 test('translates diagnostic events in lists and details, keeps unknown codes, and sends original filter values', async () => {
   const event = { ...record, sessionOutcome: undefined, recordId: 'connect-event', eventType: 'CONNECT_RESULT', stage: 'CHANNEL_SETUP', outcome: 'CONNECTED' } as AuditRecordV1;
   const unknown = { ...record, sessionOutcome: undefined, recordId: 'future-event', eventType: 'FUTURE_EVENT', stage: 'FUTURE_STAGE', outcome: 'FUTURE_OUTCOME' } as AuditRecordV1;
-  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'events' ? [event, unknown] : [], total: type === 'events' ? '2' : '0', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
+  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'events' ? [event, unknown] : [], total: type === 'events' ? '2' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   api.getTelemetryDetail.mockResolvedValue(event);
   render(<ObservabilityLogAudit />);
   fireEvent.click(screen.getByRole('tab', { name: '诊断事件' }));
@@ -158,7 +159,7 @@ async function chooseAuditOption(name: string, label: string) {
 test.each(filterCases)('$tab uses translated dropdowns and submits raw enum values; reset clears them', async item => {
   const sample = { ...record, recordId: `${item.type}-record`, inboundProtocol: item.protocol, [item.resultField]: item.result,
     qname: 'example.test', stage: 'AUTH', ...Object.fromEntries(item.extra.map(field => [field.field, field.code])) } as AuditRecordV1;
-  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === item.type ? [sample] : [], total: type === item.type ? '1' : '0', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
+  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === item.type ? [sample] : [], total: type === item.type ? '1' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   api.getTelemetryDetail.mockResolvedValue(sample);
   render(<ObservabilityLogAudit />);
   fireEvent.click(screen.getByRole('tab', { name: item.tab }));
@@ -188,7 +189,7 @@ test.each(filterCases)('$tab uses translated dropdowns and submits raw enum valu
 test('all authentication outcomes are translated and selecting a result keeps its original value', async () => {
   const outcomes = { SUCCESS: '认证通过', FAILURE: '认证失败', DENIED: '认证拒绝', CHALLENGE: '请求提供凭据', MALFORMED: '认证格式错误', CANCELLED: '认证取消', ERROR: '认证异常' };
   const rows = Object.keys(outcomes).map(authOutcome => ({ ...record, recordId: authOutcome, authOutcome, authMethod: 'SOCKS5_PASSWORD' } as AuditRecordV1));
-  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'credential-auth' ? rows : [], total: type === 'credential-auth' ? '7' : '0', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
+  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'credential-auth' ? rows : [], total: type === 'credential-auth' ? '7' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   render(<ObservabilityLogAudit />);
   fireEvent.click(screen.getByRole('tab', { name: '认证审计' }));
   await screen.findByText('认证通过');
@@ -211,7 +212,7 @@ test('explains authentication failure before routing without implying a missing 
     username: null, userId: null,
     credentialAuthAttempts: [{ authAttemptId: 'auth-failure', attemptedUsername: 'unknown-account', authOutcome: 'FAILURE', authMethod: 'SOCKS5_PASSWORD', occurredAt: record.occurredAt }],
     sessionOutcome: 'ERROR_END', connectOutcome: 'NOT_ATTEMPTED', failureStage: 'AUTH', errorCode: 'INVALID_CREDENTIALS' } as AuditRecordV1;
-  api.queryTelemetryPage.mockResolvedValue({ items: [earlyFailure], total: '1', limit: 50, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' });
+  api.queryTelemetryPage.mockResolvedValue({ items: [earlyFailure], total: '1', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' });
   render(<ObservabilityLogAudit />);
   await screen.findByText('认证未通过，目标未记录');
   expect(screen.getByText('认证阶段未进入选路')).toBeInTheDocument();

@@ -18,9 +18,8 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class AccessLogUtil {
-    private static volatile boolean logReportingEnabled = true;
-
-    public static void setLogReportingEnabled(Boolean enabled) { logReportingEnabled = enabled == null || enabled; }
+    // Legacy collection is permanently disabled; the node setting controls V1 telemetry.
+    private static final boolean LEGACY_LOG_REPORTING_ENABLED = false;
 
     private static final WebSocketLogPublisher logPublisher = new WebSocketLogPublisher(5000);
     
@@ -29,7 +28,7 @@ public class AccessLogUtil {
     private static final long START_TIMESTAMP = System.currentTimeMillis();
 
     public static void logSuccess(Channel channel) {
-        if (!logReportingEnabled) return;
+        if (!LEGACY_LOG_REPORTING_ENABLED) return;
         // 从 channel 获取 ProxyContext 和 ProxyTimeContext
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(channel);
         ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(channel);
@@ -53,7 +52,7 @@ public class AccessLogUtil {
     }
 
     public static void logFailure(Channel channel, int status, String errorCode, String errorMsg) {
-        if (!logReportingEnabled) return;
+        if (!LEGACY_LOG_REPORTING_ENABLED) return;
         // 从 channel 获取 ProxyContext 和 ProxyTimeContext
         ProxyContext proxyContext = ChannelAttributes.getProxyContext(channel);
         ProxyTimeContext timeContext = ChannelAttributes.getProxyTimeContext(channel);
@@ -82,7 +81,7 @@ public class AccessLogUtil {
                               DnsProxyContext dnsCtx,
                               DnsResponseCode code,
                               List<String> answerIps) {
-        if (!logReportingEnabled || proxyContext == null) return;
+        if (!LEGACY_LOG_REPORTING_ENABLED || proxyContext == null) return;
         ProxyTimeContext ctx = timeContext != null ? timeContext : new ProxyTimeContext();
         ctx.setRequestEndTime(System.currentTimeMillis());
 

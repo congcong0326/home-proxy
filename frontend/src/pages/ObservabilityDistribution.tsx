@@ -169,7 +169,7 @@ export function ObservabilityDistribution() {
     {workerError && <Alert type="error" showIcon message={workerError} />}
     {!query && <Alert type="warning" showIcon message="请选择有效日期，范围最多 93 天" />}
     {error && <Alert type="error" showIcon message={error} />}
-    <Card variant="outlined" title="TopN 结果" extra={<a href="/config/overview/aggregate">旧版聚合分析</a>}>
+    <Card variant="outlined" title="TopN 结果">
       {data && <Typography.Paragraph type="secondary" className="distribution-summary">
         <Space wrap size="middle">
           <span>全部连接：{digits(data.totals.connections)}</span><span>上行：{byteCell(data.totals.upload)}</span>

@@ -12,6 +12,7 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.service.AggregateConfigService;
 import org.congcong.proxyworker.service.LoggingLevelService;
 import org.congcong.proxyworker.server.ConfigApplyResult;
+import org.congcong.proxyworker.telemetry.TelemetryPublisher;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
@@ -45,6 +46,17 @@ class ProxyWorkerApplicationTest {
             assertTrue(listener.onConfigChanged(config).success());
             assertEquals(1, refreshCount.get());
 
+            config.setLogReportingEnabled(false);
+            assertTrue(listener.onConfigChanged(config).success());
+            assertFalse(TelemetryPublisher.getInstance().enabled());
+            assertFalse(TelemetryPublisher.getInstance().authEnabled());
+            assertFalse(TelemetryPublisher.getInstance().eventsEnabled());
+            assertEquals(1, refreshCount.get());
+            config.setLogReportingEnabled(true);
+            assertTrue(listener.onConfigChanged(config).success());
+            assertTrue(TelemetryPublisher.getInstance().enabled());
+            assertEquals(1, refreshCount.get());
+
             config.setLogLevel(LogLevel.WARN);
             config.setConfigHash("logging-only-hash");
             config.setGeneratedAt(LocalDateTime.now());
@@ -58,6 +70,7 @@ class ProxyWorkerApplicationTest {
             assertTrue(listener.onConfigChanged(config).success());
             assertEquals(2, refreshCount.get());
         } finally {
+            TelemetryPublisher.getInstance().setLogReportingEnabled(true);
             context.stop();
         }
     }

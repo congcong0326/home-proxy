@@ -16,10 +16,8 @@ import RouteManagement from './pages/RouteManagement';
 import RuleSetManagement from './pages/RuleSetManagement';
 import './App.css';
 import InboundManagement from './pages/InboundManagement';
-import LogAudit from './pages/LogAudit';
 import { ObservabilityLogAudit } from './pages/ObservabilityLogAudit';
 import { ObservabilityDistribution } from './pages/ObservabilityDistribution';
-import AggregatedAnalysis from './pages/AggregatedAnalysis';
 import Dashboard from './pages/Dashboard';
 import { TrafficOverview } from './pages/TrafficOverview';
 import WolManagement from './pages/WolManagement';
@@ -124,11 +122,11 @@ const AppContent: React.FC = () => {
           <Route path="routing" element={<RouteManagement />} />
           <Route path="rule-sets" element={<RuleSetManagement />} />
           <Route path="inbound" element={<InboundManagement />} />
-          {/* 访问概览嵌套路由 */}
+          {/* 网关观测；旧访问概览地址跳转到对应新版页面 */}
           <Route path="observability/log-audit" element={<ObservabilityLogAudit />} />
           <Route path="observability/distribution" element={<ObservabilityDistribution />} />
-          <Route path="overview/log-audit" element={<LogAudit />} />
-          <Route path="overview/aggregate" element={<AggregatedAnalysis />} />
+          <Route path="overview/log-audit" element={<Navigate to="/config/observability/log-audit" replace />} />
+          <Route path="overview/aggregate" element={<Navigate to="/config/observability/distribution" replace />} />
           {/* Dashboard路由 */}
           <Route path="dashboard" element={<Dashboard />} />
           {/* Dashboard子页面路由 */}

@@ -1,9 +1,13 @@
 package org.congcong.proxyworker.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.dto.WorkerManagementMessage;
 import org.congcong.common.dto.WorkerManagementMessageType;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.congcong.common.dto.AccessLog;
+import org.congcong.common.dto.AuthLog;
+import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,6 +27,7 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
@@ -30,6 +35,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class WorkerManagementWebSocketServerTest {
@@ -59,11 +65,15 @@ class WorkerManagementWebSocketServerTest {
         System.setProperty("WORKER_MANAGEMENT_TOKEN_FILE", tokenFile.toString());
 
         WorkerManagementWebSocketServer server = new WorkerManagementWebSocketServer(new AggregateConfigService());
+        // Even a preexisting/requeued legacy batch must never leave this worker.
+        AccessLogUtil.requeueAccessLogs(List.of(new AccessLog()));
+        AccessLogUtil.requeueAuthLogs(List.of(new AuthLog()));
         server.start();
         try {
             String token = Files.readString(tokenFile).trim();
             CountDownLatch received = new CountDownLatch(1);
             AtomicReference<WorkerManagementMessage> message = new AtomicReference<>();
+            AtomicReference<Exception> parseError = new AtomicReference<>();
             WebSocket socket = trustedClient().newWebSocketBuilder()
                     .connectTimeout(Duration.ofSeconds(5))
                     .header("Authorization", "Bearer " + token)
@@ -77,10 +87,12 @@ class WorkerManagementWebSocketServerTest {
                         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                             if (last) {
                                 try {
-                                    message.set(new ObjectMapper().readValue(data.toString(), WorkerManagementMessage.class));
+                                    message.set(new ObjectMapper().registerModule(new JavaTimeModule())
+                                            .readValue(data.toString(), WorkerManagementMessage.class));
                                     received.countDown();
-                                } catch (Exception ignored) {
-                                    // The assertion below turns an unparsable frame into a test failure.
+                                } catch (Exception error) {
+                                    parseError.set(error);
+                                    received.countDown();
                                 }
                             }
                             webSocket.request(1);
@@ -89,13 +101,17 @@ class WorkerManagementWebSocketServerTest {
                     }).join();
 
             assertTrue(received.await(5, TimeUnit.SECONDS));
+            assertNull(parseError.get(), () -> "Cannot parse WSS heartbeat: " + parseError.get());
             assertEquals(WorkerManagementMessageType.CONFIG_POLL, message.get().getType());
             assertEquals("wss-test", message.get().getWorkerId());
             assertTrue(message.get().getHeartbeat() != null);
             assertTrue(message.get().getHeartbeat().getMetrics() != null);
+            assertNull(message.get().getAccessLogs());
+            assertNull(message.get().getAuthLogs());
             socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
         } finally {
             server.stop();
+            AccessLogUtil.stop();
         }
     }
 

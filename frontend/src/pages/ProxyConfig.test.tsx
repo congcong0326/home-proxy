@@ -33,12 +33,14 @@ test('does not show unfinished rate limit and geo distribution entries', async (
   expect(screen.getByText('日志审计')).toBeInTheDocument();
 });
 
-test('keeps the old audit entry and adds gateway observability audit', async () => {
+test('hides legacy access overview entries and keeps gateway observability', async () => {
   renderProxyConfig();
   await screen.findByText('网关观测');
-  expect(screen.getByText('新版日志审计')).toBeInTheDocument();
-  expect(screen.getByText('访问分布')).toBeInTheDocument();
   expect(screen.getByText('日志审计')).toBeInTheDocument();
+  expect(screen.getByText('访问分布')).toBeInTheDocument();
+  expect(screen.queryByText('访问概览')).not.toBeInTheDocument();
+  expect(screen.queryByText('新版日志审计')).not.toBeInTheDocument();
+  expect(screen.queryByText('聚合分析')).not.toBeInTheDocument();
 });
 
 test('shows disk monitor under the system operations menu', async () => {
