@@ -58,6 +58,12 @@ public class WorkerManagementConnectionService {
     private final AggregateConfigCacheService aggregateConfigCacheService;
     private final WorkerControlService workerControlService;
     private final LogService logService;
+    private final org.congcong.controlmanager.telemetry.TelemetryStore telemetryStore;
+    private final org.congcong.controlmanager.telemetry.TelemetryProperties telemetryProperties;
+    private final java.util.concurrent.ThreadPoolExecutor telemetryExecutor = new java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 0, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(128),
+            r -> { Thread t = new Thread(r, "telemetry-ingest"); t.setDaemon(true); return t; },
+            new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
     private final ConcurrentHashMap<String, Connection> connections = new ConcurrentHashMap<>();
     private final Set<String> connecting = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -87,6 +93,7 @@ public class WorkerManagementConnectionService {
     @PreDestroy
     void stop() {
         scheduler.shutdownNow();
+        telemetryExecutor.shutdown();
         connections.values().forEach(connection -> connection.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "controller stopping"));
         connections.clear();
     }
@@ -139,7 +146,9 @@ public class WorkerManagementConnectionService {
         }
         String token = worker.getManagementToken();
         WorkerWebSocketListener listener = new WorkerWebSocketListener(workerId);
-        webSocketClient.newWebSocketBuilder()
+        WebSocket.Builder builder = webSocketClient.newWebSocketBuilder();
+        if (telemetryProperties.isIngestEnabled()) builder.header("X-Home-Proxy-Telemetry", "1");
+        builder
                 .connectTimeout(Duration.ofSeconds(5))
                 .header("Authorization", "Bearer " + token)
                 .buildAsync(uri, listener)
@@ -180,6 +189,45 @@ public class WorkerManagementConnectionService {
         String expectedWorkerId = listener.workerId;
         try {
             WorkerManagementMessage request = objectMapper.readValue(json, WorkerManagementMessage.class);
+            if (expectedWorkerId.equals(request.getWorkerId()) && request.getType() == WorkerManagementMessageType.TELEMETRY_HELLO) {
+                if (telemetryProperties.isIngestEnabled() && Integer.valueOf(1).equals(request.getTelemetryVersion())) {
+                    listener.telemetryAccepted = true;
+                    telemetryStore.observeWorker(expectedWorkerId, request.getTelemetryStatus());
+                    WorkerManagementMessage accepted = new WorkerManagementMessage();
+                    accepted.setType(WorkerManagementMessageType.TELEMETRY_ACCEPT);
+                    accepted.setWorkerId(expectedWorkerId);
+                    accepted.setTelemetryVersion(1);
+                    listener.send(socket, objectMapper.writeValueAsString(accepted));
+                }
+                return;
+            }
+            if (expectedWorkerId.equals(request.getWorkerId()) && request.getType() == WorkerManagementMessageType.TELEMETRY_BATCH) {
+                if (!listener.telemetryAccepted || !telemetryProperties.isIngestEnabled() || request.getTelemetryBatch() == null
+                        || json.length() > telemetryProperties.getMaxBatchBytes() + 8192) return;
+                telemetryStore.observeWorker(expectedWorkerId, request.getTelemetryStatus());
+                try {
+                    telemetryExecutor.execute(() -> {
+                        org.congcong.common.telemetry.TelemetryAckV1 ack;
+                        try { ack = telemetryStore.ingest(expectedWorkerId, request.getTelemetryBatch()); }
+                        catch (Exception error) {
+                            log.warn("独立 telemetry ingest 失败, workerId={}, error={}", expectedWorkerId, error.toString());
+                            ack = new org.congcong.common.telemetry.TelemetryAckV1();
+                            ack.setBatchId(request.getTelemetryBatch().getBatchId());
+                            ack.setReasonCode(error instanceof IllegalArgumentException ? "INVALID_OR_CONFLICTING_FACT" : "STORE_UNAVAILABLE");
+                        }
+                        try {
+                            WorkerManagementMessage response = new WorkerManagementMessage();
+                            response.setType(WorkerManagementMessageType.TELEMETRY_ACK);
+                            response.setWorkerId(expectedWorkerId);
+                            response.setTelemetryAck(ack);
+                            listener.send(socket, objectMapper.writeValueAsString(response));
+                        } catch (Exception error) { log.debug("Telemetry ACK unavailable; worker will replay"); }
+                    });
+                } catch (java.util.concurrent.RejectedExecutionException full) {
+                    log.warn("Telemetry ingest queue full; no ACK, worker will retry, workerId={}", expectedWorkerId);
+                }
+                return;
+            }
             if (request.getType() != WorkerManagementMessageType.CONFIG_POLL
                     || !expectedWorkerId.equals(request.getWorkerId())) {
                 log.warn("收到无效 worker WSS 管理消息, workerId={}", expectedWorkerId);
@@ -207,7 +255,7 @@ public class WorkerManagementConnectionService {
                 response = new WorkerManagementMessage(WorkerManagementMessageType.CONFIG,
                         expectedWorkerId, config.getConfigHash(), config);
             }
-            socket.sendText(objectMapper.writeValueAsString(response), true);
+            listener.send(socket, objectMapper.writeValueAsString(response));
         } catch (Exception e) {
             log.warn("处理 worker WSS 配置轮询失败, workerId={}, error={}", expectedWorkerId, e.toString());
         }
@@ -288,6 +336,12 @@ public class WorkerManagementConnectionService {
         private final StringBuilder pendingText = new StringBuilder();
         private volatile long lastPollNanos = System.nanoTime();
         private volatile boolean closed;
+        private volatile boolean telemetryAccepted;
+        private CompletableFuture<?> outbound = CompletableFuture.completedFuture(null);
+
+        private synchronized void send(WebSocket socket, String json) {
+            outbound = outbound.handle((ignored, error) -> null).thenCompose(ignored -> socket.sendText(json, true));
+        }
 
         private WorkerWebSocketListener(String workerId) {
             this.workerId = workerId;

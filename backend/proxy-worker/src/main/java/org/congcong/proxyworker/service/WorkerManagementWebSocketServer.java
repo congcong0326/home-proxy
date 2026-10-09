@@ -71,7 +71,18 @@ public final class WorkerManagementWebSocketServer {
         thread.setDaemon(true);
         return thread;
     });
+    private final ScheduledExecutorService telemetryScheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "worker-telemetry-sender");
+        thread.setDaemon(true);
+        return thread;
+    });
     private volatile Channel serverChannel;
+    private static final io.netty.util.AttributeKey<Boolean> TELEMETRY_CAPABLE = io.netty.util.AttributeKey.valueOf("telemetryControllerV1");
+    private volatile boolean telemetryAccepted;
+    private volatile String pendingBatchId;
+    private volatile long nextTelemetrySend;
+    private volatile long telemetryBackoffMs = 2000;
+
 
     public WorkerManagementWebSocketServer(AggregateConfigService configService) {
         this.config = ProxyWorkerConfig.getInstance();
@@ -104,6 +115,7 @@ public final class WorkerManagementWebSocketServer {
             serverChannel = bootstrap.bind(config.getManagementPort()).syncUninterruptibly().channel();
             long interval = Math.max(500L, config.getManagementPollIntervalMs());
             pollScheduler.scheduleWithFixedDelay(this::safeSendConfigPoll, 0, interval, TimeUnit.MILLISECONDS);
+            telemetryScheduler.scheduleWithFixedDelay(this::safeSendTelemetry, 0, interval, TimeUnit.MILLISECONDS);
             log.info("Worker WSS 管理端已启动, port={}, path={}", config.getManagementPort(), PATH);
         } catch (RuntimeException e) {
             stop();
@@ -113,6 +125,7 @@ public final class WorkerManagementWebSocketServer {
 
     public void stop() {
         pollScheduler.shutdownNow();
+        telemetryScheduler.shutdownNow();
         Channel active = controllerChannel.getAndSet(null);
         if (active != null) active.close();
         Channel server = serverChannel;
@@ -136,6 +149,9 @@ public final class WorkerManagementWebSocketServer {
     }
 
     private void registerControllerChannel(Channel channel) {
+        telemetryAccepted = false;
+        pendingBatchId = null;
+        nextTelemetrySend = 0;
         Channel previous = controllerChannel.getAndSet(channel);
         if (previous != null && previous != channel) previous.close();
         log.info("Controller 已连接到 worker WSS 管理端, remote={}", channel.remoteAddress());
@@ -195,6 +211,41 @@ public final class WorkerManagementWebSocketServer {
         }
     }
 
+    private void safeSendTelemetry() {
+        try { sendTelemetry(); }
+        catch (Exception error) { log.warn("独立 telemetry 发送失败，保留内存批次等待重试: {}", error.toString()); }
+    }
+
+    private void sendTelemetry() throws Exception {
+        Channel active = controllerChannel.get();
+        var publisher = org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance();
+        if (active == null || !active.isActive() || !Boolean.TRUE.equals(active.attr(TELEMETRY_CAPABLE).get()) || !publisher.enabled()) return;
+        long now = System.currentTimeMillis();
+        if (now < nextTelemetrySend) return;
+        WorkerManagementMessage message = new WorkerManagementMessage();
+        message.setWorkerId(config.getWorkerId());
+        message.setTelemetryVersion(1);
+        if (!telemetryAccepted) {
+            message.setType(WorkerManagementMessageType.TELEMETRY_HELLO);
+            message.setTelemetryStatus(publisher.status());
+        } else {
+            var batch = publisher.peek();
+            if (batch == null) {
+                message.setType(WorkerManagementMessageType.TELEMETRY_HELLO);
+                message.setTelemetryStatus(publisher.status());
+            } else {
+                message.setType(WorkerManagementMessageType.TELEMETRY_BATCH);
+                message.setTelemetryBatch(batch);
+                message.setTelemetryStatus(publisher.status());
+                if (batch.getBatchId().equals(pendingBatchId)) publisher.retried();
+                pendingBatchId = batch.getBatchId();
+            }
+        }
+        nextTelemetrySend = now + Math.max(5000, telemetryBackoffMs);
+        String json = objectMapper.writeValueAsString(message);
+        active.eventLoop().execute(() -> active.writeAndFlush(new TextWebSocketFrame(json)));
+    }
+
     private final class ManagementFrameHandler extends SimpleChannelInboundHandler<WebSocketFrame> {
         private final StringBuilder pendingText = new StringBuilder();
         @Override
@@ -227,6 +278,27 @@ public final class WorkerManagementWebSocketServer {
                 log.warn("忽略 workerId 不匹配的管理消息");
                 return;
             }
+            if (message.getType() == WorkerManagementMessageType.TELEMETRY_ACCEPT && Integer.valueOf(1).equals(message.getTelemetryVersion())
+                    && Boolean.TRUE.equals(ctx.channel().attr(TELEMETRY_CAPABLE).get())) {
+                telemetryAccepted = true;
+                nextTelemetrySend = 0;
+                return;
+            }
+            if (message.getType() == WorkerManagementMessageType.TELEMETRY_ACK && message.getTelemetryAck() != null) {
+                var ack = message.getTelemetryAck();
+                if (ack.getBatchId() != null && ack.getBatchId().equals(pendingBatchId)) {
+                    if (ack.isPersisted()) {
+                        org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance().acknowledge(ack);
+                        pendingBatchId = null;
+                        telemetryBackoffMs = 2000;
+                        nextTelemetrySend = 0;
+                    } else {
+                        telemetryBackoffMs = Math.min(60000, telemetryBackoffMs * 2);
+                        nextTelemetrySend = System.currentTimeMillis() + telemetryBackoffMs;
+                    }
+                }
+                return;
+            }
             if (message.getType() == WorkerManagementMessageType.WOL_WAKE && message.getTaskPayload() != null) {
                 new WolTaskExecutor().execute(new org.congcong.common.dto.WorkerTaskDTO(null, WolTaskExecutor.TASK_TYPE, message.getTaskPayload()));
             } else if (message.getType() == WorkerManagementMessageType.CONFIG && message.getConfig() != null) {
@@ -237,6 +309,7 @@ public final class WorkerManagementWebSocketServer {
         @Override
         public void channelInactive(ChannelHandlerContext ctx) throws Exception {
             if (controllerChannel.compareAndSet(ctx.channel(), null)) {
+                telemetryAccepted = false;
                 log.info("Controller WSS 管理连接已断开, remote={}", ctx.channel().remoteAddress());
             }
             super.channelInactive(ctx);
@@ -264,6 +337,7 @@ public final class WorkerManagementWebSocketServer {
                 ctx.writeAndFlush(response).addListener(future -> ctx.close());
                 return;
             }
+            ctx.channel().attr(TELEMETRY_CAPABLE).set("1".equals(request.headers().get("X-Home-Proxy-Telemetry")));
             ctx.fireChannelRead(ReferenceCountUtil.retain(request));
         }
 

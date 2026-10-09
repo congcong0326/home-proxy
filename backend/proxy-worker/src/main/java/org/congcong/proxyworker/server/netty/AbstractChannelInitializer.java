@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.server.netty;
 
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelInitializer;
@@ -91,5 +92,6 @@ public abstract class AbstractChannelInitializer extends ChannelInitializer<Chan
         ProxyTimeContext proxyTimeContext = new ProxyTimeContext();
 
         ChannelAttributes.setProxyTimeContext(socketChannel, proxyTimeContext);
+        TelemetryHooks.accept(socketChannel, inboundConfig);
     }
 }

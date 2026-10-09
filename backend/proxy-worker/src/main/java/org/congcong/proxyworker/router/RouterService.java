@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.router;
 
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
@@ -67,6 +68,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             boolean hostIsIp = isIp(targetHost);
             matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
         }
+        boolean telemetryFallback = matchedRoute == null;
         if (matchedRoute == null) {
             matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
             if (matchedRoute == null) {
@@ -75,6 +77,7 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
         }
         ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
         proxyTunnelRequest.setRouteConfig(matchedRoute);
+        TelemetryHooks.routing(channelHandlerContext.channel(), proxyTunnelRequest, telemetryFallback);
         rejectNonPublicClientLiteral(proxyTunnelRequest, matchedRoute);
         log.info("SNI 分流: user={}, domain={}, targetPort={}, route={}, policy={}, outbound={}, destination={}:{}",
                 proxyContext.getUserName(),
@@ -98,10 +101,15 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
     }
 
     private boolean routeMatches(RouteConfig route, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
+        int telemetryRuleIndex = 0;
         for (RouteRule rule : route.getRules()) {
             if (ruleMatches(route, rule, targetHost, hostIsIp, proxyTunnelRequest)) {
+                proxyTunnelRequest.setTelemetryMatchedRuleId(proxyTunnelRequest.getInboundConfig().getConfigVersion()
+                        + ":" + route.getId() + ":" + telemetryRuleIndex);
+                proxyTunnelRequest.setTelemetryMatchedRuleSet(rule.getConditionType() == RouteConditionType.RULE_SET ? rule.getValue() : null);
                 return true;
             }
+            telemetryRuleIndex++;
         }
         return false;
     }

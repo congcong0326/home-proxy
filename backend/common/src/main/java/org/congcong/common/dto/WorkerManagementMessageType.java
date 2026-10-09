@@ -9,5 +9,9 @@ public enum WorkerManagementMessageType {
     /** The controller confirms that the worker's configuration hash is current. */
     CONFIG_UNCHANGED,
     /** Direct WOL wake command delivered over the management WebSocket. */
-    WOL_WAKE
+    WOL_WAKE,
+    TELEMETRY_HELLO,
+    TELEMETRY_ACCEPT,
+    TELEMETRY_BATCH,
+    TELEMETRY_ACK
 }

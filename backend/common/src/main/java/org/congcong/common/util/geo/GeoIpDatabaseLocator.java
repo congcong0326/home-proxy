@@ -11,7 +11,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Stream;
 
-final class GeoIpDatabaseLocator {
+public final class GeoIpDatabaseLocator {
     static final String DATABASE_FILE_NAME = "GeoLite2-City.mmdb";
     private static final String PROPERTY_MMDB_PATH = "geoip.mmdb.path";
     private static final String PROPERTY_DATA_DIR = "geoip.data.dir";
@@ -22,7 +22,7 @@ final class GeoIpDatabaseLocator {
     private GeoIpDatabaseLocator() {
     }
 
-    static Optional<Path> resolveDefault() {
+    public static Optional<Path> resolveDefault() {
         return resolve(
                 System.getProperties(),
                 System.getenv(),

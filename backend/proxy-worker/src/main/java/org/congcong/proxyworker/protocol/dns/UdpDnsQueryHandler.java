@@ -89,6 +89,9 @@ public class UdpDnsQueryHandler extends SimpleChannelInboundHandler<DatagramDnsQ
         proxyContext.setBytesIn(DnsMessageUtil.estimateMessageSize(query));
         tunnelRequest.setProxyContext(proxyContext);
         tunnelRequest.setProxyTimeContext(proxyTimeContext);
+        if (org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance().enabled()) {
+            tunnelRequest.setTelemetryDnsObservation(new org.congcong.proxyworker.telemetry.DnsObservation(tunnelRequest, dnsCtx));
+        }
         ctx.fireChannelRead(tunnelRequest);
     }
 

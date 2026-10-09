@@ -81,7 +81,14 @@ final class FakeIpDnsAnswerHandler extends SimpleChannelInboundHandler<ProxyTunn
         if (request.getProxyContext() != null) {
             request.getProxyContext().setBytesOut(DnsMessageUtil.estimateMessageSize(response));
         }
-        ctx.channel().writeAndFlush(response);
+        long telemetryResponseBytes = DnsMessageUtil.estimateMessageSize(response);
+        int telemetryRcode = response.code().intValue();
+        ctx.channel().writeAndFlush(response).addListener(sent -> {
+            if (request.getTelemetryDnsObservation() != null) {
+                request.getTelemetryDnsObservation().complete(request, result, failure, telemetryRcode,
+                        answerIps, sent.isSuccess(), telemetryResponseBytes);
+            }
+        });
         try {
             AccessLogUtil.logDns(request.getProxyContext(), request.getProxyTimeContext(), dns,
                     response.code(), answerIps);

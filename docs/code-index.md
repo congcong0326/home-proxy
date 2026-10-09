@@ -129,6 +129,7 @@
 - 新增协议：先改 `ProtocolType`，再补 control-manager 表单和校验、worker `ProxyServerFactory`、协议 strategy/initializer、出站 connector。
 - 新增路由条件或策略：改 `common` enum/DTO、control-manager 路由管理、worker `RouterService` 或 `OutboundConnectorFactory`。
 - 新增管理台页面：补 `frontend/src/pages`、`frontend/src/types`、`frontend/src/services/api.ts`，再把路由挂到 `App.tsx` 和 `ProxyConfig.tsx` 导航。
+- 新日志模型与网关观测（阶段 A 已实施，B/C/D 待实施）：先读 [双轨演进设计](development/gateway-observability-log-model-design.md)，使用独立 DTO、采集／存储／API 和前端分类；流量重点区分实际目标重写至内网的子集与外网，不需额外 NAS 归属配置，并新增用户名密码认证来源审计；观察阶段保留所有旧代码、旧表与旧查询，用户确认稳定后再分批迁移页面，最终清理需另行确认。
 - 新增数据库字段：新增 Flyway 脚本，更新 entity、DTO、mapper/service、前端类型。
 
 ## 验证入口
@@ -140,3 +141,11 @@
 - worker 单测：`mvn -f backend/pom.xml -pl proxy-worker -am test -DskipTests=false`
 - 前端测试：`make frontend-test`
 - 前端构建并同步静态资源到管理端：`make frontend-sync-static`
+
+## 网关观测 V1（阶段 A）
+
+- `common/telemetry`：独立事实 DTO、业务流量分类、批次和持久化 ACK。
+- `proxy-worker/telemetry`：接收时上下文、唯一结束汇总、成功载荷计数、认证/DNS 基础钩子、有界内存缓冲（无 Worker 日志持久化）。
+- `control-manager/telemetry`：独立 `telemetry.*_v1` 初始化、幂等 ingest/query、来源 GeoIP 与分析契约、`/api/observability/v1`。
+- `frontend/src/types/observability.ts` 与 `api.ts`：独立类型/API，现有页面保持旧查询。
+- [阶段 A 实施与保留数据 E2E](testing/gateway-observability-stage-a.md)：开关、协议、查询、兼容、回退与验收。

@@ -21,6 +21,12 @@ import java.net.InetSocketAddress;
  */
 @Getter
 public class ProxyTunnelRequest {
+    @Setter
+    private org.congcong.proxyworker.telemetry.DnsObservation telemetryDnsObservation;
+    @Setter
+    private String telemetryMatchedRuleId;
+    @Setter
+    private String telemetryMatchedRuleSet;
     private final ProtocolType protocolType;
     private final String targetHost;
     private final int targetPort;

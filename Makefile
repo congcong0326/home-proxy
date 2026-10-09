@@ -21,7 +21,7 @@ MAVEN_ARGS ?= -B -ntp -Dmaven.repo.local=$(MAVEN_REPO)
 NPM_CACHE ?= $(CURDIR)/.npm
 NPM_ARGS ?= --cache $(NPM_CACHE)
 
-.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-fake-ip-transparent e2e-fake-ip-persistent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
+.PHONY: build package backend-build backend-test backend-dev worker-build worker-it e2e-transparent e2e-fake-ip-transparent e2e-fake-ip-persistent e2e-direct-outbound-safety e2e-worker-proxy e2e-worker-proxy-setup e2e-observability-stage-a e2e-observability-stage-a-setup frontend-install frontend-build frontend-test frontend-dev frontend-sync-static docker-build docker-build-control docker-build-worker docker-up-control docker-up-worker docker-reset-control docker-save docker-save-offline
 .NOTPARALLEL: package
 
 build: backend-build frontend-build
@@ -68,6 +68,14 @@ e2e-worker-proxy:
 
 e2e-worker-proxy-setup:
 	bash scripts/e2e/worker-proxy-e2e.sh --provision
+
+# Retains all telemetry tables and facts; requires enabled V1 ingest/query and worker collection.
+e2e-observability-stage-a:
+	python3 scripts/e2e/gateway-observability-stage-a-e2e.py
+	python3 scripts/e2e/gateway-observability-protocol-probe.py
+
+e2e-observability-stage-a-setup:
+	python3 scripts/e2e/gateway-observability-stage-a-e2e.py --provision
 
 frontend-install:
 	$(NPM) $(NPM_ARGS) --prefix $(FRONTEND_DIR) ci

@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.server;
 
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.buffer.Unpooled;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
@@ -54,7 +55,10 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         final int bytes = readableBytes(msg);
 
         // 写到对端，失败则关闭双端；成功时累加字节统计
+        Channel telemetryChannel = isClient ? ctx.channel() : relayChannel;
+        TelemetryHooks.writeStarted(telemetryChannel);
         relayChannel.write(msg).addListener(future -> {
+            TelemetryHooks.writeCompleted(telemetryChannel, isClient, bytes, future.isSuccess());
             if (!future.isSuccess()) {
                 Throwable cause = future.cause();
                 String errorMsg = cause != null ? cause.getMessage() : "unknown (maybe channel closed)";
@@ -109,6 +113,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         // 增加访问日志记录
         Channel contextChannel = isClient ? ctx.channel() : relayChannel;
         if (contextChannel != null) {
+            TelemetryHooks.error(contextChannel, "RELAY", "RELAY_ERROR");
             AccessLogUtil.logFailure(contextChannel, 500, "RELAY_ERROR", cause.getMessage());
         }
         closeOnFlush(ctx.channel());

@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol;
 
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
@@ -45,6 +46,8 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
         // 填下目标的地址与端口信息
         proxyContext.setOriginalTargetHost(proxyTunnelRequest.getTargetHost());
         proxyContext.setOriginalTargetPort(proxyTunnelRequest.getTargetPort());
+
+        TelemetryHooks.beginConnect(inboundChannel);
 
         // 用统一的 promise 承载成功/失败，交由 getRelayPromise 处理中继与协议响应
         Promise<Channel> relayPromise = getRelayPromise(channelHandlerContext, proxyTunnelRequest);
@@ -130,6 +133,7 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 //                "\r\n";
                 // shadowsock 不需要写回数据，但是可能需要处理 initialPayload
                 if (future.isSuccess()) {
+                    TelemetryHooks.connected(ctx.channel(), outboundChannel, proxyTunnelRequest);
                     // 连接成功设置中继服务器
                     if (strategy.needRelay()) {
                         setRelay(ctx.channel(), outboundChannel);
@@ -141,7 +145,10 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                     if (proxyTunnelRequest.getInitialPayload() != null) {
                         log.debug("写入首次负载");
                         ByteBuf initialPayload = proxyTunnelRequest.getInitialPayload();
+                        int telemetryPayloadBytes = initialPayload.readableBytes();
+                        TelemetryHooks.writeStarted(ctx.channel());
                         outboundChannel.writeAndFlush(initialPayload).addListener(f -> {
+                            TelemetryHooks.writeCompleted(ctx.channel(), true, telemetryPayloadBytes, f.isSuccess());
                             if (!f.isSuccess()) {
                                 // 写失败也释放
                                 if (initialPayload.refCnt() > 0) {
@@ -157,6 +164,7 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 // 连接失败
                 else {
                     Throwable cause = future.cause();
+                    TelemetryHooks.connectFailed(ctx.channel(), cause);
                     strategy.onConnectFailure(ctx, outboundChannel, proxyTunnelRequest, cause);
                     log.debug("因为{}执行失败回调", cause.getMessage());
                 }

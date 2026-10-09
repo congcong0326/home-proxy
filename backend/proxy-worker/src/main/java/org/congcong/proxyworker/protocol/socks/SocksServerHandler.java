@@ -1,5 +1,6 @@
 package org.congcong.proxyworker.protocol.socks;
 
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelFutureListener;
@@ -53,6 +54,8 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
                         new Socks5PasswordAuthRequestDecoder());
                 channelHandlerContext.writeAndFlush(new DefaultSocks5InitialResponse(Socks5AuthMethod.PASSWORD));
             } else {
+                TelemetryHooks.authentication(channelHandlerContext.channel(), "SOCKS5_PASSWORD", "PROTOCOL_REJECTION", null, null,
+                        org.congcong.common.telemetry.AuthOutcome.DENIED, "NO_ACCEPTABLE_METHOD", null);
                 // 客户端不支持用户名/密码，拒绝
                 channelHandlerContext.writeAndFlush(new DefaultSocks5InitialResponse(Socks5AuthMethod.UNACCEPTED))
                         .addListener(ChannelFutureListener.CLOSE);
@@ -62,9 +65,12 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
 
         // 校验认证请求（用户名/密码）
         if (socksMessage instanceof Socks5PasswordAuthRequest authReq) {
+            long telemetryAuthStart = System.nanoTime();
             String username = authReq.username();
             String password = authReq.password();
             if (bruteForceProtector.isLocked(username)) {
+                TelemetryHooks.authentication(channelHandlerContext.channel(), "SOCKS5_PASSWORD", "CREDENTIAL_CHECK", username, null,
+                        org.congcong.common.telemetry.AuthOutcome.DENIED, "ACCOUNT_LOCKED", null);
                 log.warn("SOCKS5 authentication failed for user {}: account is temporarily locked", username);
                 rejectAuthentication(channelHandlerContext);
                 return;
@@ -73,6 +79,9 @@ public class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage
             UserConfig user = FindUser.find(username, inboundConfig);
             boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
 
+            TelemetryHooks.authentication(channelHandlerContext.channel(), "SOCKS5_PASSWORD", "CREDENTIAL_CHECK", username, ok ? user : null,
+                    ok ? org.congcong.common.telemetry.AuthOutcome.SUCCESS : org.congcong.common.telemetry.AuthOutcome.FAILURE,
+                    ok ? "VERIFIED" : "INVALID_CREDENTIALS", (System.nanoTime() - telemetryAuthStart) / 1000);
             if (ok) {
                 bruteForceProtector.clearFailures(username);
                 // 认证通过，返回成功并加入命令解析器以处理后续CONNECT等请求

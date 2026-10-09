@@ -54,6 +54,7 @@ public class ProxyWorkerApplication {
             activeManagementServer.stop();
             PROXY_CONTEXT.closeAll();
             AccessLogUtil.stop();
+            org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance().shutdown();
         }));
         
         // 主线程保持运行

@@ -24,6 +24,15 @@ public class WorkerManagementMessage {
     /** Authentication logs buffered by the worker and delivered over the management socket. */
     private List<AuthLog> authLogs;
     private java.util.Map<String, Object> taskPayload;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private Integer telemetryVersion;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private org.congcong.common.telemetry.TelemetryBatchV1 telemetryBatch;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private org.congcong.common.telemetry.TelemetryAckV1 telemetryAck;
+    @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+    private java.util.Map<String, Object> telemetryStatus;
+
 
     public WorkerManagementMessage(WorkerManagementMessageType type,
                                    String workerId,

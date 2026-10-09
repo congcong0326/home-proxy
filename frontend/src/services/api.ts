@@ -1,3 +1,4 @@
+import { TelemetryType, TelemetryQuery, TelemetryRecordV1, TelemetryStatusV1 } from '../types/observability';
 import {
   LoginRequest,
   LoginResponse,
@@ -1052,6 +1053,19 @@ class ApiService {
     return this.request<void>(`/scheduler/tasks/${id}`, {
       method: 'DELETE'
     });
+  }
+
+  // Independent stage A API; existing log/statistics methods retain their data source.
+  async getTelemetryStatus(workerId?: string): Promise<TelemetryStatusV1> {
+    return this.request<TelemetryStatusV1>(`/observability/v1/status${workerId ? `?workerId=${encodeURIComponent(workerId)}` : ''}`);
+  }
+
+  async queryTelemetry<T extends TelemetryRecordV1>(type: TelemetryType, query: TelemetryQuery): Promise<T[]> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined) params.set(key, String(value));
+    });
+    return this.request<T[]>(`/observability/v1/${type}?${params}`);
   }
 
   // ========== 系统运维：MySQL备份恢复 ==========
