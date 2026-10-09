@@ -2,7 +2,9 @@ package org.congcong.controlmanager.service;
 
 import org.congcong.common.dto.ProxyWorkerDTO;
 import org.congcong.common.dto.WorkerTokenResponse;
+import org.congcong.common.enums.LogLevel;
 import org.congcong.controlmanager.dto.WorkerCreateRequest;
+import org.congcong.controlmanager.dto.WorkerUpdateRequest;
 import org.congcong.controlmanager.entity.ProxyWorker;
 import org.congcong.controlmanager.entity.WorkerStatus;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
@@ -14,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,11 +43,13 @@ class ProxyWorkerServiceTest {
     private InboundConfigRepository inboundConfigRepository;
 
     private ProxyWorkerService service;
+    private ConcurrentMapCacheManager cacheManager;
 
     @BeforeEach
     void setUp() {
+        cacheManager = new ConcurrentMapCacheManager("aggregateConfig");
         service = new ProxyWorkerService(proxyWorkerRepository, workerStatusRepository,
-                workerTaskRepository, inboundConfigRepository);
+                workerTaskRepository, inboundConfigRepository, cacheManager);
     }
 
     @Test
@@ -82,6 +88,44 @@ class ProxyWorkerServiceTest {
         assertNull(response.getToken());
         assertEquals("wss://edge.example.test:18444/management/ws", response.getWorker().getManagementUrl());
         assertTrue(response.getWorker().getManagementTokenPresent());
+        assertEquals(LogLevel.INFO, response.getWorker().getLogLevel());
+    }
+
+    @Test
+    void updatesLogLevelAndEvictsOnlyThatWorkersConfigAfterCommit() {
+        ProxyWorker worker = worker("edge-01", "Edge 01");
+        when(proxyWorkerRepository.findById("edge-01")).thenReturn(java.util.Optional.of(worker));
+        when(proxyWorkerRepository.save(any(ProxyWorker.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        var cache = cacheManager.getCache("aggregateConfig");
+        cache.put("edge-01", "old-config");
+        cache.put("other-worker", "other-config");
+        WorkerUpdateRequest request = new WorkerUpdateRequest();
+        request.setDisplayName("Edge 01");
+        request.setLogLevel(LogLevel.WARN);
+
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            assertEquals(LogLevel.WARN, service.update("edge-01", request).getLogLevel());
+            assertEquals(LogLevel.WARN, worker.getLogLevel());
+            assertEquals("old-config", cache.get("edge-01").get());
+            TransactionSynchronizationManager.getSynchronizations().forEach(sync -> sync.afterCommit());
+            assertNull(cache.get("edge-01"));
+            assertEquals("other-config", cache.get("other-worker").get());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void updateWithoutLogLevelRetainsExistingLevel() {
+        ProxyWorker worker = worker("edge-01", "Edge 01");
+        worker.setLogLevel(LogLevel.ERROR);
+        when(proxyWorkerRepository.findById("edge-01")).thenReturn(java.util.Optional.of(worker));
+        when(proxyWorkerRepository.save(any(ProxyWorker.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        WorkerUpdateRequest request = new WorkerUpdateRequest();
+        request.setDisplayName("Renamed edge");
+
+        assertEquals(LogLevel.ERROR, service.update("edge-01", request).getLogLevel());
     }
 
     private ProxyWorker worker(String workerId, String displayName) {

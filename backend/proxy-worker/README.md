@@ -187,11 +187,9 @@ this.httpClient = HttpClient.newBuilder()
 
 ### 调试模式
 
-修改 `logback.xml` 中的日志级别：
+在管理台新建／编辑代理节点时，将“代理网关日志上报”下方的“日志级别”设置为 `DEBUG` 或 `TRACE`。支持 `TRACE`、`DEBUG`、`INFO`、`WARN`、`ERROR`、`OFF`，默认 `INFO`。
 
-```xml
-<logger name="org.congcong.proxyworker" level="DEBUG" />
-```
+worker 启动时先使用 `INFO`，恢复本地成功配置或收到管理端配置后动态应用等级，应用和依赖日志统一继承 root。配置相同等级时不重复修改，仅改变日志设置不会刷新代理服务。该设置与访问／认证日志上报开关独立，排障完成后可恢复 `INFO`。
 
 ## 许可证
 

@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.service;
 
 import org.congcong.common.dto.InboundConfigDTO;
+import org.congcong.common.enums.LogLevel;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -8,8 +9,20 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 class CanonicalConfigHasherTest {
+
+    @Test
+    void logLevelChangesConfigHashAndMissingLevelDefaultsToInfo() {
+        CanonicalConfigHasher hasher = new CanonicalConfigHasher();
+        String info = hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, LogLevel.INFO);
+        String warn = hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, LogLevel.WARN);
+
+        assertNotEquals(info, warn);
+        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, null));
+        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of()));
+    }
 
     @Test
     void hashesInboundWithLocalDateTimeFieldsDeterministically() {

@@ -44,6 +44,5 @@
         <appender-ref ref="ASYNC_FILE" />
     </root>
 
-    <!-- 应用程序日志级别 -->
-    <logger name="org.congcong.proxyworker" level="INFO" />
+    <!-- 应用和依赖日志继承 root，管理端动态调整统一生效。 -->
 </configuration>

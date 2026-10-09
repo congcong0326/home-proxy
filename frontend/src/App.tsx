@@ -25,7 +25,7 @@ import DiskMonitor from './pages/DiskMonitor';
 import MailGateway from './pages/MailGateway';
 import DatabaseBackup from './pages/DatabaseBackup';
 import ProxyGatewayMonitor from './pages/ProxyGatewayMonitor';
-import WorkerManagement from './pages/WorkerManagement';
+import { WorkerManagement } from './pages/WorkerManagement';
 
 // 应用主组件
 const AppContent: React.FC = () => {

@@ -2,11 +2,14 @@ package org.congcong.controlmanager.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.Data;
+import org.congcong.common.enums.LogLevel;
 
 import java.time.LocalDateTime;
 
@@ -26,6 +29,10 @@ public class ProxyWorker {
 
     @Column(name = "log_reporting_enabled", nullable = false)
     private Boolean logReportingEnabled = true;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "log_level", nullable = false, length = 16)
+    private LogLevel logLevel = LogLevel.INFO;
 
     @Column(length = 255)
     private String description;

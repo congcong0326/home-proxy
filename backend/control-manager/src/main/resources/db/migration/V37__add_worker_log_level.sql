@@ -1,0 +1,2 @@
+ALTER TABLE proxy_worker
+    ADD COLUMN log_level VARCHAR(16) NOT NULL DEFAULT 'INFO';

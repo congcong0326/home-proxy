@@ -1,6 +1,7 @@
 package org.congcong.common.dto;
 
 import lombok.Data;
+import org.congcong.common.enums.LogLevel;
 
 import java.time.LocalDateTime;
 
@@ -10,6 +11,7 @@ public class ProxyWorkerDTO {
     private String displayName;
     private Boolean enabled;
     private Boolean logReportingEnabled;
+    private LogLevel logLevel;
     private String description;
     private String managementUrl;
     private String managementToken;

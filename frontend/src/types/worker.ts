@@ -1,3 +1,5 @@
+export type LogLevel = 'TRACE' | 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'OFF';
+
 export interface WorkerStatusSnapshot {
   workerId: string;
   hostname?: string;
@@ -21,6 +23,7 @@ export interface ProxyWorkerDTO {
   displayName: string;
   enabled: boolean;
   logReportingEnabled?: boolean;
+  logLevel?: LogLevel;
   description?: string;
   managementUrl?: string;
   managementToken?: string;
@@ -37,6 +40,7 @@ export interface WorkerCreateRequest {
   managementUrl: string;
   managementToken: string;
   logReportingEnabled?: boolean;
+  logLevel?: LogLevel;
 }
 
 export interface WorkerUpdateRequest {
@@ -46,6 +50,7 @@ export interface WorkerUpdateRequest {
   managementUrl?: string;
   managementToken?: string;
   logReportingEnabled?: boolean;
+  logLevel?: LogLevel;
 }
 
 export interface WorkerTokenResponse {

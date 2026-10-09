@@ -2,10 +2,16 @@ package org.congcong.proxyworker;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import org.congcong.common.dto.AggregateConfigResponse;
+import org.congcong.common.dto.InboundConfigDTO;
+import org.congcong.common.enums.LogLevel;
+import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.service.AggregateConfigService;
+import org.congcong.proxyworker.service.LoggingLevelService;
+import org.congcong.proxyworker.server.ConfigApplyResult;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
@@ -13,11 +19,66 @@ import java.lang.reflect.Constructor;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProxyWorkerApplicationTest {
+
+    @Test
+    void loggingOnlyChangeSkipsProxyRefreshButProxyChangesStillApply() {
+        LoggerContext context = new LoggerContext();
+        AtomicInteger refreshCount = new AtomicInteger();
+        try {
+            var listener = new ProxyWorkerApplication.ConfigChangeListener(new LoggingLevelService(context), configs -> {
+                refreshCount.incrementAndGet();
+                return ConfigApplyResult.applied();
+            });
+            AggregateConfigResponse config = aggregateConfig();
+            InboundConfigDTO dns = new InboundConfigDTO();
+            dns.setId(1L);
+            dns.setProtocol(ProtocolType.DNS_SERVER);
+            dns.setFakeIpEnabled(true);
+            config.setInbounds(List.of(dns));
+            assertTrue(listener.onConfigChanged(config).success());
+            assertEquals(1, refreshCount.get());
+
+            config.setLogLevel(LogLevel.WARN);
+            config.setConfigHash("logging-only-hash");
+            config.setGeneratedAt(LocalDateTime.now());
+            assertTrue(listener.onConfigChanged(config).success());
+            assertEquals(Level.WARN, context.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).getLevel());
+            assertEquals(1, refreshCount.get());
+            assertTrue(listener.onConfigChanged(config).success());
+            assertEquals(1, refreshCount.get());
+
+            dns.setPort(5353);
+            assertTrue(listener.onConfigChanged(config).success());
+            assertEquals(2, refreshCount.get());
+        } finally {
+            context.stop();
+        }
+    }
+
+    @Test
+    void failedProxyApplyIsRetriedEvenWhenLoggingLevelIsUnchanged() {
+        LoggerContext context = new LoggerContext();
+        AtomicInteger attempts = new AtomicInteger();
+        try {
+            var listener = new ProxyWorkerApplication.ConfigChangeListener(new LoggingLevelService(context), configs ->
+                    attempts.incrementAndGet() == 1
+                            ? ConfigApplyResult.failure(null, new IllegalStateException("bind failed"))
+                            : ConfigApplyResult.applied());
+            AggregateConfigResponse config = aggregateConfig();
+            assertFalse(listener.onConfigChanged(config).success());
+            assertTrue(listener.onConfigChanged(config).success());
+            assertEquals(2, attempts.get());
+        } finally {
+            context.stop();
+        }
+    }
 
     @Test
     void configChangeLogContainsSummaryButNotFullConfigData() throws Exception {

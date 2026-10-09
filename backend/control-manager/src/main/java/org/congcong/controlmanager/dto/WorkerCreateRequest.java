@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import org.congcong.common.enums.LogLevel;
 
 @Data
 public class WorkerCreateRequest {
@@ -27,4 +28,5 @@ public class WorkerCreateRequest {
     private String managementToken;
 
     private Boolean logReportingEnabled = true;
+    private LogLevel logLevel = LogLevel.INFO;
 }

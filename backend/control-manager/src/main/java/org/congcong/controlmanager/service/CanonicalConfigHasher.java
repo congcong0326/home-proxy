@@ -9,6 +9,7 @@ import org.congcong.common.dto.RateLimitDTO;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RuleSetDTO;
 import org.congcong.common.dto.UserDtoWithCredential;
+import org.congcong.common.enums.LogLevel;
 import org.springframework.stereotype.Component;
 
 import java.security.MessageDigest;
@@ -30,6 +31,12 @@ public class CanonicalConfigHasher {
 
     public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
                        List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled) {
+        return hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled, LogLevel.INFO);
+    }
+
+    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
+                       List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled,
+                       LogLevel logLevel) {
         try {
             LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("inbounds", inbounds);
@@ -38,6 +45,7 @@ public class CanonicalConfigHasher {
             snapshot.put("users", users);
             snapshot.put("ruleSets", ruleSets);
             snapshot.put("logReportingEnabled", logReportingEnabled);
+            snapshot.put("logLevel", logLevel == null ? LogLevel.INFO : logLevel);
             return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(mapper.writeValueAsBytes(snapshot)));
         } catch (Exception e) {
             throw new IllegalStateException("无法计算配置哈希", e);

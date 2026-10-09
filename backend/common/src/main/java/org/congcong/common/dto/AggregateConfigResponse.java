@@ -3,6 +3,7 @@ package org.congcong.common.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.congcong.common.enums.LogLevel;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,6 +20,8 @@ public class AggregateConfigResponse {
     private String workerId;
     /** 是否启用代理网关访问日志上报，默认开启。 */
     private Boolean logReportingEnabled = true;
+    /** Worker runtime logging level; configurations without this field use INFO. */
+    private LogLevel logLevel = LogLevel.INFO;
     /**
      * 配置版本
      */

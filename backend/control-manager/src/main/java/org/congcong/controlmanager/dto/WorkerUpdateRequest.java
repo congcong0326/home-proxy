@@ -3,6 +3,7 @@ package org.congcong.controlmanager.dto;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
+import org.congcong.common.enums.LogLevel;
 
 @Data
 public class WorkerUpdateRequest {
@@ -21,4 +22,6 @@ public class WorkerUpdateRequest {
     @Size(max = 128)
     private String managementToken;
     private Boolean logReportingEnabled;
+    /** Omit this field to retain the current runtime logging level. */
+    private LogLevel logLevel;
 }

@@ -6,6 +6,7 @@ import org.congcong.common.dto.ProxyWorkerDTO;
 import org.congcong.common.dto.WorkerStatusSnapshot;
 import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.common.dto.WorkerTokenResponse;
+import org.congcong.common.enums.LogLevel;
 import org.congcong.controlmanager.dto.WorkerCreateRequest;
 import org.congcong.controlmanager.dto.WorkerUpdateRequest;
 import org.congcong.controlmanager.entity.ProxyWorker;
@@ -15,8 +16,12 @@ import org.congcong.controlmanager.repository.ProxyWorkerRepository;
 import org.congcong.controlmanager.repository.WorkerStatusRepository;
 import org.congcong.controlmanager.repository.WorkerTaskRepository;
 import org.springframework.http.HttpStatus;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -36,6 +41,7 @@ public class ProxyWorkerService {
     private final WorkerStatusRepository workerStatusRepository;
     private final WorkerTaskRepository workerTaskRepository;
     private final InboundConfigRepository inboundConfigRepository;
+    private final CacheManager cacheManager;
 
     @Transactional(readOnly = true)
     public List<ProxyWorkerDTO> list() {
@@ -67,8 +73,10 @@ public class ProxyWorkerService {
         worker.setDescription(request.getDescription());
         worker.setEnabled(true);
         worker.setLogReportingEnabled(request.getLogReportingEnabled() == null || request.getLogReportingEnabled());
+        worker.setLogLevel(request.getLogLevel() == null ? LogLevel.INFO : request.getLogLevel());
         configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), true);
         ProxyWorker saved = proxyWorkerRepository.save(worker);
+        evictConfigAfterCommit(saved.getWorkerId());
         return tokenResponse(saved);
     }
 
@@ -79,8 +87,11 @@ public class ProxyWorkerService {
         worker.setDescription(request.getDescription());
         if (request.getEnabled() != null) worker.setEnabled(request.getEnabled());
         if (request.getLogReportingEnabled() != null) worker.setLogReportingEnabled(request.getLogReportingEnabled());
+        if (request.getLogLevel() != null) worker.setLogLevel(request.getLogLevel());
         configureManagementConnection(worker, request.getManagementUrl(), request.getManagementToken(), false);
-        return toDto(proxyWorkerRepository.save(worker));
+        ProxyWorker saved = proxyWorkerRepository.save(worker);
+        evictConfigAfterCommit(workerId);
+        return toDto(saved);
     }
 
     @Transactional
@@ -108,6 +119,22 @@ public class ProxyWorkerService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "节点不存在: " + workerId));
     }
 
+    private void evictConfigAfterCommit(String workerId) {
+        Cache cache = cacheManager.getCache("aggregateConfig");
+        if (cache == null) return;
+        // A poll during the transaction must not repopulate the cache with the old row.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cache.evict(workerId);
+                }
+            });
+        } else {
+            cache.evict(workerId);
+        }
+    }
+
     private WorkerTokenResponse tokenResponse(ProxyWorker worker) {
         WorkerTokenResponse response = new WorkerTokenResponse();
         response.setWorker(toDto(worker));
@@ -124,6 +151,7 @@ public class ProxyWorkerService {
         dto.setDisplayName(worker.getDisplayName());
         dto.setEnabled(worker.getEnabled());
         dto.setLogReportingEnabled(worker.getLogReportingEnabled() == null || worker.getLogReportingEnabled());
+        dto.setLogLevel(worker.getLogLevel() == null ? LogLevel.INFO : worker.getLogLevel());
         dto.setDescription(worker.getDescription());
         dto.setManagementUrl(worker.getManagementUrl());
         dto.setManagementToken(worker.getManagementToken());

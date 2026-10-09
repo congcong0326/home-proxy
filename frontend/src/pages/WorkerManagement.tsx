@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Card, Form, Input, Modal, Popconfirm, Space, Table, Tag, Typography, message, Switch } from 'antd';
+import { Button, Card, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag, Typography, message, Switch } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined, StopOutlined } from '@ant-design/icons';
 import { apiService } from '../services/api';
 import { ProxyWorkerDTO, WorkerCreateRequest } from '../types/worker';
 
-const WorkerManagement: React.FC = () => {
+export const WorkerManagement: React.FC = () => {
   const [workers, setWorkers] = useState<ProxyWorkerDTO[]>([]);
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,6 +39,7 @@ const WorkerManagement: React.FC = () => {
       managementUrl: worker.managementUrl || '',
       managementToken: worker.managementToken || '',
       logReportingEnabled: worker.logReportingEnabled !== false,
+      logLevel: worker.logLevel || 'INFO',
     });
     setCreateOpen(true);
   };
@@ -53,6 +54,7 @@ const WorkerManagement: React.FC = () => {
           managementUrl: value.managementUrl,
           managementToken: value.managementToken?.trim() || undefined,
           logReportingEnabled: value.logReportingEnabled,
+          logLevel: value.logLevel,
         });
       } else {
         await apiService.createWorker(value);
@@ -94,9 +96,17 @@ const WorkerManagement: React.FC = () => {
       <Table rowKey="workerId" loading={loading} columns={columns} dataSource={workers} scroll={{ x: 1100 }} />
     </Card>
     <Modal title={editingWorker ? '编辑代理节点' : '新建代理节点'} open={createOpen} onCancel={() => { setCreateOpen(false); setEditingWorker(null); form.resetFields(); }} onOk={() => void save()}>
-      <Form form={form} layout="vertical"><Form.Item name="workerId" label="节点标识"><Input disabled={Boolean(editingWorker)} /></Form.Item><Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item><Form.Item name="managementUrl" label="Worker WSS 地址" extra="填写 Worker 启动后监听的 wss:// 地址" rules={[{ required: true, pattern: /^wss:\/\/.+/, message: '请输入有效的 wss:// 地址' }]}><Input placeholder="wss://worker.example.com:18444/management/ws" /></Form.Item><Form.Item name="managementToken" label="Worker 管理 Token" extra="Token 由 Worker 生成，读取 worker.management.tokenFile 后粘贴到这里" rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item><Form.Item name="logReportingEnabled" label="代理网关日志上报" valuePropName="checked" initialValue={true}><Switch checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item><Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item></Form>
+      <Form form={form} layout="vertical">
+        <Form.Item name="workerId" label="节点标识"><Input disabled={Boolean(editingWorker)} /></Form.Item>
+        <Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item>
+        <Form.Item name="managementUrl" label="Worker WSS 地址" extra="填写 Worker 启动后监听的 wss:// 地址" rules={[{ required: true, pattern: /^wss:\/\/.+/, message: '请输入有效的 wss:// 地址' }]}><Input placeholder="wss://worker.example.com:18444/management/ws" /></Form.Item>
+        <Form.Item name="managementToken" label="Worker 管理 Token" extra="Token 由 Worker 生成，读取 worker.management.tokenFile 后粘贴到这里" rules={[{ required: true }]}><Input autoComplete="off" /></Form.Item>
+        <Form.Item name="logReportingEnabled" label="代理网关日志上报" valuePropName="checked" initialValue={true}><Switch checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item>
+        <Form.Item name="logLevel" label="日志级别" initialValue="INFO" rules={[{ required: true }]}>
+          <Select options={['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'OFF'].map(level => ({ label: level, value: level }))} />
+        </Form.Item>
+        <Form.Item name="description" label="说明"><Input.TextArea rows={3} /></Form.Item>
+      </Form>
     </Modal>
   </div>;
 };
-
-export default WorkerManagement;

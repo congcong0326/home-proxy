@@ -8,6 +8,7 @@ import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RuleSetDTO;
 import org.congcong.common.dto.UserDtoWithCredential;
 import org.congcong.common.enums.RateLimitScopeType;
+import org.congcong.common.enums.LogLevel;
 import org.congcong.controlmanager.entity.InboundConfig;
 import org.congcong.controlmanager.entity.Route;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
@@ -75,10 +76,13 @@ public class AggregateConfigService {
         }
 
         List<RateLimitDTO> rateLimits = filterRateLimits(rateLimitService.getRateLimitsByEnabled(true), userIds);
-        boolean logReportingEnabled = proxyWorkerRepository.findById(workerId).map(w -> w.getLogReportingEnabled() == null || w.getLogReportingEnabled()).orElse(true);
-        String configHash = canonicalConfigHasher.hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled);
+        var worker = proxyWorkerRepository.findById(workerId);
+        boolean logReportingEnabled = worker.map(w -> w.getLogReportingEnabled() == null || w.getLogReportingEnabled()).orElse(true);
+        LogLevel logLevel = worker.map(w -> w.getLogLevel()).orElse(LogLevel.INFO);
+        String configHash = canonicalConfigHasher.hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled, logLevel);
         AggregateConfigResponse response = AggregateConfigResponse.of(workerId, inbounds, routes, rateLimits, users, ruleSets, configHash);
         response.setLogReportingEnabled(logReportingEnabled);
+        response.setLogLevel(logLevel);
         return response;
     }
 

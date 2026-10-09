@@ -240,6 +240,10 @@ docker compose -f docker-compose.worker.yml up -d
 
 worker 启动后会在持久卷中生成 `/data/proxy-worker/management.token`，并监听 `wss://<worker地址>:18444/management/ws`。将该 Token 和 WSS 地址填入管理台的“新建节点”表单即可；controller 会主动连接 worker，因此 controller 不需要公网地址。重建容器会保留 Token，`docker compose down -v` 会删除它。
 
+新建／编辑代理节点时，可在“代理网关日志上报”下方设置“日志级别”，支持 `TRACE`、`DEBUG`、`INFO`、`WARN`、`ERROR`、`OFF`，默认 `INFO`。该设置控制 worker 的控制台和文件运行日志，与访问／认证日志上报开关独立。worker 启动时默认使用 `INFO`，恢复本地成功配置或收到管理端配置后应用配置等级；保存后通常在下一次 WSS 配置轮询（默认 2 秒）生效，相同等级不会重复修改，仅调整日志设置不会刷新代理监听或中断连接。离线节点重连后应用新配置。
+
+数据库升级由 Flyway 自动执行 `V37__add_worker_log_level.sql`，为 `proxy_worker` 增加 `log_level`，已有节点默认 `INFO`。升级时先更新 worker，再更新控制面，避免旧 worker 无法解析新增配置字段。
+
 worker 使用 `network_mode: host`，控制面下发的代理入站端口会直接监听在宿主机上。新增端口前请确认宿主机防火墙已放行，并且没有其他进程占用同一端口。
 
 ### 3. 透明代理场景（可选）

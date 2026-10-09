@@ -1,10 +1,13 @@
 package org.congcong.proxyworker;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.*;
+import org.congcong.common.enums.LogLevel;
 import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
@@ -14,9 +17,11 @@ import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.server.ConfigApplyResult;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
 import org.congcong.proxyworker.service.AggregateConfigService;
+import org.congcong.proxyworker.service.LoggingLevelService;
 import org.congcong.proxyworker.service.WorkerManagementWebSocketServer;
 
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * 代理工作节点主应用程序
@@ -27,6 +32,7 @@ public class ProxyWorkerApplication {
     private static final ProxyContext PROXY_CONTEXT = ProxyContext.getInstance();
     
     public static void main(String[] args) throws Exception {
+        new LoggingLevelService().apply(LogLevel.INFO);
         log.info("启动代理工作节点应用程序");
         AggregateConfigService configService = new AggregateConfigService();
         configService.setConfigChangeListener(new ConfigChangeListener());
@@ -62,14 +68,38 @@ public class ProxyWorkerApplication {
     /**
      * 配置变更监听器实现
      */
-    private static class ConfigChangeListener implements AggregateConfigService.ConfigChangeListener {
+    static class ConfigChangeListener implements AggregateConfigService.ConfigChangeListener {
+        private final LoggingLevelService loggingLevelService;
+        private final Function<List<InboundConfig>, ConfigApplyResult> refreshProxy;
+        private final ObjectMapper mapper = new ObjectMapper()
+                .registerModule(new JavaTimeModule())
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        private JsonNode appliedProxyConfig;
+
+        ConfigChangeListener() {
+            this(new LoggingLevelService(), PROXY_CONTEXT::refresh);
+        }
+
+        ConfigChangeListener(LoggingLevelService loggingLevelService,
+                             Function<List<InboundConfig>, ConfigApplyResult> refreshProxy) {
+            this.loggingLevelService = loggingLevelService;
+            this.refreshProxy = refreshProxy;
+        }
+
         @Override
-        public ConfigApplyResult onConfigChanged(AggregateConfigResponse newConfig) {
+        public synchronized ConfigApplyResult onConfigChanged(AggregateConfigResponse newConfig) {
             if (!ProxyWorkerConfig.getInstance().getWorkerId().equals(newConfig.getWorkerId())) {
                 return ConfigApplyResult.failure(null, new IllegalArgumentException("配置 workerId 与本节点不一致"));
             }
-            log.info("收到配置变更通知:");
+            loggingLevelService.apply(newConfig.getLogLevel());
             AccessLogUtil.setLogReportingEnabled(newConfig.getLogReportingEnabled());
+            ObjectNode proxyConfig = mapper.valueToTree(newConfig);
+            proxyConfig.remove(List.of("logLevel", "logReportingEnabled", "version", "generatedAt", "configHash"));
+            // Logging-only updates must not refresh listeners, Fake IP DNS or rule sets.
+            if (proxyConfig.equals(appliedProxyConfig)) {
+                return ConfigApplyResult.applied();
+            }
+            log.info("收到配置变更通知:");
             log.info("  版本: {}", newConfig.getVersion());
             log.info("  生成时间: {}", newConfig.getGeneratedAt());
             log.info("  入站配置数量: {}", newConfig.getInbounds() != null ? newConfig.getInbounds().size() : 0);
@@ -78,10 +108,6 @@ public class ProxyWorkerApplication {
             log.info("  用户配置数量: {}", newConfig.getUsers() != null ? newConfig.getUsers().size() : 0);
             log.info("  规则集数量: {}", newConfig.getRuleSets() != null ? newConfig.getRuleSets().size() : 0);
             log.info("  配置哈希: {}", newConfig.getConfigHash());
-            ObjectMapper mapper = new ObjectMapper();
-            mapper.registerModule(new JavaTimeModule());
-            // 忽略来源对象中在目标类中不存在的管理端展示字段。
-            mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
             // 获取所有用户配置
             Map<Long, UserDtoWithCredential> userMap = new HashMap<>();
             Map<Long, RouteDTO> routeMap = new HashMap<>();
@@ -163,7 +189,11 @@ public class ProxyWorkerApplication {
             RuleSetRegistry.refresh(newConfig.getRuleSets());
             log.info("已构建入站配置数量: {}", inboundConfigs.size());
             // 刷新代理服务
-            return PROXY_CONTEXT.refresh(inboundConfigs);
+            ConfigApplyResult result = refreshProxy.apply(inboundConfigs);
+            if (result.success()) {
+                appliedProxyConfig = proxyConfig;
+            }
+            return result;
         }
     }
 }
