@@ -12,6 +12,29 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class TelemetryStoreTest {
+    @Test
+    void removedLimiterSlotsRemainCompatibleWithOldWorkerReplayHashes() throws Exception {
+        properties.setIngestEnabled(true);
+        var batch = batch();
+        batch.getSessions().get(0).setWorkerId("node");
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
+                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .enable(com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY);
+        String current = mapper.writeValueAsString(batch.getSessions().get(0));
+        assertFalse(current.contains("rateLimit"));
+        java.util.Map<String, Object> old = mapper.readValue(current, java.util.TreeMap.class);
+        old.put("rateLimitPolicyId", null); old.put("rateLimitWaitUs", null);
+        String previousJson = mapper.writeValueAsString(old);
+        assertDoesNotThrow(() -> mapper.readValue(previousJson, SessionLogV1.class));
+        String previousHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(previousJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        when(client.query(anyString(), any(), any())).thenReturn(List.of(Map.of("raw_hash", previousHash)));
+        assertTrue(store.ingest("node", batch).isPersisted());
+        verify(client, never()).execute(startsWith("INSERT INTO"), any(Object[].class));
+        assertFalse(TelemetrySchema.SESSIONS.ddl().contains("rate_limit_wait_us"));
+    }
+
     private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
     private final TelemetryProperties properties = new TelemetryProperties();
     private final TelemetryStore store = new TelemetryStore(client, properties, mock(CredentialGeoAnalysis.class));
@@ -45,6 +68,7 @@ class TelemetryStoreTest {
 
     @Test
     void disabledIngestNeverTouchesOldOrNewTables() {
+        properties.setIngestEnabled(false);
         assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
         verifyNoInteractions(client);
     }
@@ -56,10 +80,12 @@ class TelemetryStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "", now.minusSeconds(60), now, 100, 0, null));
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(60), now, 201, 0, null));
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(31 * 86400L + 1), now, 100, 0, null));
-        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(Map.of("raw_json", "{\"downloadBytes\":\"9007199254740993\",\"dnsDurationUs\":null}", "received_at", "2026-10-09 01:00:00")));
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(Map.of("raw_json", "{\"downloadBytes\":\"9007199254740993\",\"dnsDurationUs\":null,\"rateLimitWaitUs\":null,\"rateLimitPolicyId\":null}", "received_at", "2026-10-09 01:00:00")));
         var rows = store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(60), now, 100, 0, null);
         assertEquals("9007199254740993", rows.get(0).get("downloadBytes"));
         assertNull(rows.get(0).get("dnsDurationUs"));
+        assertFalse(rows.get(0).containsKey("rateLimitWaitUs"));
+        assertFalse(rows.get(0).containsKey("rateLimitPolicyId"));
         verify(client).query(contains(" FINAL WHERE worker_id = ?"), any(Object[].class));
     }
 

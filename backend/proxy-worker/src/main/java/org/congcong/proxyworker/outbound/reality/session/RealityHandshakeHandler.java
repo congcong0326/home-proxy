@@ -39,6 +39,8 @@ public final class RealityHandshakeHandler extends SimpleChannelInboundHandler<T
         }
         if (handshakeEngine.handshakeComplete() && !handshakeCompleteNotified) {
             handshakeCompleteNotified = true;
+            var timing = ctx.pipeline().get(org.congcong.proxyworker.telemetry.OutboundTimingHandler.class);
+            if (timing != null) timing.tlsComplete();
             ctx.fireUserEventTriggered("HANDSHAKE_COMPLETE");
         }
     }

@@ -1,0 +1,14 @@
+{
+  "output": "/tmp/observability-audit-fixes-screenshots",
+  "browserErrors": [],
+  "fourListsAndDetails": true,
+  "backendTargetFilter": true,
+  "chineseConnectionResults": true,
+  "collectionCardRemoved": true,
+  "failedAccountVisible": true,
+  "chineseEnumDropdowns": true,
+  "dnsProtocolCollected": true,
+  "eventContextCollected": true,
+  "timezone": "Asia/Shanghai",
+  "mobile": true
+}

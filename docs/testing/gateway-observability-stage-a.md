@@ -1,6 +1,6 @@
 # 网关观测阶段 A：契约、实施与保留数据 E2E
 
-更新日期：2026-10-09。对应 [双轨设计](../development/gateway-observability-log-model-design.md) 的阶段 A；阶段 B 的完整采集、业务聚合、异常来源规则和新页面，以及 C/D 的迁移/清理尚未实施。
+更新日期：2026-10-09。对应 [双轨设计](../development/gateway-observability-log-model-design.md) 的阶段 A；后续按第 13 节调整为 B 新版日志审计与数据确认、C 逐项迁移现有查询、D 独立清理旧链路，其中 B1 已实施，见 [B1 审计页面记录](gateway-observability-b1.md)；B2／C／D 尚未实施。完整采集、专题看板与高级异常来源分析按实际功能依赖逐步补齐，不作为开始查询迁移的统一前置条件。
 
 用户后续确认采用内网及时消费、有界内存缓冲方案。当前版本移除 Worker 日志磁盘缓存，交付语义为 `BEST_EFFORT_WITH_ACK`；不要求或承诺 Worker 重启恢复待确认日志。首版磁盘缓冲及 39 个事实的重启恢复测试仅为历史验证，已由本次内存方案替代，原先落库的记录继续保留。
 
@@ -12,21 +12,21 @@
 
 未观测字段保持 null/UNKNOWN，包括 DNS 缓存、真实上游尝试、连接细分阶段耗时、限流/背压、代理握手确认等。没有完整恢复失败事件、非 A/AAAA 或内部 DNS 覆盖。普通上游代理的真实目标 IP 保持未知，业务分类按 OUTBOUND_PROXY_ROUTE 为 EXTERNAL；connector 就绪使用本机实际完成边界。目标重写至 RFC1918/ULA 才属于 INTERNAL_REWRITE；回环、基准测试、保留地址为 UNKNOWN。
 
-认证 GeoIP 在管理端独立 ingest 线程处理，仅查 IP 字面量，缓存最多 2,000 个来源。分析独立存 analysis_json，不参与原始事实冲突判定。基线为 BASELINE_INSUFFICIENT，规则版本 contract-v1，仅提供 LOCATION_UNKNOWN；完整风险分析及配置传播留给阶段 B。密码、认证头、Basic 编码/解码串、原始报文和异常自由文本不进入新认证日志。
+认证 GeoIP 在管理端独立 ingest 线程处理，仅查 IP 字面量，缓存最多 2,000 个来源。分析独立存 analysis_json，不参与原始事实冲突判定。基线为 BASELINE_INSUFFICIENT，规则版本 contract-v1，仅提供 LOCATION_UNKNOWN；完整风险分析及配置传播留给后续独立的高级认证分析。密码、认证头、Basic 编码/解码串、原始报文和异常自由文本不进入新认证日志。
 
 ## 开关与部署
 
-默认新采集/ingest/query 关闭，独立于旧 logReportingEnabled。阶段 A 使用部署级开关，不增加配置数据库字段或 Flyway 迁移，不修改既有配置 CRUD/hash。
+新采集/ingest/query 默认开启，独立于旧 logReportingEnabled。2026-10-09 按用户要求将代码与 Compose 默认值从 false 调整为 true，避免仅更新镜像但沿用旧部署配置时出现 QUERY_DISABLED；显式设为 false 仍可独立关闭。管理端开关由 Spring Boot 的 observability.ingest-enabled/query-enabled 绑定，Worker 采集读取环境变量（或优先使用 JVM observability.enabled 属性），不增加配置数据库字段或 Flyway 迁移，不修改既有配置 CRUD/hash。
 
 | 配置 | 默认 | 用途 |
 | --- | --- | --- |
-| Worker OBSERVABILITY_ENABLED | false | 每 Worker 打开新采集 |
+| Worker OBSERVABILITY_ENABLED | true | 每 Worker 打开新采集 |
 | Worker OBSERVABILITY_AUTH_ENABLED | true | 总开关下独立凭据认证采集 |
 | Worker OBSERVABILITY_EVENTS_ENABLED | true | 总开关下独立事件采集 |
 | Worker OBSERVABILITY_BUFFER_CAPACITY | 5000 | 最大未确认事实数，包含待 ACK 批次 |
 | Worker OBSERVABILITY_BUFFER_MAX_BYTES | 4194304 | 序列化事实载荷上限；实际堆占用另含对象/批次开销 |
-| 管理端 OBSERVABILITY_INGEST_ENABLED | false | 协商/接收/写入 |
-| 管理端 OBSERVABILITY_QUERY_ENABLED | false | 独立查询 |
+| 管理端 OBSERVABILITY_INGEST_ENABLED | true | 协商/接收/写入 |
+| 管理端 OBSERVABILITY_QUERY_ENABLED | true | 独立查询 |
 
 先升级管理端，再升级 Worker，继续使用现有环境变量及 Docker 数据卷：
 
@@ -50,7 +50,7 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 6. Worker 只在匹配 batchId、protocolVersion=1 且 persisted=true 后释放内存批次；未知、失败、旧版本 ACK 不释放数据。重试返回不可变快照的副本，调用方修改不影响下一次发送。
 7. Worker 停止/重启/崩溃会丢失未确认内存日志。API 明示 bufferMode=MEMORY、restartRecoverySupported=false；不会补造缺失汇总/字节。状态指标按 worker instance 重置。控制端已落库记录不受 Worker 重启影响。
 
-管理端单进程 ingest 队列最多 128 批，队列满不 ACK；Worker 按内存容量保留批次。多管理端并发、海量历史按 ID 查找及生产容量基准需阶段 B 验证。
+管理端单进程 ingest 队列最多 128 批，队列满不 ACK；Worker 按内存容量保留批次。阶段 B 检查页面所需详情查询、基本运行状态与实际 Worker 覆盖；多管理端并发、海量历史按 ID 查找及生产容量基准按实际部署和后续功能依赖验证。
 
 ## 新表与查询契约
 
@@ -75,7 +75,7 @@ ADMIN/SUPER_ADMIN 可查询 /api/observability/v1：
 | GET /events | 唯一事件 |
 | GET /credential-auth | 唯一认证尝试及 analysis |
 
-列表强制 workerId、ISO UTC from/to，窗口不超过 31 天；limit 默认 100、最大 200，offset 最大 10,000；可选 connectionId。始终在 FINAL 后查询，按 occurred_at DESC、record_id 排序；无样本返回空数组，关闭查询返回 503。业务聚合/复杂过滤/详情页面属于阶段 B。
+列表强制 workerId、ISO UTC from/to，窗口不超过 31 天；limit 默认 100、最大 200，offset 最大 10,000；可选 connectionId。始终在 FINAL 后查询，按 occurred_at DESC、record_id 排序；无样本返回空数组，关闭查询返回 503。审计所需过滤、分页及详情页面属于阶段 B；业务聚合在阶段 C 的对应迁移批次或后续独立观测功能中补齐。
 
 ## E2E 与验收
 
@@ -103,7 +103,7 @@ python3 scripts/e2e/fake-ip-persistent-e2e.py test
 
 ## 开销、差异与回退
 
-内存版本删除磁盘读写及 spool writer，仅保留独立 sender 和有界缓冲。status 用 bufferBytes/depth/capacity/maxBytes、dropped、serializationFailures、complete 展示当前进程状态；生产吞吐、延迟、堆内存及多 Worker 容量需阶段 B 持续观测。
+内存版本删除磁盘读写及 spool writer，仅保留独立 sender 和有界缓冲。status 用 bufferBytes/depth/capacity/maxBytes、dropped、serializationFailures、complete 展示当前进程状态；阶段 B 起持续观察实际启用 Worker 的运行开销与覆盖，生产吞吐、延迟、堆内存及多 Worker 容量按后续部署范围验证。
 
 旧 BLOCK 日志继续过滤，新汇总记录 BLOCK；新凭据认证在检查时记录，未建隧道的成功也保留；新流量只累加成功载荷且唯一收尾。累计表数包含调试、多轮兼容和合成夹具，不能替代单次时间窗口分母。
 

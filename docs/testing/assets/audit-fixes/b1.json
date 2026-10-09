@@ -1,0 +1,104 @@
+{
+  "workerId": "home-01",
+  "scope": {
+    "workerId": "home-01",
+    "from": "2026-10-08T09:34:46.581986+00:00",
+    "to": "2026-10-09T09:34:46.581986+00:00"
+  },
+  "types": {
+    "sessions": {
+      "total": "110",
+      "filteredTotal": "2",
+      "recordId": "3a3b8ea3-e7ed-4e77-b1ed-078bf4503fbb",
+      "filters": {
+        "clientIp": "127.0.0.1",
+        "protocol": "TLS_SNI_TCP",
+        "outcome": "NORMAL_END",
+        "connectOutcome": "CONNECTED",
+        "trafficCategory": "UNKNOWN",
+        "route": "24",
+        "target": "127.0.0.1",
+        "username": "home-01-timing-e2e"
+      }
+    },
+    "dns": {
+      "total": "23",
+      "filteredTotal": "1",
+      "recordId": "eef1a31d-ca2e-4dba-9959-1489d9762fa9",
+      "filters": {
+        "clientIp": "192.0.2.193",
+        "protocol": "DNS_SERVER",
+        "target": "stage-a.telemetry.test.",
+        "qtype": "AAAA",
+        "outcome": "ANSWERED"
+      }
+    },
+    "events": {
+      "total": "152",
+      "filteredTotal": "1",
+      "recordId": "5931bf88-5051-4b03-beb7-abe29f5ced0d",
+      "filters": {
+        "clientIp": "127.0.0.1",
+        "protocol": "TLS_SNI_TCP",
+        "eventType": "CONNECT_RESULT",
+        "outcome": "CONNECTED"
+      }
+    },
+    "credential-auth": {
+      "total": "102",
+      "filteredTotal": "18",
+      "recordId": "91999729-314d-4ad6-912f-955553e70c59",
+      "filters": {
+        "clientIp": "127.0.0.1",
+        "protocol": "SOCKS5",
+        "authMethod": "SOCKS5_PASSWORD",
+        "outcome": "SUCCESS",
+        "username": "home-01-timing-e2e"
+      }
+    }
+  },
+  "readOnly": true,
+  "association": {
+    "dns": "0",
+    "events": "1",
+    "credential-auth": "0"
+  },
+  "authResults": {
+    "FAILURE": "15",
+    "CHALLENGE": "7",
+    "DENIED": "7",
+    "MALFORMED": "7"
+  },
+  "unverifiedAttemptedAccounts": {
+    "failedConnections": 15,
+    "historicalFactsUnchanged": true,
+    "searchIncludesFailures": true
+  },
+  "syntheticLargeInteger": "9007199254740993",
+  "status": {
+    "authenticationAnalysis": "GEOIP_CONTRACT_ONLY",
+    "ingestEnabled": true,
+    "schemaVersion": 1,
+    "scope": "STAGE_A_INFRASTRUCTURE",
+    "delivery": "BEST_EFFORT_WITH_ACK",
+    "queryEnabled": true,
+    "worker": {
+      "retries": 0,
+      "dropped": 0,
+      "bufferMaxBytes": 4194304,
+      "instanceId": "dc08f22c-4160-4e10-a7cd-63298ec41110",
+      "lastSeenAt": "2026-10-09T09:34:46.079137562Z",
+      "acks": 3,
+      "capability": "V1_NEGOTIATED",
+      "bufferCapacity": 5000,
+      "serializationFailures": 0,
+      "enabled": true,
+      "restartRecoverySupported": false,
+      "bufferBytes": 0,
+      "complete": true,
+      "bufferMode": "MEMORY",
+      "queueDepth": 0,
+      "online": true
+    }
+  }
+}

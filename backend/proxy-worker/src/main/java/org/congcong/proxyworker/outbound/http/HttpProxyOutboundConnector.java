@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.outbound.http;
 
 import io.netty.bootstrap.Bootstrap;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.*;
@@ -30,6 +31,7 @@ public class HttpProxyOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
+                        TelemetryHooks.outbound(ch, inboundChannel, true, false, "SUCCESS");
                         ch.pipeline().addLast(
                                 new HttpClientCodec(),
                                 new HttpObjectAggregator(1024 * 8),
@@ -40,7 +42,7 @@ public class HttpProxyOutboundConnector extends AbstractOutboundConnector {
 
         // 连接上游 HTTP 代理（使用路由配置中的最终地址）
         return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
-                request.getFinalTargetHost(), request.getFinalTargetPort(), b::connect);
+                request.getFinalTargetHost(), request.getFinalTargetPort(), address -> TelemetryHooks.connectTcp(b, inboundChannel, address));
     }
 
     private static class HttpProxyClientHandler extends SimpleChannelInboundHandler<Object> {

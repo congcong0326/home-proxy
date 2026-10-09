@@ -2,6 +2,8 @@ package org.congcong.proxyworker.outbound.direct;
 
 import com.google.common.net.InetAddresses;
 import io.netty.bootstrap.Bootstrap;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
+import org.congcong.proxyworker.telemetry.SessionObservation.Stage;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
 import io.netty.handler.codec.dns.DnsRecordType;
@@ -65,12 +67,14 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
         if (clientIp == null && inbound.remoteAddress() instanceof InetSocketAddress peer
                 && peer.getAddress() != null) clientIp = peer.getAddress().getHostAddress();
         DnsQueryContext context = new DnsQueryContext(clientIp, dnsInbound, dnsInbound.getConfigVersion());
+        TelemetryHooks.beginStage(inbound, Stage.DNS);
         CompletableFuture<DnsResult> dns = queryAddresses(host, context, inbound);
         inbound.closeFuture().addListener(closed -> {
             dns.cancel(false);
             overall.tryFailure(new IllegalStateException("inbound closed during DNS lookup"));
         });
         dns.whenComplete((answer, error) -> inbound.eventLoop().execute(() -> {
+            TelemetryHooks.endStage(inbound, Stage.DNS);
             if (overall.isDone()) return;
             if (error != null) {
                 relayPromise.tryFailure(error);
@@ -151,12 +155,17 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
                 .channel(getSocketChannel())
                 .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
                 .option(ChannelOption.SO_KEEPALIVE, true)
-                .handler(new DirectClientHandler(relayPromise));
+                .handler(new ChannelInitializer<Channel>() {
+                    @Override protected void initChannel(Channel channel) {
+                        channel.pipeline().addLast(new DirectClientHandler(relayPromise));
+                        TelemetryHooks.outbound(channel, inboundChannel, false, false, null);
+                    }
+                });
 
         if (requiresPublicAddressValidation(request) && destination.isUnresolved()) {
             b.resolver(PublicAddressResolverGroup.INSTANCE);
         }
-        return b.connect(destination);
+        return TelemetryHooks.connectTcp(b, inboundChannel, destination);
     }
 
     private static final class DeferredConnectFuture extends DefaultChannelPromise {

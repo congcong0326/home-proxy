@@ -59,6 +59,8 @@ class WorkerVlessRealityVisionIT {
 
             assertTrue(response.contains("echo:/xray-vless-reality-vision-out"), response);
             assertEquals(1, echo.requestCount());
+            org.congcong.proxyworker.integration.support.TelemetryTimingAssertions.assertOutbound(
+                    echo.port(), "VLESS_REALITY", true, "LOCAL_REQUEST_SENT");
         }
     }
 }

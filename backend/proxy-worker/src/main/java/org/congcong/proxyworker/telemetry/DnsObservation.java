@@ -21,6 +21,7 @@ public final class DnsObservation {
         record.setQueryOrigin("CLIENT"); record.setQname(dns.getQName());
         record.setQtype(dns.getQType().name()); record.setQclass("IN"); record.setTransport("UDP");
         record.setInboundId(request.getInboundConfig().getId()); record.setInboundName(request.getInboundConfig().getName());
+        record.setInboundProtocol(request.getInboundConfig().getProtocol().name());
         record.setConfigVersion(request.getInboundConfig().getConfigVersion());
         record.setClientIp(dns.getClient().getAddress().getHostAddress()); record.setClientPort(dns.getClient().getPort());
         record.setTransportPeerIp(record.getClientIp()); record.setTransportPeerPort(record.getClientPort());

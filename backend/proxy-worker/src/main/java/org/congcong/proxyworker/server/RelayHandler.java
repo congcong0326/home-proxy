@@ -48,6 +48,7 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
 
         // 当对端不可写时，对当前入站禁用自动读取，形成背压
         if (!relayChannel.isWritable()) {
+            TelemetryHooks.backpressure(isClient ? ctx.channel() : relayChannel, isClient, true);
             ctx.channel().config().setAutoRead(false);
         }
 
@@ -126,6 +127,8 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         // 当前channel可写性变化时，调整对端的自动读取以实现背压
         if (relayChannel != null && relayChannel.isActive()) {
             boolean writable = ctx.channel().isWritable();
+            // Writability of the upload destination is seen by its download handler, and vice versa.
+            TelemetryHooks.backpressure(isClient ? ctx.channel() : relayChannel, !isClient, !writable);
             relayChannel.config().setAutoRead(writable);
             if (writable) {
                 // 重新触发一次读取以恢复数据流

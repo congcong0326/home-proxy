@@ -8,8 +8,8 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "observability")
 public class TelemetryProperties {
-    private boolean ingestEnabled;
-    private boolean queryEnabled;
+    private boolean ingestEnabled = true;
+    private boolean queryEnabled = true;
     private int maxBatchRecords = 100;
     private int maxBatchBytes = 262144;
     /** Null disables TTL. Stage A never changes retention on legacy tables. */

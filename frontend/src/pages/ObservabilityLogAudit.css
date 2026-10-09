@@ -1,0 +1,19 @@
+.observability-audit > .ant-card,
+.observability-audit > .ant-alert {
+  margin-bottom: 16px;
+}
+.audit-filters {
+  gap: 12px 0;
+  margin-bottom: 12px;
+}
+.audit-filters .ant-input {
+  max-width: 280px;
+}
+@media (max-width: 768px) {
+  .audit-filters {
+    display: block;
+  }
+  .audit-filters .ant-form-item {
+    margin-bottom: 12px;
+  }
+}

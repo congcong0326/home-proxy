@@ -104,7 +104,16 @@ public class TelemetryStore implements ApplicationRunner {
                 // The management connection, not a self-declared JSON field, supplies node identity.
                 record.setWorkerId(authenticatedWorkerId);
                 String json = mapper.writeValueAsString(record);
-                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.getBytes(StandardCharsets.UTF_8)));
+                String hashJson = json;
+                if (record instanceof SessionLogV1) {
+                    // V1 originally serialized two unimplemented limiter slots as null. Preserve replay hashes
+                    // across this DTO cleanup without retaining them in new facts or dropping existing columns.
+                    Map<String, Object> canonical = new TreeMap<>(mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
+                    canonical.put("rateLimitPolicyId", null);
+                    canonical.put("rateLimitWaitUs", null);
+                    hashJson = mapper.writeValueAsString(canonical);
+                }
+                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(hashJson.getBytes(StandardCharsets.UTF_8)));
                 String key = group.getKey().name() + record.getRecordId();
                 String previous = inBatch.putIfAbsent(key, hash);
                 if (previous != null && !previous.equals(hash)) throw new IllegalArgumentException("RECORD_ID_CONFLICT");
@@ -191,6 +200,8 @@ public class TelemetryStore implements ApplicationRunner {
                 + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?", params.toArray()).stream().map(row -> {
                     try {
                         Map<String, Object> result = new LinkedHashMap<>(mapper.readValue(row.get("raw_json").toString(), Map.class));
+                        result.remove("rateLimitPolicyId");
+                        result.remove("rateLimitWaitUs");
                         Object received = row.get("received_at");
                         String receivedAt = received instanceof Timestamp time ? time.toInstant().toString()
                                 : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
@@ -201,5 +212,151 @@ public class TelemetryStore implements ApplicationRunner {
                     } catch (Exception e) { throw new IllegalStateException(e); }
                 }).toList();
     }
+
+    public record AuditPage(List<Map<String, Object>> items, String total, int limit, int offset,
+                            int maxOffset, String timeBoundary) { }
+
+    public AuditPage page(TelemetrySchema schema, TelemetryQueryRequest request) {
+        SqlScope scope = auditScope(schema, request);
+        initialize();
+        var count = client.query("SELECT count() AS total FROM " + schema.table + " FINAL WHERE " + scope.where,
+                scope.params.toArray());
+        List<Object> params = new ArrayList<>(scope.params);
+        params.add(request.getLimit());
+        params.add(request.getOffset());
+        var rows = readAuditRows("SELECT raw_json, received_at, analysis_json FROM " + schema.table
+                + " FINAL WHERE " + scope.where + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?", params);
+        if (schema == TelemetrySchema.SESSIONS) attachCredentialAttempts(rows, request);
+        return new AuditPage(rows, count.get(0).get("total").toString(), request.getLimit(), request.getOffset(),
+                10000, "[from,to)");
+    }
+
+    public Map<String, Object> detail(TelemetrySchema schema, String recordId, TelemetryQueryRequest request) {
+        UUID.fromString(recordId);
+        SqlScope scope = auditScope(schema, request);
+        initialize();
+        List<Object> params = new ArrayList<>(scope.params);
+        params.add(recordId);
+        var rows = readAuditRows("SELECT raw_json, received_at, analysis_json FROM " + schema.table
+                + " FINAL WHERE " + scope.where + " AND record_id = ? LIMIT 1", params);
+        if (schema == TelemetrySchema.SESSIONS) attachCredentialAttempts(rows, request);
+        return rows.isEmpty() ? null : rows.get(0);
+    }
+
+    private SqlScope auditScope(TelemetrySchema schema, TelemetryQueryRequest request) {
+        if (!properties.isQueryEnabled()) throw new IllegalStateException("QUERY_DISABLED");
+        if (request.getWorkerId() == null || request.getWorkerId().isBlank() || request.getWorkerId().length() > 128
+                || request.getFrom() == null || request.getTo() == null || !request.getTo().isAfter(request.getFrom())
+                || java.time.Duration.between(request.getFrom(), request.getTo()).compareTo(java.time.Duration.ofDays(31)) > 0
+                || request.getLimit() < 1 || request.getLimit() > 200 || request.getOffset() < 0 || request.getOffset() > 10000) {
+            throw new IllegalArgumentException("Worker/time required; window <=31 days, limit 1..200, offset 0..10000");
+        }
+        StringBuilder where = new StringBuilder("worker_id = ? AND occurred_at >= ? AND occurred_at < ?");
+        List<Object> params = new ArrayList<>(List.of(request.getWorkerId(), Timestamp.from(request.getFrom()), Timestamp.from(request.getTo())));
+        addFilter(where, params, request.getConnectionId(), schema == TelemetrySchema.DNS
+                ? "(connection_id = ? OR parent_connection_id = ?)" : "connection_id = ?", schema == TelemetrySchema.DNS ? 2 : 1);
+        if (request.getConnectionId() != null && !request.getConnectionId().isBlank()) UUID.fromString(request.getConnectionId());
+        if (schema == TelemetrySchema.SESSIONS && has(request.getUsername())) {
+            if (request.getUsername().length() > 2048) throw new IllegalArgumentException("Filter too long");
+            where.append(" AND (positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR (worker_instance_id, connection_id) IN ("
+                    + "SELECT worker_instance_id, connection_id FROM " + TelemetrySchema.AUTH.table
+                    + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                    + " AND positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0))");
+            params.addAll(List.of(request.getUsername(), request.getWorkerId(),
+                    Timestamp.from(request.getTo().minus(java.time.Duration.ofDays(31))), Timestamp.from(request.getTo()), request.getUsername()));
+        } else addFilter(where, params, request.getUsername(), schema == TelemetrySchema.AUTH
+                ? "(positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(verified_username,''), ?) > 0)"
+                : "positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0", schema == TelemetrySchema.AUTH ? 3 : 1);
+        addFilter(where, params, request.getClientIp(), "client_ip = ?", 1);
+        addFilter(where, params, request.getProtocol(), "inbound_protocol = ?", 1);
+        String outcome = schema == TelemetrySchema.SESSIONS ? "session_outcome" : schema == TelemetrySchema.AUTH ? "auth_outcome" : "outcome";
+        addFilter(where, params, request.getOutcome(), outcome + " = ?", 1);
+        if (schema == TelemetrySchema.SESSIONS) {
+            addFilter(where, params, request.getTarget(), "(positionCaseInsensitiveUTF8(ifNull(logical_target_host,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(effective_target_host,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(original_dst_ip,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(selected_target_ip,''), ?) > 0)", 4);
+            addFilter(where, params, request.getRoute(), "(positionCaseInsensitiveUTF8(ifNull(route_name,''), ?) > 0 OR toString(route_id) = ?)", 2);
+            addFilter(where, params, request.getTrafficCategory(), "traffic_category = ?", 1);
+            addFilter(where, params, request.getConnectOutcome(), "connect_outcome = ?", 1);
+        } else if (schema == TelemetrySchema.DNS) {
+            addFilter(where, params, request.getTarget(), "positionCaseInsensitiveUTF8(ifNull(qname,''), ?) > 0", 1);
+            addFilter(where, params, request.getQtype(), "qtype = ?", 1);
+        } else if (schema == TelemetrySchema.EVENTS) {
+            addFilter(where, params, request.getEventType(), "event_type = ?", 1);
+        } else {
+            addFilter(where, params, request.getAuthMethod(), "auth_method = ?", 1);
+        }
+        if (schema != TelemetrySchema.SESSIONS && (has(request.getRoute()) || has(request.getTrafficCategory()) || has(request.getConnectOutcome()))
+                || schema != TelemetrySchema.DNS && has(request.getQtype())
+                || schema != TelemetrySchema.EVENTS && has(request.getEventType())
+                || schema != TelemetrySchema.AUTH && has(request.getAuthMethod())
+                || schema != TelemetrySchema.DNS && schema != TelemetrySchema.SESSIONS && has(request.getTarget())) {
+            throw new IllegalArgumentException("Filter unsupported for this record type");
+        }
+        return new SqlScope(where.toString(), params);
+    }
+
+    private boolean has(String value) { return value != null && !value.isBlank(); }
+
+    /** Read-time association; neither the original session fact nor verified identity is rewritten. */
+    private void attachCredentialAttempts(List<Map<String, Object>> sessions, TelemetryQueryRequest request) {
+        Map<List<String>, List<Map<String, Object>>> associated = new LinkedHashMap<>();
+        for (var session : sessions) {
+            if (session.get("connectionId") instanceof String connection && session.get("workerInstanceId") instanceof String instance) {
+                associated.putIfAbsent(List.of(instance, connection), new ArrayList<>());
+            }
+        }
+        if (associated.isEmpty()) return;
+        List<Object> params = new ArrayList<>(List.of(request.getWorkerId(),
+                Timestamp.from(request.getTo().minus(java.time.Duration.ofDays(31))), Timestamp.from(request.getTo())));
+        associated.keySet().forEach(params::addAll);
+        var attempts = client.query("SELECT worker_instance_id, connection_id, auth_attempt_id, attempted_username, auth_outcome, auth_method, occurred_at FROM "
+                + TelemetrySchema.AUTH.table + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                + " AND (worker_instance_id, connection_id) IN (" + String.join(",", Collections.nCopies(associated.size(), "(?,?)")) + ")"
+                + " ORDER BY occurred_at DESC, record_id LIMIT 21 BY worker_instance_id, connection_id", params.toArray());
+        for (var attempt : attempts) {
+            var target = associated.get(List.of(attempt.get("worker_instance_id").toString(), attempt.get("connection_id").toString()));
+            if (target == null) continue;
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("authAttemptId", attempt.get("auth_attempt_id"));
+            result.put("attemptedUsername", attempt.get("attempted_username"));
+            result.put("authOutcome", attempt.get("auth_outcome"));
+            result.put("authMethod", attempt.get("auth_method"));
+            Object occurred = attempt.get("occurred_at");
+            result.put("occurredAt", occurred instanceof Timestamp time ? time.toInstant().toString()
+                    : occurred instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
+                    : occurred.toString().replace(" ", "T") + (occurred.toString().endsWith("Z") ? "" : "Z"));
+            target.add(result);
+        }
+        for (var session : sessions) {
+            if (!(session.get("connectionId") instanceof String connection) || !(session.get("workerInstanceId") instanceof String instance)) continue;
+            var matches = associated.get(List.of(instance, connection));
+            session.put("credentialAuthAttempts", matches.stream().limit(20).toList());
+            session.put("credentialAuthAttemptsTruncated", matches.size() > 20);
+        }
+    }
+
+    private void addFilter(StringBuilder where, List<Object> params, String value, String predicate, int copies) {
+        if (!has(value)) return;
+        if (value.length() > 2048) throw new IllegalArgumentException("Filter too long");
+        where.append(" AND ").append(predicate);
+        for (int i = 0; i < copies; i++) params.add(value);
+    }
+
+    private List<Map<String, Object>> readAuditRows(String sql, List<Object> params) {
+        return client.query(sql, params.toArray()).stream().map(row -> {
+            try {
+                Map<String, Object> result = new LinkedHashMap<>(mapper.readValue(row.get("raw_json").toString(), Map.class));
+                result.remove("rateLimitPolicyId");
+                result.remove("rateLimitWaitUs");
+                Object received = row.get("received_at");
+                result.put("receivedAt", received instanceof Timestamp time ? time.toInstant().toString()
+                        : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
+                        : received.toString().replace(" ", "T") + (received.toString().endsWith("Z") ? "" : "Z"));
+                if (row.get("analysis_json") != null) result.put("analysis", mapper.readValue(row.get("analysis_json").toString(), Map.class));
+                return result;
+            } catch (Exception e) { throw new IllegalStateException("INVALID_STORED_FACT", e); }
+        }).toList();
+    }
+
+    private record SqlScope(String where, List<Object> params) { }
     private record Pending(TelemetrySchema schema, TelemetryRecordV1 record, String json, String hash) { }
 }

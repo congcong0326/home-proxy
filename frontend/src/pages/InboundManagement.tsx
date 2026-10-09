@@ -14,6 +14,7 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
   Statistic,
   Grid
@@ -28,7 +29,8 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundTrafficStats } from '../types/inbound';
+import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundTrafficStats, InboundMonthlyTrafficV1 } from '../types/inbound';
+import { TrafficCategory } from '../types/observability';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO } from '../types/user';
 import { RouteDTO } from '../types/route';
@@ -91,6 +93,13 @@ const routeOrderRules = [
 
 const supportsTls = (protocol?: ProtocolType) => protocol === ProtocolType.SOCKS5;
 
+const trafficCategoryLabels: Record<TrafficCategory, string> = {
+  INTERNAL_REWRITE: '内网访问（目标重写）',
+  EXTERNAL: '外网访问',
+  OTHER_INTERNAL: '其他内网',
+  UNKNOWN: '未知分类',
+};
+
 const InboundManagement: React.FC = () => {
   const [state, setState] = useState<PageState>({
     loading: false,
@@ -109,7 +118,9 @@ const InboundManagement: React.FC = () => {
   const [editingItem, setEditingItem] = useState<InboundConfigDTO | null>(null);
   const [createForm] = Form.useForm<InboundConfigCreateRequest>();
   const [editForm] = Form.useForm<InboundConfigUpdateRequest>();
-  const [trafficMap, setTrafficMap] = useState<Record<number, InboundTrafficStats>>({});
+  const [trafficSource, setTrafficSource] = useState<'v1' | 'legacy'>('v1');
+  const [trafficMap, setTrafficMap] = useState<Record<number, InboundTrafficStats | InboundMonthlyTrafficV1>>({});
+  const [trafficErrors, setTrafficErrors] = useState<number[]>([]);
   const screens = Grid.useBreakpoint();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
@@ -209,26 +220,31 @@ const InboundManagement: React.FC = () => {
   // Shadowsocks 加密算法选项
   const ssMethodSelectOptions = useMemo(() => PROXY_ENC_ALGO_OPTIONS, []);
 
-  const fetchInboundTraffic = useCallback(async (list: InboundConfigDTO[]) => {
-    const ids = (list || []).map(i => i.id).filter((id): id is number => typeof id === 'number');
-    if (!ids.length) return;
-    const results = await Promise.all(ids.map(async (id) => {
-      try {
-        const data = await apiService.getInboundMonthlyTraffic(id);
-        return { id, data };
-      } catch (e) {
-        console.warn('加载入站流量失败', id, e);
-        return null;
-      }
-    }));
-    setTrafficMap(prev => {
-      const next = { ...prev };
-      results.forEach(item => {
-        if (item?.data) next[item.id] = item.data;
-      });
-      return next;
-    });
-  }, []);
+  useEffect(() => {
+    let current = true;
+    setTrafficMap({});
+    setTrafficErrors([]);
+    const fetchTraffic = async () => {
+      const results = await Promise.all(state.inbounds.map(async (inbound) => {
+        try {
+          const data = trafficSource === 'v1'
+            ? await apiService.getInboundMonthlyTrafficV1(inbound.id, inbound.workerId)
+            : await apiService.getInboundMonthlyTraffic(inbound.id);
+          return { id: inbound.id, data };
+        } catch (e) {
+          console.warn('加载入站流量失败', inbound.id, e);
+          return { id: inbound.id, data: undefined };
+        }
+      }));
+      if (!current) return;
+      const next: Record<number, InboundTrafficStats | InboundMonthlyTrafficV1> = {};
+      results.forEach(item => { if (item.data) next[item.id] = item.data; });
+      setTrafficMap(next);
+      setTrafficErrors(results.filter(item => !item.data).map(item => item.id));
+    };
+    void fetchTraffic();
+    return () => { current = false; };
+  }, [state.inbounds, trafficSource]);
 
   const loadUsersAndRoutes = useCallback(async () => {
     try {
@@ -363,12 +379,11 @@ const InboundManagement: React.FC = () => {
         total: res.total,
         loading: false,
       }));
-      await fetchInboundTraffic(normalizedInbounds);
     } catch (error) {
       console.error('加载入站配置失败:', error);
       setState(prev => ({ ...prev, loading: false }));
     }
-  }, [fetchInboundTraffic, state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort, state.workerFilter]);
+  }, [state.currentPage, state.pageSize, state.sortBy, state.sortDir, state.protocolFilter, state.statusFilter, state.tlsFilter, state.searchPort, state.workerFilter]);
 
   useEffect(() => {
     loadUsersAndRoutes();
@@ -446,9 +461,21 @@ const InboundManagement: React.FC = () => {
       ),
     },
     { title: '本月流量(上/下行)', key: 'traffic', render: (_: any, record: InboundConfigDTO) => {
-      const t = record.id ? trafficMap[record.id] : undefined;
-      if (!t) return '-';
-      return `${formatBytes(t.bytesIn || 0)} / ${formatBytes(t.bytesOut || 0)}`;
+      if (trafficErrors.includes(record.id)) return <Typography.Text type="warning">查询失败</Typography.Text>;
+      const t = trafficMap[record.id];
+      if (!t) return '加载中';
+      if (!('traffic' in t)) return `${formatBytes(t.bytesIn || 0)} / ${formatBytes(t.bytesOut || 0)}`;
+      const detail = <div>
+        <div>{t.period} · {t.timeZone} · 上行 / 下行</div>
+        {(Object.keys(trafficCategoryLabels) as TrafficCategory[]).map(category => <div key={category}>
+          {trafficCategoryLabels[category]}：{formatBytes(Number(t.categories[category].upload))} / {formatBytes(Number(t.categories[category].download))}
+        </div>)}
+        <div>总量：{formatBytes(Number(t.traffic.total))}</div>
+        <div>上行 {t.traffic.upload} 字节 / 下行 {t.traffic.download} 字节</div>
+      </div>;
+      return <Tooltip title={detail}>
+        <span>{formatBytes(Number(t.traffic.upload))} / {formatBytes(Number(t.traffic.download))}</span>
+      </Tooltip>;
     }},
     { title: '状态', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? <Tag color="green">启用</Tag> : <Tag color="red">禁用</Tag> },
     { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt' },
@@ -584,6 +611,12 @@ const InboundManagement: React.FC = () => {
           </Col>
         </Row>
       </Card>
+
+      <Space style={{ marginBottom: 12 }}>
+        <Typography.Text type="secondary">流量统计</Typography.Text>
+        <Select aria-label="流量统计来源" value={trafficSource} onChange={setTrafficSource} style={{ width: 150 }}
+          options={[{ value: 'v1', label: '新日志' }, { value: 'legacy', label: '旧日志' }]} />
+      </Space>
 
       <Table
         rowKey="id"

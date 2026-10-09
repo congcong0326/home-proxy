@@ -34,6 +34,10 @@ Thumbs.db
 *.orig
 /.superpowers/
 
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
 # Local reference checkouts
 /.reference/
 

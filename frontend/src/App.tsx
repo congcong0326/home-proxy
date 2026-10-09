@@ -17,6 +17,8 @@ import RuleSetManagement from './pages/RuleSetManagement';
 import './App.css';
 import InboundManagement from './pages/InboundManagement';
 import LogAudit from './pages/LogAudit';
+import { ObservabilityLogAudit } from './pages/ObservabilityLogAudit';
+import { ObservabilityDistribution } from './pages/ObservabilityDistribution';
 import AggregatedAnalysis from './pages/AggregatedAnalysis';
 import Dashboard from './pages/Dashboard';
 import { TrafficOverview } from './pages/TrafficOverview';
@@ -123,6 +125,8 @@ const AppContent: React.FC = () => {
           <Route path="rule-sets" element={<RuleSetManagement />} />
           <Route path="inbound" element={<InboundManagement />} />
           {/* 访问概览嵌套路由 */}
+          <Route path="observability/log-audit" element={<ObservabilityLogAudit />} />
+          <Route path="observability/distribution" element={<ObservabilityDistribution />} />
           <Route path="overview/log-audit" element={<LogAudit />} />
           <Route path="overview/aggregate" element={<AggregatedAnalysis />} />
           {/* Dashboard路由 */}

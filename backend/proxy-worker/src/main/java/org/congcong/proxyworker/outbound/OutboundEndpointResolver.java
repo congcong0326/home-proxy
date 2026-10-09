@@ -1,6 +1,8 @@
 package org.congcong.proxyworker.outbound;
 
 import com.google.common.net.InetAddresses;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
+import org.congcong.proxyworker.telemetry.SessionObservation.Stage;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -51,6 +53,7 @@ public final class OutboundEndpointResolver {
                 && peer.getAddress() != null) clientIp = peer.getAddress().getHostAddress();
         DnsQueryContext context = new DnsQueryContext(clientIp, dns.get(), dns.get().getConfigVersion());
         DeferredFuture overall = new DeferredFuture(inbound);
+        TelemetryHooks.beginStage(inbound, Stage.DNS);
         CompletableFuture<DnsResult> lookup = queryAddresses(host, context, inbound);
         ChannelFutureListener cancelOnClose = closed -> {
             lookup.cancel(false);
@@ -59,6 +62,7 @@ public final class OutboundEndpointResolver {
         inbound.closeFuture().addListener(cancelOnClose);
         overall.addListener(done -> inbound.closeFuture().removeListener(cancelOnClose));
         lookup.whenComplete((result, error) -> inbound.eventLoop().execute(() -> {
+            TelemetryHooks.endStage(inbound, Stage.DNS);
             if (overall.isDone()) return;
             if (result != null && request.getProxyContext() != null) {
                 request.getProxyContext().setDnsRouteId(result.routeId());

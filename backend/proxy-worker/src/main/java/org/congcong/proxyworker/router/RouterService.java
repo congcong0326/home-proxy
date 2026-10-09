@@ -43,51 +43,57 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
 
     @Override
     protected void channelRead0(ChannelHandlerContext channelHandlerContext, ProxyTunnelRequest proxyTunnelRequest) throws Exception {
-        ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
-        InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
-        proxyContext.setConfigVersion(inboundConfig.getConfigVersion());
-        proxyContext.setLogicalTargetSource(proxyTunnelRequest.getLogicalTargetSource().name());
-        if (proxyTunnelRequest.getProtocolType() != ProtocolType.DNS_SERVER) {
-            proxyTunnelRequest.setDnsInboundConfig(
-                    channelHandlerContext.channel().attr(ChannelAttributes.DNS_INBOUND_CONFIG).get());
-        }
-        // TLS SNI is an unauthenticated inbound: its routing identity is always
-        // the anonymous user configured on the inbound. Keep this decision at
-        // the routing boundary so bindings for that user are consistently used.
-        Long routingUserId = proxyTunnelRequest.getProtocolType() == ProtocolType.TLS_SNI_TCP
-                && inboundConfig.getAnonymousUser() != null
-                ? inboundConfig.getAnonymousUser().getId()
-                : proxyTunnelRequest.getUser() == null ? null : proxyTunnelRequest.getUser().getId();
-        String targetHost = proxyTunnelRequest.getTargetHost();
-        RouteConfig matchedRoute;
-        if (proxyTunnelRequest.getProtocolType() == ProtocolType.DNS_SERVER) {
-            String clientIp = proxyContext.getClientIp();
-            matchedRoute = DnsRouteSelector.select(inboundConfig, clientIp, targetHost).route();
-        } else {
-            List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
-            boolean hostIsIp = isIp(targetHost);
-            matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
-        }
-        boolean telemetryFallback = matchedRoute == null;
-        if (matchedRoute == null) {
-            matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
-            if (matchedRoute == null) {
-                return;
+        TelemetryHooks.requestReady(channelHandlerContext.channel());
+        TelemetryHooks.beginStage(channelHandlerContext.channel(), org.congcong.proxyworker.telemetry.SessionObservation.Stage.ROUTE_SELECTION);
+        try {
+            ProxyContext proxyContext = ProxyContextResolver.resolveProxyContext(channelHandlerContext.channel(), proxyTunnelRequest);
+            InboundConfig inboundConfig = proxyTunnelRequest.getInboundConfig();
+            proxyContext.setConfigVersion(inboundConfig.getConfigVersion());
+            proxyContext.setLogicalTargetSource(proxyTunnelRequest.getLogicalTargetSource().name());
+            if (proxyTunnelRequest.getProtocolType() != ProtocolType.DNS_SERVER) {
+                proxyTunnelRequest.setDnsInboundConfig(
+                        channelHandlerContext.channel().attr(ChannelAttributes.DNS_INBOUND_CONFIG).get());
             }
+            // TLS SNI is an unauthenticated inbound: its routing identity is always
+            // the anonymous user configured on the inbound. Keep this decision at
+            // the routing boundary so bindings for that user are consistently used.
+            Long routingUserId = proxyTunnelRequest.getProtocolType() == ProtocolType.TLS_SNI_TCP
+                    && inboundConfig.getAnonymousUser() != null
+                    ? inboundConfig.getAnonymousUser().getId()
+                    : proxyTunnelRequest.getUser() == null ? null : proxyTunnelRequest.getUser().getId();
+            String targetHost = proxyTunnelRequest.getTargetHost();
+            RouteConfig matchedRoute;
+            if (proxyTunnelRequest.getProtocolType() == ProtocolType.DNS_SERVER) {
+                String clientIp = proxyContext.getClientIp();
+                matchedRoute = DnsRouteSelector.select(inboundConfig, clientIp, targetHost).route();
+            } else {
+                List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
+                boolean hostIsIp = isIp(targetHost);
+                matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
+            }
+            boolean telemetryFallback = matchedRoute == null;
+            if (matchedRoute == null) {
+                matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
+                if (matchedRoute == null) {
+                    return;
+                }
+            }
+            ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
+            proxyTunnelRequest.setRouteConfig(matchedRoute);
+            TelemetryHooks.routing(channelHandlerContext.channel(), proxyTunnelRequest, telemetryFallback);
+            rejectNonPublicClientLiteral(proxyTunnelRequest, matchedRoute);
+            log.info("SNI 分流: user={}, domain={}, targetPort={}, route={}, policy={}, outbound={}, destination={}:{}",
+                    proxyContext.getUserName(),
+                    targetHost,
+                    proxyTunnelRequest.getTargetPort(),
+                    matchedRoute.getName(),
+                    matchedRoute.getPolicy(),
+                    matchedRoute.getOutboundProxyType(),
+                    proxyTunnelRequest.getFinalTargetHost(),
+                    proxyTunnelRequest.getFinalTargetPort());
+        } finally {
+            TelemetryHooks.endStage(channelHandlerContext.channel(), org.congcong.proxyworker.telemetry.SessionObservation.Stage.ROUTE_SELECTION);
         }
-        ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
-        proxyTunnelRequest.setRouteConfig(matchedRoute);
-        TelemetryHooks.routing(channelHandlerContext.channel(), proxyTunnelRequest, telemetryFallback);
-        rejectNonPublicClientLiteral(proxyTunnelRequest, matchedRoute);
-        log.info("SNI 分流: user={}, domain={}, targetPort={}, route={}, policy={}, outbound={}, destination={}:{}",
-                proxyContext.getUserName(),
-                targetHost,
-                proxyTunnelRequest.getTargetPort(),
-                matchedRoute.getName(),
-                matchedRoute.getPolicy(),
-                matchedRoute.getOutboundProxyType(),
-                proxyTunnelRequest.getFinalTargetHost(),
-                proxyTunnelRequest.getFinalTargetPort());
         channelHandlerContext.fireChannelRead(proxyTunnelRequest);
     }
 

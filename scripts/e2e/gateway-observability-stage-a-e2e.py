@@ -235,9 +235,16 @@ def run(api, legacy_only=False):
         assert any(row['qtype'] == 'A' and row['answerMode'] == 'FAKE_IP' and row['answerIps'] for row in dns)
         assert any(row['qtype'] == 'AAAA' and row['emptyAnswerReason'] == 'IPV6_SUPPRESSED' and row['rcode'] == 0 for row in dns)
         assert all(row['responseSent'] is True for row in dns)
+        assert all(row['inboundProtocol'] == 'DNS_SERVER' and row['transport'] == 'UDP' for row in dns)
         assert any(row['eventType'] == 'CONNECT_RESULT' and row['outcome'] == 'CONNECTED' for row in events)
+        for event in events:
+            session = next(row for row in sessions if row['connectionId'] == event['connectionId'])
+            for field in ['inboundId', 'inboundName', 'inboundProtocol', 'clientIp', 'clientPort',
+                          'clientIpSource', 'transportPeerIp', 'transportPeerPort', 'username', 'userId', 'identitySource']:
+                assert event.get(field) == session.get(field), ('event context mismatch', field, event['recordId'])
         report = {'workerId': WORKER, 'from': iso(from_time), 'to': query['to'], 'counts': {kind: len(data) for kind, data in [('sessions', sessions), ('credential-auth', auth), ('dns', dns), ('events', events)]},
                   'controlledPayloadBytesPerDirection': len(PAYLOAD), 'tablesPreserved': True, 'bufferMode': 'MEMORY', 'restartRecoverySupported': False,
+                  'dnsProtocolCollected': True, 'eventContextCollected': True,
                   'sessionSamples': [{k: row.get(k) for k in ['connectionId', 'logicalTargetHost', 'connectOutcome', 'sessionOutcome', 'trafficCategory', 'selectedTargetIp', 'uploadBytes', 'downloadBytes']} for row in sessions if row.get('logicalTargetHost')]}
         path = Path(os.environ.get('E2E_REPORT', '/tmp/gateway-observability-stage-a-e2e.json'))
         path.write_text(json.dumps(report, indent=2) + '\n')

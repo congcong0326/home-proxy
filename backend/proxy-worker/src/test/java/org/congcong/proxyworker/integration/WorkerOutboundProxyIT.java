@@ -39,6 +39,8 @@ class WorkerOutboundProxyIT {
 
             assertTrue(response.contains("echo:/xray-socks-out"), response);
             assertEquals(1, echo.requestCount());
+            org.congcong.proxyworker.integration.support.TelemetryTimingAssertions.assertOutbound(
+                    echo.port(), "SOCKS5", false, "SUCCESS");
         }
     }
 
@@ -63,6 +65,8 @@ class WorkerOutboundProxyIT {
 
             assertTrue(response.contains("echo:/xray-http-out"), response);
             assertEquals(1, echo.requestCount());
+            org.congcong.proxyworker.integration.support.TelemetryTimingAssertions.assertOutbound(
+                    echo.port(), "HTTPS_CONNECT", false, "SUCCESS");
         }
     }
 
@@ -91,6 +95,8 @@ class WorkerOutboundProxyIT {
 
             assertTrue(response.contains("echo:/xray-ss-out"), response);
             assertEquals(1, echo.requestCount());
+            org.congcong.proxyworker.integration.support.TelemetryTimingAssertions.assertOutbound(
+                    echo.port(), "SHADOW_SOCKS", false, "LOCAL_REQUEST_SENT");
         }
     }
 }

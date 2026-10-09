@@ -77,6 +77,8 @@ docker pull congcong0326/home-proxy-worker:latest
 - `clickhouse`：访问日志和统计库，仅 Docker 内部网络可访问
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
 
+新版日志采集、接收和统计查询默认开启。管理端使用 Spring Boot 配置 `observability.ingest-enabled`、`observability.query-enabled`，可分别通过环境变量 `OBSERVABILITY_INGEST_ENABLED=false`、`OBSERVABILITY_QUERY_ENABLED=false` 关闭；Worker 可通过 `OBSERVABILITY_ENABLED=false` 关闭新版采集。修改环境变量后需要重建对应容器。新版统计从采集开启后累计，旧日志不会自动补入。
+
 ### 1. 启动控制面
 
 在服务器上创建一个部署目录：

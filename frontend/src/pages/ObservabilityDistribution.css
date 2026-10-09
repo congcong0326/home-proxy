@@ -1,0 +1,15 @@
+.distribution-query {
+  display: flex;
+  align-items: flex-end;
+}
+.distribution-more-filters {
+  margin-top: 16px;
+}
+.distribution-summary {
+  margin-bottom: 16px;
+}
+.distribution-key {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

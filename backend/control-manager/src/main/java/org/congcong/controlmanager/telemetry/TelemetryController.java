@@ -32,4 +32,26 @@ public class TelemetryController {
         catch (IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage()); }
         catch (IllegalStateException e) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage()); }
     }
+
+    @GetMapping("/{type}/page")
+    public TelemetryStore.AuditPage page(@PathVariable String type, @ModelAttribute TelemetryQueryRequest request) {
+        try { return store.page(TelemetrySchema.fromPath(type), request); }
+        catch (IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage()); }
+        catch (RuntimeException e) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "V1_QUERY_UNAVAILABLE"); }
+    }
+
+    @GetMapping("/{type}/{recordId}")
+    public Map<String, Object> detail(@PathVariable String type, @PathVariable String recordId,
+                                     @RequestParam String workerId, @RequestParam Instant from, @RequestParam Instant to) {
+        try {
+            var request = new TelemetryQueryRequest();
+            request.setWorkerId(workerId); request.setFrom(from); request.setTo(to);
+            var row = store.detail(TelemetrySchema.fromPath(type), recordId, request);
+            if (row == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Record absent from selected Worker/time scope");
+            return row;
+        } catch (ResponseStatusException e) { throw e; }
+        catch (IllegalArgumentException e) { throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage()); }
+        catch (RuntimeException e) { throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "V1_QUERY_UNAVAILABLE"); }
+    }
+
 }

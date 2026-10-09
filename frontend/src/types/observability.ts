@@ -32,6 +32,9 @@ export interface TelemetryRecordV1 {
 }
 
 export interface SessionLogV1 extends TelemetryRecordV1 {
+  /** Query-time associations; these attempts do not establish verified user identity. */
+  credentialAuthAttempts?: Pick<CredentialAuthLogV1, 'authAttemptId' | 'attemptedUsername' | 'authOutcome' | 'authMethod' | 'occurredAt'>[];
+  credentialAuthAttemptsTruncated?: boolean;
   startedAt: string;
   connectedAt: string | null;
   endedAt: string;
@@ -64,7 +67,6 @@ export interface SessionLogV1 extends TelemetryRecordV1 {
   channelReadyBasis: string | null;
   targetConfirmationLevel: string | null;
   proxyHandshakeOutcome: string | null;
-  rateLimitPolicyId: string | null;
   originalDstPort: number | null;
   logicalTargetPort: number | null;
   effectiveTargetPort: number | null;
@@ -81,7 +83,6 @@ export interface SessionLogV1 extends TelemetryRecordV1 {
   outboundTcpDurationUs: UInt64String | null;
   outboundTlsDurationUs: UInt64String | null;
   proxyHandshakeDurationUs: UInt64String | null;
-  rateLimitWaitUs: UInt64String | null;
   uploadBackpressureDurationUs: UInt64String | null;
   downloadBackpressureDurationUs: UInt64String | null;
   routeId: UInt64String | null;
@@ -165,7 +166,7 @@ export interface CredentialAuthLogV1 extends TelemetryRecordV1 {
   reasonCode: string | null;
   authOutcome: AuthOutcome | null;
   authDurationUs: UInt64String | null;
-  analysis: CredentialAuthAnalysisV1;
+  analysis: CredentialAuthAnalysisV1 | null;
 }
 
 export interface TelemetryQuery {
@@ -175,6 +176,28 @@ export interface TelemetryQuery {
   limit?: number;
   offset?: number;
   connectionId?: string;
+  username?: string;
+  clientIp?: string;
+  target?: string;
+  protocol?: string;
+  outcome?: string;
+  connectOutcome?: string;
+  route?: string;
+  trafficCategory?: TrafficCategory;
+  qtype?: string;
+  eventType?: string;
+  authMethod?: string;
+}
+
+export type AuditRecordV1 = SessionLogV1 | DnsQueryLogV1 | ProxyEventLogV1 | CredentialAuthLogV1;
+
+export interface TelemetryPageV1<T extends TelemetryRecordV1 = AuditRecordV1> {
+  items: T[];
+  total: UInt64String;
+  limit: number;
+  offset: number;
+  maxOffset: number;
+  timeBoundary: '[from,to)';
 }
 
 export interface TelemetryStatusV1 {
@@ -188,6 +211,11 @@ export interface TelemetryStatusV1 {
     capability: 'V1_NEGOTIATED' | 'UNSUPPORTED_OR_DISABLED';
     online: boolean;
     complete: boolean;
+    enabled?: boolean;
+    instanceId?: string;
+    queueDepth?: number;
+    retries?: number;
+    acks?: number;
     lastSeenAt?: string;
     bufferMode?: 'MEMORY';
     restartRecoverySupported?: false;

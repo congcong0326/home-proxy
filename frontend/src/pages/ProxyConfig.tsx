@@ -132,6 +132,15 @@ const ProxyConfig: React.FC = () => {
       ],
     },
     {
+      key: 'observability',
+      icon: <ApiOutlined />,
+      label: '网关观测',
+      children: [
+        { key: '/config/observability/log-audit', icon: <DatabaseOutlined />, label: '新版日志审计' },
+        { key: '/config/observability/distribution', icon: <AreaChartOutlined />, label: '访问分布' },
+      ],
+    },
+    {
       key: 'access-overview',
       icon: <GlobalOutlined />,
       label: '访问概览',
@@ -152,7 +161,7 @@ const ProxyConfig: React.FC = () => {
       theme="dark"
       mode="inline"
       selectedKeys={[location.pathname]}
-      defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview']}
+      defaultOpenKeys={['dashboard', 'system-ops', 'proxy-config', 'access-overview', 'observability']}
       className="proxy-config-menu"
       items={menuItems}
       onClick={({ key }) => {
@@ -376,6 +385,8 @@ const getCardDescription = (key: string): string => {
       return '查看访问日志，支持查询、过滤与详情';
     case '/config/overview/aggregate':
       return '综合用户与应用TopN聚合分析';
+    case '/config/observability/distribution':
+      return '分析用户、目标、来源 IP 与路由的连接和流量分布';
     case '/config/dashboard/mail-gateway':
       return 'SMTP网关、bizKey目标配置与发送日志';
     case '/config/system-ops/disk':

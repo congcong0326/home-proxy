@@ -1,6 +1,9 @@
 package org.congcong.proxyworker.telemetry;
 
 import io.netty.channel.Channel;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.channel.ChannelFuture;
+import static org.congcong.proxyworker.telemetry.SessionObservation.Stage.*;
 import io.netty.util.AttributeKey;
 import org.congcong.common.telemetry.*;
 import org.congcong.common.enums.ProtocolType;
@@ -33,14 +36,54 @@ public final class TelemetryHooks {
             record.setClientIpSource("TRANSPORT_PEER");
         }
         channel.attr(CONTEXT).set(state);
+        if (inbound.getProtocol() == ProtocolType.TP_PROXY || inbound.getProtocol() == ProtocolType.TLS_SNI_TCP) {
+            beginStage(channel, TARGET_RECOVERY);
+        } else {
+            beginStage(channel, CLIENT_HANDSHAKE);
+        }
         channel.closeFuture().addListener(ignored -> channel.eventLoop().execute(state::close));
     }
     public static SessionObservation state(Channel channel) { return channel == null ? null : channel.attr(CONTEXT).get(); }
     private static void run(Channel channel, java.util.function.Consumer<SessionObservation> action) {
         SessionObservation state = state(channel);
         if (state == null) return;
-        Runnable safe = () -> { try { action.accept(state); } catch (Exception ignored) { } };
+        Runnable safe = () -> { try { if (!state.isFinished()) action.accept(state); } catch (Exception ignored) { } };
         if (channel.eventLoop().inEventLoop()) safe.run(); else channel.eventLoop().execute(safe);
+    }
+    public static void beginStage(Channel channel, SessionObservation.Stage stage) {
+        long now = System.nanoTime();
+        run(channel, state -> state.begin(stage, now));
+    }
+    public static void endStage(Channel channel, SessionObservation.Stage stage) {
+        long now = System.nanoTime();
+        run(channel, state -> state.end(stage, now));
+    }
+    public static void requestReady(Channel channel) {
+        endStage(channel, CLIENT_HANDSHAKE);
+        endStage(channel, TARGET_RECOVERY);
+    }
+    public static void relayStarted(Channel channel) { run(channel, SessionObservation::relayStarted); }
+    public static void backpressure(Channel channel, boolean upload, boolean blocked) {
+        var stage = upload ? UPLOAD_BACKPRESSURE : DOWNLOAD_BACKPRESSURE;
+        if (blocked) beginStage(channel, stage); else endStage(channel, stage);
+    }
+    /** Resolver observation excludes DNS from the socket connect timer and preserves address validation. */
+    public static ChannelFuture connectTcp(Bootstrap bootstrap, Channel inbound, java.net.InetSocketAddress address) {
+        if (state(inbound) == null) return bootstrap.connect(address);
+        var group = new TimingAddressResolverGroup(bootstrap.config().resolver(), inbound);
+        bootstrap.resolver(group);
+        try {
+            ChannelFuture future = bootstrap.connect(address);
+            future.addListener(done -> group.close());
+            return future;
+        } catch (RuntimeException failure) {
+            group.close();
+            throw failure;
+        }
+    }
+    public static void outbound(Channel outbound, Channel inbound, boolean proxy, boolean tls, String readyOutcome) {
+        if (state(inbound) == null) return;
+        outbound.pipeline().addFirst(new OutboundTimingHandler(inbound, proxy, tls, readyOutcome));
     }
     public static void routing(Channel channel, ProxyTunnelRequest request, boolean fallback) {
         run(channel, state -> {
@@ -91,7 +134,8 @@ public final class TelemetryHooks {
             boolean proxy = request.getRouteConfig().getPolicy() == RoutePolicy.OUTBOUND_PROXY;
             record.setChannelReadyBasis(proxy ? "PROXY_CONNECTOR_READY" : "DIRECT_TCP_CONNECTED");
             record.setTargetConfirmationLevel(proxy ? "UPSTREAM_PROTOCOL_ONLY" : "LOCAL_TCP_CONNECTED");
-            // Connector readiness is not universally a remote protocol ACK; leave handshake outcome unknown.
+            var timing = outbound == null ? null : outbound.pipeline().get(OutboundTimingHandler.class);
+            if (proxy && timing != null) record.setProxyHandshakeOutcome(timing.readyOutcome());
             TrafficClassifierV1.classify(record);
             state.connected();
         });

@@ -1,5 +1,6 @@
 import { ProtocolType } from './route';
 import { ProxyEncAlgo } from './proxyEncAlgo';
+import { TrafficCategory } from './observability';
 
 export interface InboundRouteBinding {
   userIds: number[];
@@ -68,6 +69,24 @@ export interface InboundTrafficStats {
   bytesOut: number;
   totalBytes: number;
   period?: string;
+}
+
+export interface InboundTrafficCounters {
+  upload: string;
+  download: string;
+  total: string;
+}
+
+export interface InboundMonthlyTrafficV1 {
+  inboundId: number;
+  workerId: string;
+  period: string;
+  timeZone: string;
+  from: string;
+  to: string;
+  traffic: InboundTrafficCounters;
+  categories: Record<TrafficCategory, InboundTrafficCounters>;
+  firstSessionAt: string | null;
 }
 
 export interface InboundQueryParams {

@@ -13,7 +13,7 @@ public final class TelemetryPublisher {
     public static final String INSTANCE_ID = UUID.randomUUID().toString();
     private static final TelemetryPublisher INSTANCE = new TelemetryPublisher();
     private final boolean enabled = Boolean.parseBoolean(System.getProperty("observability.enabled",
-            System.getenv().getOrDefault("OBSERVABILITY_ENABLED", "false")));
+            System.getenv().getOrDefault("OBSERVABILITY_ENABLED", "true")));
     private final boolean authEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_AUTH_ENABLED", "true"));
     private final boolean eventsEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_EVENTS_ENABLED", "true"));
     private final int capacity = Integer.parseInt(System.getenv().getOrDefault("OBSERVABILITY_BUFFER_CAPACITY", "5000"));

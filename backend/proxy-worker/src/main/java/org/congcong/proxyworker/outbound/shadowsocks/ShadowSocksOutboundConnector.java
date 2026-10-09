@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.outbound.shadowsocks;
 
 import io.netty.bootstrap.Bootstrap;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
@@ -44,6 +45,7 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
+                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false, "LOCAL_REQUEST_SENT");
                         if (ShadowSocks2022Support.isEnabled(outboundProxyEncAlgo)) {
                             ShadowSocks2022ClientSession session = new ShadowSocks2022ClientSession();
                             var requestCryptoProcessor = CryptoProcessorFactory.createProcessor(outboundProxyEncAlgo, outboundProxyPassword);
@@ -78,7 +80,7 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
                 });
 
         return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
-                outboundProxyHost, outboundProxyPort, b::connect);
+                outboundProxyHost, outboundProxyPort, address -> TelemetryHooks.connectTcp(b, inboundChannel, address));
     }
 
     private static class ShadowSocksClientHandler extends SimpleChannelInboundHandler<ByteBuf> {

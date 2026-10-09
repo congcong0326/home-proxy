@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.outbound.reality;
 
 import io.netty.bootstrap.Bootstrap;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
@@ -45,6 +46,7 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
+                        TelemetryHooks.outbound(ch, inboundChannel, true, true, "LOCAL_REQUEST_SENT");
                         RealityHandshakeEngine handshakeEngine = new RealityHandshakeEngine(
                                 realityConfig,
                                 new RealityClientHelloFactory());
@@ -60,6 +62,6 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                 });
 
         return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
-                outboundConfig.host(), outboundConfig.port(), bootstrap::connect);
+                outboundConfig.host(), outboundConfig.port(), address -> TelemetryHooks.connectTcp(bootstrap, inboundChannel, address));
     }
 }

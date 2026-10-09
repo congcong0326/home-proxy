@@ -1,6 +1,7 @@
 package org.congcong.proxyworker.outbound.socks;
 
 import io.netty.bootstrap.Bootstrap;
+import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import io.netty.channel.*;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.socksx.v5.*;
@@ -28,6 +29,7 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
+                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false, "SUCCESS");
                         socketChannel.pipeline().addLast(
                                 Socks5ClientEncoder.DEFAULT,//编码
                                 new Socks5InitialResponseDecoder(),//解码
@@ -37,7 +39,7 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
                 });
 
         return OutboundEndpointResolver.connect(inboundChannel, request, relayPromise,
-                request.getFinalTargetHost(), request.getFinalTargetPort(), b::connect);
+                request.getFinalTargetHost(), request.getFinalTargetPort(), address -> TelemetryHooks.connectTcp(b, inboundChannel, address));
     }
 
     private static class Socks5ClientHandler extends SimpleChannelInboundHandler<Object> {

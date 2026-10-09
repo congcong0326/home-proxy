@@ -1,5 +1,6 @@
+import { TelemetryType, TelemetryQuery, TelemetryRecordV1, TelemetryStatusV1, TelemetryPageV1, AuditRecordV1 } from '../types/observability';
 import { OverviewData, OverviewQuery, LiveConnections } from '../types/overview';
-import { TelemetryType, TelemetryQuery, TelemetryRecordV1, TelemetryStatusV1 } from '../types/observability';
+import { DistributionData, DistributionQuery } from '../types/distribution';
 import {
   LoginRequest,
   LoginResponse,
@@ -49,7 +50,8 @@ import {
   InboundConfigCreateRequest,
   InboundConfigUpdateRequest,
   InboundQueryParams,
-  InboundTrafficStats
+  InboundTrafficStats,
+  InboundMonthlyTrafficV1
 } from '../types/inbound';
 import {
   AccessLogListItem,
@@ -444,6 +446,12 @@ class ApiService {
   async getInboundMonthlyTraffic(inboundId: number, month?: string): Promise<InboundTrafficStats> {
     const query = month ? `?month=${encodeURIComponent(month)}` : '';
     return this.request<InboundTrafficStats>(`/logs/traffic/inbound/${inboundId}/month${query}`);
+  }
+
+  async getInboundMonthlyTrafficV1(inboundId: number, workerId: string, month?: string): Promise<InboundMonthlyTrafficV1> {
+    const params = new URLSearchParams({ workerId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' });
+    if (month) params.set('month', month);
+    return this.request<InboundMonthlyTrafficV1>(`/observability/v1/traffic/inbound/${inboundId}/month?${params}`);
   }
 
   // ========== 代理节点 ==========
@@ -1067,6 +1075,12 @@ class ApiService {
     return this.request<OverviewData>(`/observability/v1/overview?${params}`);
   }
 
+  async getObservabilityDistribution(query: DistributionQuery): Promise<DistributionData> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
+    return this.request<DistributionData>(`/observability/v1/distribution?${params}`);
+  }
+
   async getObservabilityLive(query: OverviewQuery): Promise<LiveConnections> {
     const params = new URLSearchParams();
     Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== '') params.set(key, String(value)); });
@@ -1079,6 +1093,19 @@ class ApiService {
       if (value !== undefined) params.set(key, String(value));
     });
     return this.request<T[]>(`/observability/v1/${type}?${params}`);
+  }
+
+  async queryTelemetryPage(type: TelemetryType, query: TelemetryQuery): Promise<TelemetryPageV1> {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') params.set(key, String(value));
+    });
+    return this.request<TelemetryPageV1>(`/observability/v1/${type}/page?${params}`);
+  }
+
+  async getTelemetryDetail(type: TelemetryType, recordId: string, scope: Pick<TelemetryQuery, 'workerId' | 'from' | 'to'>): Promise<AuditRecordV1> {
+    const params = new URLSearchParams(scope);
+    return this.request<AuditRecordV1>(`/observability/v1/${type}/${encodeURIComponent(recordId)}?${params}`);
   }
 
   // ========== 系统运维：MySQL备份恢复 ==========

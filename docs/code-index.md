@@ -129,7 +129,7 @@
 - 新增协议：先改 `ProtocolType`，再补 control-manager 表单和校验、worker `ProxyServerFactory`、协议 strategy/initializer、出站 connector。
 - 新增路由条件或策略：改 `common` enum/DTO、control-manager 路由管理、worker `RouterService` 或 `OutboundConnectorFactory`。
 - 新增管理台页面：补 `frontend/src/pages`、`frontend/src/types`、`frontend/src/services/api.ts`，再把路由挂到 `App.tsx` 和 `ProxyConfig.tsx` 导航。
-- 新日志模型与网关观测（阶段 A 已实施，B/C/D 待实施）：先读 [双轨演进设计](development/gateway-observability-log-model-design.md)，使用独立 DTO、采集／存储／API 和前端分类；流量重点区分实际目标重写至内网的子集与外网，不需额外 NAS 归属配置，并新增用户名密码认证来源审计；观察阶段保留所有旧代码、旧表与旧查询，用户确认稳定后再分批迁移页面，最终清理需另行确认。
+- 新日志模型与网关观测（阶段 A、B1 已实施，B2 及后续待实施）：先读 [双轨演进设计](development/gateway-observability-log-model-design.md) 第 13 节；B1 已交付四类日志的新版审计页面，B2 继续确认关键数据，用户确认可用后进入 C，按入站流量、用户／全局流量、聚合分析、日志入口分批迁移查询；高级看板与风险分析按需独立实施，D 清理旧链路需另行确认。使用独立 DTO、采集／存储／API 和前端分类；流量重点区分实际目标重写至内网的子集与外网，不需额外 NAS 归属配置，并新增用户名密码认证来源审计。B 保留所有旧代码、旧表与旧查询，C 每批保留回退能力及旧采集／代码／表。
 - 新增数据库字段：新增 Flyway 脚本，更新 entity、DTO、mapper/service、前端类型。
 
 ## 验证入口
@@ -150,9 +150,34 @@
 - `frontend/src/types/observability.ts` 与 `api.ts`：独立类型/API，现有页面保持旧查询。
 - [阶段 A 实施与保留数据 E2E](testing/gateway-observability-stage-a.md)：开关、协议、查询、兼容、回退与验收。
 
+## 网关观测 B1：新版日志审计
+
+- `frontend/src/pages/ObservabilityLogAudit.tsx`：网关观测 → 新版日志审计；独立四标签、后端筛选／分页、详情与连接关联、中文连接结果；按用户反馈移除采集状态卡片。
+- `control-manager/telemetry/TelemetryQueryRequest`、`TelemetryController`、`TelemetryStore`：新增 `/{type}/page` 和有界稳定 ID 详情；连接在查询时批量关联认证尝试账号，用户名筛选包含失败尝试，不改原始用户身份；旧 V1 数组查询及 `/api/logs` 保留。
+- [B1 实施与验证记录](testing/gateway-observability-b1.md)：API 契约、截图、只读 E2E、部署／回退与采集边界。流量概览已按后续用户要求提供 C2 增强预览，入站月度流量按 C1 切换新源，其余统计页面继续使用旧源。
+
+## 入站月度流量（C1）
+
+- `control-manager/telemetry/InboundTrafficService`、`InboundTrafficController`：`/api/observability/v1/traffic/inbound/{inboundId}/month`，按节点／入站／本地月份聚合唯一连接汇总，四分类与历史起点独立于旧日志。
+- `frontend/src/pages/InboundManagement.tsx`、`types/inbound.ts`、`services/api.ts`：本月上／下行默认新源，悬停查看分类与历史范围，显式旧源回退；配置 CRUD 保持原行为。
+- [统计口径、验证与回退](testing/gateway-observability-inbound-traffic.md)：结束月份归属、月份／时区、大数、空历史与查询失败；旧采集、旧接口和旧表保留。
+
 ## 流量概览增强预览（C2）
 
 - `frontend/src/pages/TrafficOverview.tsx`、`TrafficOverview.css`、`types/overview.ts`：默认外网；四个 ECharts 面板、来源／结果筛选、当前并发与来源排行；`LegacyTrafficOverview.tsx` 保留原页面作为回退入口，Dashboard 嵌入同一新版组件。
 - `control-manager/telemetry/OverviewController`、`OverviewQuery`、`OverviewService`、`ConcurrencyTimeline`：`/api/observability/v1/overview` 及 `/live`；从唯一 sessions／DNS／认证事实直接聚合，历史并发按相交连接区间扫描，不受审计分页限制。
 - `common/telemetry/EstablishedConnectionsV1`、`proxy-worker/telemetry/EstablishedConnectionRegistry`、`service/WorkerMetricsCollector`：已建立业务连接的分类／来源快照，经现有心跳 `metrics_json` 上报；不增加配置或日志表。
 - [实施、截图与验证](testing/gateway-observability-overview.md)：历史与当前口径、内外网筛选边界、空值与结果分组、真实连接 E2E、回退步骤。
+
+## 新版连接阶段耗时
+
+- `proxy-worker/telemetry/SessionObservation`、`TelemetryHooks`：单调时钟阶段计时、结束冻结、协议请求就绪和中继背压。
+- `proxy-worker/telemetry/OutboundTimingHandler`、`TimingAddressResolverGroup`：实际 socket connect、系统解析与出站协议计时；自定义 DNS 在 direct／endpoint resolver 中计时。
+- `scripts/e2e/gateway-observability-session-timing-e2e.py`（`make e2e-observability-session-timing`）：本地真实上游／失败／背压／SNI 流量，保留日志并禁用临时入站；同目录 `gateway-observability-session-timing-browser.cjs` 只读核对实际详情。
+- [连接阶段耗时采集与验证](testing/gateway-observability-session-timing.md)：客户端握手、目标恢复、选路、DNS、TCP、REALITY TLS、上游代理握手和双向背压的采集边界；移除无执行来源的限流字段。
+
+## 网关观测：访问分布预览
+
+- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：独立六维度 TopN，连接数／上行／下行／总流量，全量分母与其余项目；旧聚合分析入口保留。
+- `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、UInt128 累加、93 天范围、缺失维度计数与节点历史起点；不改采集和旧 API。
+- [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。

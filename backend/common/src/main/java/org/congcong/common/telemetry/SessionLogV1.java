@@ -5,7 +5,9 @@ import lombok.EqualsAndHashCode;
 import java.time.Instant;
 import java.util.List;
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+@JsonIgnoreProperties({"rateLimitPolicyId", "rateLimitWaitUs"})
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class SessionLogV1 extends TelemetryRecordV1 {
@@ -41,7 +43,6 @@ public class SessionLogV1 extends TelemetryRecordV1 {
     private String channelReadyBasis;
     private String targetConfirmationLevel;
     private String proxyHandshakeOutcome;
-    private String rateLimitPolicyId;
     private Integer originalDstPort;
     private Integer logicalTargetPort;
     private Integer effectiveTargetPort;
@@ -69,8 +70,6 @@ public class SessionLogV1 extends TelemetryRecordV1 {
     private Long outboundTlsDurationUs;
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long proxyHandshakeDurationUs;
-    @JsonFormat(shape = JsonFormat.Shape.STRING)
-    private Long rateLimitWaitUs;
     @JsonFormat(shape = JsonFormat.Shape.STRING)
     private Long uploadBackpressureDurationUs;
     @JsonFormat(shape = JsonFormat.Shape.STRING)

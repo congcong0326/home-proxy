@@ -1,0 +1,18 @@
+{
+  "output": "/tmp/session-timing-screenshots",
+  "realSessionDetailsVerified": 7,
+  "filteredSessionCount": 8,
+  "browserErrors": [],
+  "valuesMatchAuditedFacts": true,
+  "removedLimiterField": true,
+  "protocolApplicability": true,
+  "screenshots": [
+    "timing-reality.png",
+    "timing-http.png",
+    "timing-download-backpressure.png",
+    "timing-upload-backpressure.png",
+    "timing-upstream-failure.png",
+    "timing-sni-recovery.png",
+    "timing-fake-ip-dns.png"
+  ]
+}
