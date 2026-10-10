@@ -146,7 +146,7 @@
 
 - `common/telemetry`：独立事实 DTO、业务流量分类、批次和持久化 ACK。
 - `proxy-worker/telemetry`：接收时上下文、唯一结束汇总、成功载荷计数、认证/DNS 基础钩子、有界内存缓冲（无 Worker 日志持久化）。
-- `control-manager/telemetry`：独立 `telemetry.*_v1` 初始化、幂等 ingest/query、来源 GeoIP 与分析契约、`/api/observability/v1`。
+- `control-manager/telemetry`：独立 `telemetry.*_v1` 初始化、有界内存 ACK／分表批量 writer/query、来源 GeoIP 与分析契约、`/api/observability/v1`。
 - `frontend/src/types/observability.ts` 与 `api.ts`：独立类型/API，现有页面保持旧查询。
 - [阶段 A 实施与保留数据 E2E](testing/gateway-observability-stage-a.md)：开关、协议、查询、兼容、回退与验收。
 
@@ -188,3 +188,10 @@
 - `frontend/src/pages/WorkerManagement.tsx`：原“代理网关日志上报”沿用 `logReportingEnabled`，通过聚合配置动态控制 `TelemetryPublisher` 的 V1 四类日志采集／发送；与 `OBSERVABILITY_ENABLED` 部署总开关共同生效。
 - `AccessLogUtil` 的旧采集固定关闭，`WorkerManagementWebSocketServer` 心跳帧不携带旧日志；旧代码／API／历史数据保留。
 - [配置与生效边界](testing/gateway-observability-stage-a.md#仅上报新版日志)：关闭暂停新版待确认批次，重新开启继续发送；恢复旧采集需回退 Worker 版本。
+
+## 管理端日志攒批与认证 GeoIP
+
+- `control-manager/telemetry/TelemetryStore`：整批内存接收即 ACK，无 CK ingest 查重；四类队列独立满 1000 条或最早等待 120 秒 flush，失败保留，正常关闭尽力 flush。
+- `TelemetryProperties`／Compose：管理端队列总条数、字节预算和 flush 条数／等待时间；`TelemetryController` 的 status 返回管理端队列状态。
+- `CredentialGeoAnalysis`：缺失数据库每分钟重试，认证位置优先中文；`TelemetryStore` 查询时刷新历史 DB_UNAVAILABLE 分析。mmdb 放 `data/geoip/GeoLite2-City.mmdb`，不提交数据库。
+- 语义与边界见 [阶段 A 的管理端内存 ACK](testing/gateway-observability-stage-a.md#管理端内存-ack-与批量写入2026-10-09)。

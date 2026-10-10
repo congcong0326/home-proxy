@@ -36,7 +36,7 @@ def iso(value):
     return value.isoformat().replace('+00:00', 'Z')
 
 
-def wait(label, fn, timeout=90):
+def wait(label, fn, timeout=180):
     deadline = time.monotonic() + timeout
     last = None
     while time.monotonic() < deadline:

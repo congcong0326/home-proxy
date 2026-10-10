@@ -12,7 +12,7 @@
 
 未观测字段保持 null/UNKNOWN，包括 DNS 缓存、真实上游尝试、连接细分阶段耗时、限流/背压、代理握手确认等。没有完整恢复失败事件、非 A/AAAA 或内部 DNS 覆盖。普通上游代理的真实目标 IP 保持未知，业务分类按 OUTBOUND_PROXY_ROUTE 为 EXTERNAL；connector 就绪使用本机实际完成边界。目标重写至 RFC1918/ULA 才属于 INTERNAL_REWRITE；回环、基准测试、保留地址为 UNKNOWN。
 
-认证 GeoIP 在管理端独立 ingest 线程处理，仅查 IP 字面量，缓存最多 2,000 个来源。分析独立存 analysis_json，不参与原始事实冲突判定。基线为 BASELINE_INSUFFICIENT，规则版本 contract-v1，仅提供 LOCATION_UNKNOWN；完整风险分析及配置传播留给后续独立的高级认证分析。密码、认证头、Basic 编码/解码串、原始报文和异常自由文本不进入新认证日志。
+认证 GeoIP 在管理端批量 flush 线程处理，仅查 IP 字面量，缓存最多 2,000 个来源。分析独立存 analysis_json，不参与原始事实冲突判定。基线为 BASELINE_INSUFFICIENT，规则版本 contract-v1，仅提供 LOCATION_UNKNOWN；完整风险分析及配置传播留给后续独立的高级认证分析。密码、认证头、Basic 编码/解码串、原始报文和异常自由文本不进入新认证日志。
 
 ## 开关与部署
 
@@ -28,6 +28,10 @@
 | Worker OBSERVABILITY_BUFFER_MAX_BYTES | 4194304 | 序列化事实载荷上限；实际堆占用另含对象/批次开销 |
 | 管理端 OBSERVABILITY_INGEST_ENABLED | true | 协商/接收/写入 |
 | 管理端 OBSERVABILITY_QUERY_ENABLED | true | 独立查询 |
+| 管理端 OBSERVABILITY_FLUSH_BATCH_SIZE | 1000 | 每类日志独立攒批条数 |
+| 管理端 OBSERVABILITY_FLUSH_MAX_DELAY_MS | 120000 | 从该类最早待写记录开始计时 |
+| 管理端 OBSERVABILITY_BUFFER_CAPACITY | 20000 | 管理端四类队列总条数上限，含正在写入的记录 |
+| 管理端 OBSERVABILITY_BUFFER_MAX_BYTES | 67108864 | JSON UTF-8 字节与每条 512 字节开销预算上限，非精确堆占用 |
 
 先升级管理端，再升级 Worker，继续使用现有环境变量及 Docker 数据卷：
 
@@ -60,12 +64,12 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 1. 支持且开启 ingest 的管理端在 Token 验证的 WSS 升级请求中加 X-Home-Proxy-Telemetry: 1。未看到该头的 Worker 不发送新消息类型/字段。
 2. Worker 发送 TELEMETRY_HELLO（telemetryVersion=1），收到 TELEMETRY_ACCEPT 后才发 TELEMETRY_BATCH。新字段 NON_NULL 序列化，旧消息保持原结构。
 3. Worker 产生事实时冻结 JSON，进入有界内存队列。独立 sender 发送时组批，每批至多 100 条、256 KiB；固定 UUID batchId，未 ACK 时保留同一批次/记录身份及内容。队列与待确认批次一起计算容量，满时拒绝新记录并增加 dropped，已有批次不被驱逐。
-4. 不写日志缓存文件，没有 fsync、后台磁盘 writer 或启动恢复。sender 与旧心跳 poller 分开执行。连接失败、CK 故障、ACK 丢失时，当前进程中的批次保留并重试；失败 ACK 退避至最多 60 秒，无 ACK 至少等待 5 秒再发。
-5. 管理端绑定已认证连接的 Worker ID，比对 CK raw_hash。相同事实重发认可，冲突拒绝；CK 同步持久写入所有新事实后才 ACK.persisted=true。部分失败不 ACK，重试跳过已经持久化的事实。
+4. 不写日志缓存文件，没有 fsync、后台磁盘 writer 或启动恢复。sender 与旧心跳 poller 分开执行。连接失败、管理端队列满、ACK 丢失时，当前进程中的批次保留并重试；失败 ACK 退避至最多 60 秒，无 ACK 至少等待 5 秒再发。
+5. 管理端绑定已认证连接的 Worker ID，验证并冻结整批事实；整批成功进入有界内存队列后立即 ACK.persisted=true。persisted 保留旧协议字段名，当前含义是管理端内存接收成功，不代表 CK 持久化。移除 ingest 的 CK 查询查重与冲突校验，队列满整批拒绝，不留下部分副本。
 6. Worker 只在匹配 batchId、protocolVersion=1 且 persisted=true 后释放内存批次；未知、失败、旧版本 ACK 不释放数据。重试返回不可变快照的副本，调用方修改不影响下一次发送。
-7. Worker 停止/重启/崩溃会丢失未确认内存日志。API 明示 bufferMode=MEMORY、restartRecoverySupported=false；不会补造缺失汇总/字节。状态指标按 worker instance 重置。控制端已落库记录不受 Worker 重启影响。
+7. 四类日志独立排队，达到 1000 条或最早记录等待 2 分钟时批量 INSERT；默认每秒检查，写入耗时／积压／故障可能延长实际延迟。失败保留记录与原接收时间，下一周期重试；正常关闭尝试 flush 剩余队列。Worker 停止/重启/崩溃会丢失未确认内存日志，管理端异常退出会丢失已 ACK 但尚未落库的日志。API 明示 bufferMode=MEMORY、restartRecoverySupported=false；不会补造缺失汇总/字节。状态指标按 worker instance 重置。控制端已落库记录不受 Worker 重启影响。
 
-管理端单进程 ingest 队列最多 128 批，队列满不 ACK；Worker 按内存容量保留批次。阶段 B 检查页面所需详情查询、基本运行状态与实际 Worker 覆盖；多管理端并发、海量历史按 ID 查找及生产容量基准按实际部署和后续功能依赖验证。
+管理端接收 executor 最多排队 128 批，日志缓冲另限总条数／字节；满时不成功 ACK，Worker 按内存容量保留批次。CK 不可用时已接收日志留在管理端内存，容量耗尽后对 Worker 施加背压。ACK 丢失重传可能重复入队；查询保留 ReplacingMergeTree + FINAL，重放身份相同的行在查询时合并，不再保证首次 received_at 不变或拒绝同 ID 内容冲突。阶段 B 检查页面所需详情查询、基本运行状态与实际 Worker 覆盖；多管理端并发、海量历史按 ID 查找及生产容量基准按实际部署和后续功能依赖验证。
 
 ## 新表与查询契约
 
@@ -76,7 +80,7 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 - telemetry.proxy_event_log_v1：record_id = event_id。
 - telemetry.credential_auth_log_v1：record_id = auth_attempt_id。
 
-DTO 字段有独立 snake_case 列，空值不转 0；另存原始 JSON、SHA-256、首次 received_at 和可空 analysis_json。时间为 UTC DateTime64(6)，UInt64 字节/耗时/ID/序号在 API 中使用十进制字符串。
+DTO 字段有独立 snake_case 列，空值不转 0；另存原始 JSON、SHA-256、管理端入队 received_at 和可空 analysis_json。时间为 UTC DateTime64(6)，UInt64 字节/耗时/ID/序号在 API 中使用十进制字符串。
 
 默认无新表 TTL。可在首次建表时用 observability.session/dns/event/auth-retention-days 分别指定正整数；既有表不自动改 TTL。E2E 不 DROP/TRUNCATE/清理任何日志表。
 
@@ -84,7 +88,7 @@ ADMIN/SUPER_ADMIN 可查询 /api/observability/v1：
 
 | 路径 | 内容 |
 | --- | --- |
-| GET /status | delivery=BEST_EFFORT_WITH_ACK，ingest/query 状态；可加 workerId 看协商、实例、内存模式/容量、队列、丢弃、序列化失败、重试/ACK；无协商为 UNSUPPORTED_OR_DISABLED |
+| GET /status | delivery=BEST_EFFORT_WITH_ACK、acknowledgement=MANAGER_MEMORY_QUEUE、managerBuffer 四类深度与 flush 配置，ingest/query 状态；可加 workerId 看协商、实例、内存模式/容量、队列、丢弃、序列化失败、重试/ACK；无协商为 UNSUPPORTED_OR_DISABLED |
 | GET /sessions | 唯一连接汇总 |
 | GET /dns | 唯一 DNS 事实 |
 | GET /events | 唯一事件 |
@@ -104,7 +108,7 @@ python3 scripts/e2e/fake-ip-persistent-e2e.py test
 
 真实流量脚本复用当前 Worker 的唯一 Fake IP DNS，新增独立命名账号/路由/SOCKS5/HTTP fixtures；测试保留全部表、事实、卷及控制器 fixtures，只释放本次添加的临时地址/socket。协议探针使用 SYNTHETIC_PROTOCOL_PROBE 记录和独立 Worker，结束只禁用该 Worker。
 
-本次内存版本验证包括：
+以下为此前 Worker 内存版的历史验证，持久 ACK／冲突拒绝／首次接收时间保证已由管理端内存 ACK 方案替代。当前验证见下文。
 
 - 内存缓冲的稳定快照、ACK 丢失重试、错误/未知 ACK、条数/字节限额（含待 ACK 数据）、溢出不驱逐已有事实、单批 100 条，以及新实例空缓冲/关闭清空。
 - 生命周期、成功载荷、唯一收尾、CK 失败不 ACK、查询范围/FINAL、大整数/空值和严格旧 DTO 兼容。
@@ -115,6 +119,14 @@ python3 scripts/e2e/fake-ip-persistent-e2e.py test
 首版已验证四种新旧版本组合、关闭采集不增长新表、原有 Fake IP 无 Host HTTP/server-first TCP/旧审计落库；改为内存方案后沿用协议协商和旧链路，重新跑新 E2E 核对新表数据及 MEMORY 状态。机器可读报告保留在 /tmp/gateway-observability-stage-a-e2e.json 和 /tmp/gateway-observability-protocol-probe.json。所有首版及本次已落库测试数据继续保留。
 
 已知基线问题：make e2e-worker-proxy 在 direct.localhost SOCKS5 场景失败（inbound closed during DNS lookup），未修改仓库 HEAD 中同样复现；未改旧路由/转发语义来绕过。环境最初更老的 Worker 不能解析仓库原有 logLevel，兼容矩阵使用修改前仓库 HEAD 镜像。
+
+## 管理端内存 ACK 与批量写入（2026-10-09）
+
+按用户要求改为内存接收即 ACK，每表 1000 条或 120 秒批量写入。API 只查询已经 flush 的 CK 数据，小流量日志在页面上可能延迟约两分钟出现。无需 Flyway 迁移，旧表、历史数据和 Worker 的 ACK 字段保持兼容。
+
+认证审计“位置数据库不可用”的本地根因是镜像内 data/geoip 只有 README，没有 mmdb。数据库继续作为忽略提交的本地部署资源；加载缺失／失败现在明确记录日志，每分钟尝试恢复，失败状态不写入 IP 缓存。公网位置优先中文名称；内网和未收录保持真实状态。查询历史认证记录时，对空分析或 DB_UNAVAILABLE 重新解析，原始认证事实与 CK 历史行不改写。
+
+自动测试覆盖内存 ACK 无 CK 请求、不可变快照、独立表阈值／最早记录计时、失败重试与接收时间保持、整批容量拒绝、正常关闭 flush、GeoIP 恢复／缓存／内网边界，以及历史认证列表／详情／旧 V1 数组查询刷新。
 
 ## 开销、差异与回退
 

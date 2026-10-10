@@ -7,6 +7,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.telemetry.*;
 import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import jakarta.annotation.PreDestroy;
+import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.ApplicationArguments;
 import java.nio.charset.StandardCharsets;
@@ -16,6 +22,7 @@ import java.time.Instant;
 import java.util.*;
 
 @Service
+@Slf4j
 public class TelemetryStore implements ApplicationRunner {
     private final ClickHouseJdbcClient client;
     private final TelemetryProperties properties;
@@ -26,10 +33,26 @@ public class TelemetryStore implements ApplicationRunner {
     private volatile boolean ready;
     private final java.util.concurrent.ConcurrentMap<String, Map<String, Object>> workerStatus = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private final Object bufferLock = new Object();
+    private final ReentrantLock flushLock = new ReentrantLock();
+    private final Map<TelemetrySchema, Deque<Pending>> buffers = new EnumMap<>(TelemetrySchema.class);
+    private final LongSupplier nanoTime;
+    private int bufferedRecords;
+    private long bufferedBytes;
+    private boolean stopping;
+
+    @Autowired
     public TelemetryStore(ClickHouseJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo) {
+        this(client, properties, geo, System::nanoTime);
+    }
+
+    TelemetryStore(ClickHouseJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo,
+                   LongSupplier nanoTime) {
         this.client = client;
         this.properties = properties;
         this.geo = geo;
+        this.nanoTime = nanoTime;
+        for (TelemetrySchema schema : TelemetrySchema.values()) buffers.put(schema, new ArrayDeque<>());
     }
 
     public void observeWorker(String workerId, Map<String, Object> reported) {
@@ -81,10 +104,9 @@ public class TelemetryStore implements ApplicationRunner {
         ready = true;
     }
 
-    /** Synchronous durable CK write; replay keeps first received_at. No ACK on partial failure. */
-    public synchronized TelemetryAckV1 ingest(String authenticatedWorkerId, TelemetryBatchV1 batch) throws Exception {
+    /** ACK means the complete batch is frozen in manager memory, not yet stored in CK. */
+    public TelemetryAckV1 ingest(String authenticatedWorkerId, TelemetryBatchV1 batch) throws Exception {
         if (!properties.isIngestEnabled()) throw new IllegalStateException("INGEST_DISABLED");
-        initialize();
         if (batch.getProtocolVersion() != 1 || batch.getBatchId() == null
                 || !batch.getBatchId().matches("[a-fA-F0-9-]{36}") || batch.recordCount() < 1
                 || batch.recordCount() > properties.getMaxBatchRecords()
@@ -97,34 +119,34 @@ public class TelemetryStore implements ApplicationRunner {
         groups.put(TelemetrySchema.EVENTS, batch.getEvents());
         groups.put(TelemetrySchema.AUTH, batch.getCredentialAuth());
         List<Pending> pending = new ArrayList<>();
-        Map<String, String> inBatch = new HashMap<>();
+        Instant receivedAt = Instant.now();
+        long queuedAt = nanoTime.getAsLong();
+        long bytes = 0;
         for (var group : groups.entrySet()) {
             for (TelemetryRecordV1 record : group.getValue()) {
                 validate(record);
-                // The management connection, not a self-declared JSON field, supplies node identity.
+                // Bind identity to the authenticated connection and freeze the accepted fact.
                 record.setWorkerId(authenticatedWorkerId);
                 String json = mapper.writeValueAsString(record);
-                String hashJson = json;
-                if (record instanceof SessionLogV1) {
-                    // V1 originally serialized two unimplemented limiter slots as null. Preserve replay hashes
-                    // across this DTO cleanup without retaining them in new facts or dropping existing columns.
-                    Map<String, Object> canonical = new TreeMap<>(mapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() { }));
-                    canonical.put("rateLimitPolicyId", null);
-                    canonical.put("rateLimitWaitUs", null);
-                    hashJson = mapper.writeValueAsString(canonical);
-                }
-                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(hashJson.getBytes(StandardCharsets.UTF_8)));
-                String key = group.getKey().name() + record.getRecordId();
-                String previous = inBatch.putIfAbsent(key, hash);
-                if (previous != null && !previous.equals(hash)) throw new IllegalArgumentException("RECORD_ID_CONFLICT");
-                var stored = client.query("SELECT raw_hash FROM " + group.getKey().table
-                        + " FINAL WHERE worker_id = ? AND record_id = ? LIMIT 1", authenticatedWorkerId, record.getRecordId());
-                if (!stored.isEmpty()) {
-                    if (!hash.equals(stored.get(0).get("raw_hash"))) throw new IllegalArgumentException("RECORD_ID_CONFLICT");
-                } else if (previous == null) pending.add(new Pending(group.getKey(), record, json, hash));
+                byte[] encoded = json.getBytes(StandardCharsets.UTF_8);
+                String hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(encoded));
+                long sizeBytes = encoded.length + 512L;
+                pending.add(new Pending(group.getKey(), mapper.readValue(json, group.getKey().model),
+                        json, hash, receivedAt, queuedAt, sizeBytes));
+                bytes += sizeBytes;
             }
         }
-        for (Pending row : pending) write(row);
+        synchronized (bufferLock) {
+            if (stopping) throw new IllegalStateException("MANAGER_STOPPING");
+            if (pending.size() > properties.getBufferCapacity() - bufferedRecords
+                    || bytes > properties.getBufferMaxBytes() - bufferedBytes) {
+                throw new IllegalStateException("MANAGER_BUFFER_FULL");
+            }
+            // Admission is all-or-nothing: a rejected batch must not leave a partial copy.
+            for (Pending row : pending) buffers.get(row.schema).addLast(row);
+            bufferedRecords += pending.size();
+            bufferedBytes += bytes;
+        }
         TelemetryAckV1 ack = new TelemetryAckV1();
         ack.setBatchId(batch.getBatchId());
         ack.setPersisted(true);
@@ -166,24 +188,88 @@ public class TelemetryStore implements ApplicationRunner {
         }
     }
 
-    private void write(Pending row) throws Exception {
-        List<String> columns = new ArrayList<>();
-        List<Object> values = new ArrayList<>();
-        for (var field : row.schema.fields()) {
-            columns.add(TelemetrySchema.column(field));
-            Object value = field.get(row.record);
-            if (value instanceof Instant time) value = Timestamp.from(time);
-            else if (value instanceof Enum<?> e) value = e.name();
-            else if (field.getType() == List.class) value = value == null ? new String[0] : ((List<?>) value).toArray(String[]::new);
-            values.add(value);
+    @Scheduled(fixedDelayString = "${observability.flush-check-ms:1000}")
+    public void flushDue() {
+        if (!flushLock.tryLock()) return;
+        try { flush(false); }
+        finally { flushLock.unlock(); }
+    }
+
+    @PreDestroy
+    void stop() {
+        synchronized (bufferLock) { stopping = true; }
+        flushLock.lock();
+        try { flush(true); }
+        finally { flushLock.unlock(); }
+    }
+
+    private void flush(boolean force) {
+        for (TelemetrySchema schema : TelemetrySchema.values()) {
+            boolean more;
+            do {
+                List<Pending> rows;
+                synchronized (bufferLock) {
+                    Deque<Pending> queue = buffers.get(schema);
+                    if (queue.isEmpty()) break;
+                    int batchSize = Math.max(1, properties.getFlushBatchSize());
+                    long ageMs = (nanoTime.getAsLong() - queue.peekFirst().queuedAt) / 1_000_000;
+                    if (!force && queue.size() < batchSize
+                            && ageMs < Math.max(1, properties.getFlushMaxDelayMs())) break;
+                    rows = queue.stream().limit(batchSize).toList();
+                }
+                try {
+                    initialize();
+                    writeBatch(schema, rows);
+                } catch (Exception error) {
+                    // Keep the prefix in memory, including its original age, for the next attempt.
+                    log.warn("Telemetry batch flush failed, table={}, records={}; retained for retry", schema.table, rows.size(), error);
+                    break;
+                }
+                synchronized (bufferLock) {
+                    for (Pending row : rows) {
+                        buffers.get(schema).removeFirst();
+                        bufferedRecords--;
+                        bufferedBytes -= row.sizeBytes;
+                    }
+                    more = !buffers.get(schema).isEmpty();
+                }
+            } while (more);
         }
+    }
+
+    public Map<String, Object> bufferStatus() {
+        synchronized (bufferLock) {
+            Map<String, Integer> depths = new LinkedHashMap<>();
+            buffers.forEach((schema, queue) -> depths.put(schema.path, queue.size()));
+            return Map.of("queueDepth", bufferedRecords, "bufferBytes", bufferedBytes,
+                    "bufferCapacity", properties.getBufferCapacity(), "bufferMaxBytes", properties.getBufferMaxBytes(),
+                    "flushBatchSize", properties.getFlushBatchSize(), "flushMaxDelayMs", properties.getFlushMaxDelayMs(),
+                    "tables", depths);
+        }
+    }
+
+    private void writeBatch(TelemetrySchema schema, List<Pending> rows) throws Exception {
+        var fields = schema.fields();
+        List<String> columns = new ArrayList<>(fields.stream().map(TelemetrySchema::column).toList());
         columns.addAll(List.of("received_at", "raw_hash", "raw_json", "analysis_json"));
-        values.add(Timestamp.from(Instant.now()));
-        values.add(row.hash);
-        values.add(row.json);
-        values.add(row.record instanceof CredentialAuthLogV1 auth ? mapper.writeValueAsString(geo.analyze(auth)) : null);
-        client.execute("INSERT INTO " + row.schema.table + " (" + String.join(",", columns) + ") VALUES ("
-                + String.join(",", Collections.nCopies(values.size(), "?")) + ")", values.toArray());
+        List<List<Object>> params = new ArrayList<>(rows.size());
+        for (Pending row : rows) {
+            List<Object> values = new ArrayList<>();
+            for (var field : fields) {
+                Object value = field.get(row.record);
+                if (value instanceof Instant time) value = Timestamp.from(time);
+                else if (value instanceof Enum<?> e) value = e.name();
+                else if (field.getType() == List.class) value = value == null ? new String[0] : ((List<?>) value).toArray(String[]::new);
+                values.add(value);
+            }
+            values.add(Timestamp.from(row.receivedAt));
+            values.add(row.hash);
+            values.add(row.json);
+            values.add(row.record instanceof CredentialAuthLogV1 auth ? mapper.writeValueAsString(geo.analyze(auth)) : null);
+            params.add(values);
+        }
+        client.batchExecute("INSERT INTO " + schema.table + " (" + String.join(",", columns) + ") VALUES ("
+                + String.join(",", Collections.nCopies(columns.size(), "?")) + ")", params);
     }
 
     public List<Map<String, Object>> query(TelemetrySchema schema, String workerId, Instant from, Instant to, int limit, int offset, String connectionId) {
@@ -207,7 +293,7 @@ public class TelemetryStore implements ApplicationRunner {
                                 : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
                                 : received.toString().replace(" ", "T") + (received.toString().endsWith("Z") ? "" : "Z");
                         result.put("receivedAt", receivedAt);
-                        if (row.get("analysis_json") != null) result.put("analysis", mapper.readValue(row.get("analysis_json").toString(), Map.class));
+                        attachAnalysis(result, row.get("analysis_json"), row.get("raw_json").toString());
                         return result;
                     } catch (Exception e) { throw new IllegalStateException(e); }
                 }).toList();
@@ -351,12 +437,25 @@ public class TelemetryStore implements ApplicationRunner {
                 result.put("receivedAt", received instanceof Timestamp time ? time.toInstant().toString()
                         : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
                         : received.toString().replace(" ", "T") + (received.toString().endsWith("Z") ? "" : "Z"));
-                if (row.get("analysis_json") != null) result.put("analysis", mapper.readValue(row.get("analysis_json").toString(), Map.class));
+                attachAnalysis(result, row.get("analysis_json"), row.get("raw_json").toString());
                 return result;
             } catch (Exception e) { throw new IllegalStateException("INVALID_STORED_FACT", e); }
         }).toList();
     }
 
+    private void attachAnalysis(Map<String, Object> result, Object storedAnalysis, String rawJson) throws Exception {
+        Map<String, Object> analysis = storedAnalysis == null ? null
+                : mapper.readValue(storedAnalysis.toString(), Map.class);
+        // Repair unavailable historical enrichment at query time, without rewriting raw facts.
+        if (result.containsKey("authAttemptId")
+                && (analysis == null || "DB_UNAVAILABLE".equals(analysis.get("geoLookupStatus")))) {
+            var refreshed = geo.analyze(mapper.readValue(rawJson, CredentialAuthLogV1.class));
+            if (refreshed != null) analysis = mapper.convertValue(refreshed, Map.class);
+        }
+        if (analysis != null) result.put("analysis", analysis);
+    }
+
     private record SqlScope(String where, List<Object> params) { }
-    private record Pending(TelemetrySchema schema, TelemetryRecordV1 record, String json, String hash) { }
+    private record Pending(TelemetrySchema schema, TelemetryRecordV1 record, String json, String hash,
+                           Instant receivedAt, long queuedAt, long sizeBytes) { }
 }

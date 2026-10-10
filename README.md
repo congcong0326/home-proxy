@@ -376,3 +376,11 @@ make docker-save-offline   # 导出应用镜像以及 MySQL/ClickHouse 镜像
 ```
 
 更完整的容器化说明见 [docs/development/docker-deployment.md](docs/development/docker-deployment.md)。
+
+### 新版日志落库与认证位置
+
+管理端接收新版四类日志后先进入有界内存队列并返回 ACK；ACK 表示内存接收，管理端异常退出可能丢失尚未落库的数据。每类日志独立累计 1000 条或最早等待 120 秒后批量写入 ClickHouse，页面只显示已经落库的日志。正常关闭会尽力 flush，CK 写入失败保留内存队列重试。
+
+可通过 `OBSERVABILITY_FLUSH_BATCH_SIZE`、`OBSERVABILITY_FLUSH_MAX_DELAY_MS` 调整攒批；管理端总容量默认 `OBSERVABILITY_BUFFER_CAPACITY=20000`、字节预算 `OBSERVABILITY_BUFFER_MAX_BYTES=67108864`。容量满整批拒绝，Worker 保留重试。`/api/observability/v1/status` 返回 `acknowledgement=MANAGER_MEMORY_QUEUE` 与 `managerBuffer` 状态。
+
+认证来源位置需要 `data/geoip/GeoLite2-City.mmdb` 随管理端镜像打包或挂载。缺失时每分钟尝试重新加载；恢复后查询历史“位置数据库不可用”记录会重新解析位置。数据库文件不得提交。

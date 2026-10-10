@@ -94,6 +94,12 @@ public class WorkerManagementConnectionService {
     void stop() {
         scheduler.shutdownNow();
         telemetryExecutor.shutdown();
+        try {
+            if (!telemetryExecutor.awaitTermination(5, TimeUnit.SECONDS)) telemetryExecutor.shutdownNow();
+        } catch (InterruptedException interrupted) {
+            telemetryExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
         connections.values().forEach(connection -> connection.webSocket().sendClose(WebSocket.NORMAL_CLOSURE, "controller stopping"));
         connections.clear();
     }
@@ -213,7 +219,7 @@ public class WorkerManagementConnectionService {
                             log.warn("独立 telemetry ingest 失败, workerId={}, error={}", expectedWorkerId, error.toString());
                             ack = new org.congcong.common.telemetry.TelemetryAckV1();
                             ack.setBatchId(request.getTelemetryBatch().getBatchId());
-                            ack.setReasonCode(error instanceof IllegalArgumentException ? "INVALID_OR_CONFLICTING_FACT" : "STORE_UNAVAILABLE");
+                            ack.setReasonCode(error instanceof IllegalArgumentException ? "INVALID_FACT" : "MANAGER_QUEUE_UNAVAILABLE");
                         }
                         try {
                             WorkerManagementMessage response = new WorkerManagementMessage();

@@ -12,58 +12,116 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class TelemetryStoreTest {
-    @Test
-    void removedLimiterSlotsRemainCompatibleWithOldWorkerReplayHashes() throws Exception {
-        properties.setIngestEnabled(true);
-        var batch = batch();
-        batch.getSessions().get(0).setWorkerId("node");
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper()
-                .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
-                .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-                .enable(com.fasterxml.jackson.databind.MapperFeature.SORT_PROPERTIES_ALPHABETICALLY);
-        String current = mapper.writeValueAsString(batch.getSessions().get(0));
-        assertFalse(current.contains("rateLimit"));
-        java.util.Map<String, Object> old = mapper.readValue(current, java.util.TreeMap.class);
-        old.put("rateLimitPolicyId", null); old.put("rateLimitWaitUs", null);
-        String previousJson = mapper.writeValueAsString(old);
-        assertDoesNotThrow(() -> mapper.readValue(previousJson, SessionLogV1.class));
-        String previousHash = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
-                .digest(previousJson.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        when(client.query(anyString(), any(), any())).thenReturn(List.of(Map.of("raw_hash", previousHash)));
-        assertTrue(store.ingest("node", batch).isPersisted());
-        verify(client, never()).execute(startsWith("INSERT INTO"), any(Object[].class));
-        assertFalse(TelemetrySchema.SESSIONS.ddl().contains("rate_limit_wait_us"));
-    }
-
     private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
     private final TelemetryProperties properties = new TelemetryProperties();
-    private final TelemetryStore store = new TelemetryStore(client, properties, mock(CredentialGeoAnalysis.class));
+    private final java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong();
+    private final TelemetryStore store = new TelemetryStore(client, properties, mock(CredentialGeoAnalysis.class), now::get);
 
     @Test
-    void ackRequiresDurableInsertAndIdentityIsConnectionBound() throws Exception {
-        properties.setIngestEnabled(true);
+    void ackIsReturnedAfterMemoryAdmissionWithoutAnyCkRequest() throws Exception {
         var batch = batch();
-        when(client.query(anyString(), any(), any())).thenReturn(List.of());
         var ack = store.ingest("authenticated-node", batch);
-        assertTrue(ack.isPersisted()); assertEquals(batch.getBatchId(), ack.getBatchId());
-        assertEquals("authenticated-node", batch.getSessions().get(0).getWorkerId());
-        verify(client).execute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), any(Object[].class));
+        assertTrue(ack.isPersisted());
+        assertEquals(batch.getBatchId(), ack.getBatchId());
+        assertEquals(1, store.bufferStatus().get("queueDepth"));
+        verifyNoInteractions(client);
+        batch.getSessions().get(0).setWorkerId("changed-after-ack");
+        batch.getSessions().get(0).setUploadBytes(123L);
+        now.set(120_000_000_000L);
+        store.flushDue();
+        var params = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), params.capture());
+        var fields = TelemetrySchema.SESSIONS.fields().stream().map(TelemetrySchema::column).toList();
+        List<?> row = (List<?>) params.getValue().get(0);
+        assertEquals("authenticated-node", row.get(fields.indexOf("worker_id")));
+        assertEquals(0L, row.get(fields.indexOf("upload_bytes")));
+        verify(client, never()).query(anyString(), any(Object[].class));
     }
 
     @Test
-    void storeFailureNeverProducesAckAndReplayRemainsPossible() {
-        properties.setIngestEnabled(true);
-        when(client.query(anyString(), any(), any())).thenReturn(List.of());
-        doThrow(new RuntimeException("CK unavailable")).when(client).execute(startsWith("INSERT INTO"), any(Object[].class));
-        assertThrows(RuntimeException.class, () -> store.ingest("node", batch()));
+    void flushesExactlyOneBatchWhenSessionQueueReachesDefault1000() throws Exception {
+        for (int i = 0; i < 10; i++) {
+            var batch = batch();
+            var records = new java.util.ArrayList<SessionLogV1>();
+            for (int j = 0; j < 100; j++) records.add(batch().getSessions().get(0));
+            batch.setSessions(records);
+            store.ingest("node", batch);
+            if (i < 9) { store.flushDue(); verifyNoInteractions(client); }
+        }
+        store.flushDue();
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 1000));
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
     }
 
     @Test
-    void conflictIsRejectedBeforeAnyBatchInsert() {
-        properties.setIngestEnabled(true);
-        when(client.query(anyString(), any(), any())).thenReturn(List.of(Map.of("raw_hash", "different-fact")));
-        assertThrows(IllegalArgumentException.class, () -> store.ingest("node", batch()));
-        verify(client, never()).execute(startsWith("INSERT INTO"), any(Object[].class));
+    void flushesAtTwoMinutesFromOldestRecordEvenWhenMoreRecordsArrive() throws Exception {
+        store.ingest("node", batch());
+        now.set(119_999_000_000L);
+        store.ingest("node", batch());
+        store.flushDue();
+        verifyNoInteractions(client);
+        now.set(120_000_000_000L);
+        store.flushDue();
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+    }
+
+    @Test
+    void eachTableHasIndependentThresholdAndClock() throws Exception {
+        properties.setFlushBatchSize(2);
+        store.ingest("node", batch());
+        now.set(60_000_000_000L);
+        var authBatch = authBatch();
+        store.ingest("node", authBatch);
+        store.ingest("node", batch());
+        store.flushDue();
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
+        verify(client, never()).batchExecute(startsWith("INSERT INTO telemetry.credential_auth_log_v1"), anyList());
+        now.set(180_000_000_000L);
+        store.flushDue();
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.credential_auth_log_v1"), argThat(rows -> rows.size() == 1));
+    }
+
+    @Test
+    void failedFlushRetainsRecordsAndReceivedAtUntilSuccessfulRetry() throws Exception {
+        store.ingest("node", batch());
+        now.set(120_000_000_000L);
+        when(client.batchExecute(startsWith("INSERT INTO"), anyList()))
+                .thenThrow(new RuntimeException("CK unavailable")).thenReturn(new int[]{1});
+        store.flushDue();
+        assertEquals(1, store.bufferStatus().get("queueDepth"));
+        store.flushDue();
+        var params = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(client, times(2)).batchExecute(startsWith("INSERT INTO"), params.capture());
+        assertEquals(params.getAllValues().get(0), params.getAllValues().get(1));
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+        assertEquals(0L, store.bufferStatus().get("bufferBytes"));
+    }
+
+    @Test
+    void invalidBatchAndCapacityOverflowAreRejectedAtomically() throws Exception {
+        var invalid = batch();
+        invalid.setSessions(List.of(invalid.getSessions().get(0), batch().getSessions().get(0)));
+        invalid.getSessions().get(1).setUploadBytes(-1L);
+        assertThrows(IllegalArgumentException.class, () -> store.ingest("node", invalid));
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+        properties.setBufferCapacity(1);
+        store.ingest("node", batch());
+        assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
+        assertEquals(1, store.bufferStatus().get("queueDepth"));
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void byteLimitRejectsWholeBatchAndGracefulShutdownFlushesSmallQueues() throws Exception {
+        properties.setBufferMaxBytes(1);
+        assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+        properties.setBufferMaxBytes(67108864);
+        store.ingest("node", batch());
+        store.stop();
+        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 1));
+        assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
     }
 
     @Test
@@ -71,6 +129,14 @@ class TelemetryStoreTest {
         properties.setIngestEnabled(false);
         assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
         verifyNoInteractions(client);
+    }
+
+    private TelemetryBatchV1 authBatch() {
+        var record = new CredentialAuthLogV1();
+        record.setRecordId(UUID.randomUUID().toString()); record.setAuthAttemptId(record.getRecordId());
+        record.setWorkerInstanceId(UUID.randomUUID().toString()); record.setOccurredAt(Instant.now());
+        var batch = new TelemetryBatchV1(); batch.setBatchId(UUID.randomUUID().toString()); batch.setCredentialAuth(List.of(record));
+        return batch;
     }
 
     @Test

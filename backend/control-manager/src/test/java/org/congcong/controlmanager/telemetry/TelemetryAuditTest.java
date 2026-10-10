@@ -18,7 +18,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TelemetryAuditTest {
     private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
     private final TelemetryProperties properties = new TelemetryProperties();
-    private final TelemetryStore store = new TelemetryStore(client, properties, mock(CredentialGeoAnalysis.class));
+    private final CredentialGeoAnalysis geo = mock(CredentialGeoAnalysis.class);
+    private final TelemetryStore store = new TelemetryStore(client, properties, geo);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new TelemetryController(store, properties)).build();
 
     private TelemetryQueryRequest request() {
@@ -27,6 +28,31 @@ class TelemetryAuditTest {
         request.setFrom(Instant.parse("2026-10-09T00:00:00Z"));
         request.setTo(Instant.parse("2026-10-10T00:00:00Z"));
         return request;
+    }
+
+    @Test
+    void historicalUnavailableAuthLocationIsRefreshedForPageDetailAndLegacyQueryWithoutWrites() {
+        String attempt = UUID.randomUUID().toString();
+        String raw = "{\"authAttemptId\":\"" + attempt + "\",\"clientIp\":\"8.8.8.8\"}";
+        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
+        when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
+                "raw_json", raw, "received_at", "2026-10-09 00:00:00",
+                "analysis_json", "{\"geoLookupStatus\":\"DB_UNAVAILABLE\",\"riskTags\":[\"LOCATION_UNKNOWN\"]}")));
+        var resolved = new org.congcong.common.telemetry.CredentialAuthAnalysisV1();
+        resolved.setGeoLookupStatus("RESOLVED"); resolved.setSourceCountry("美国"); resolved.setRiskTags(List.of());
+        when(geo.analyze(any())).thenReturn(resolved);
+        var page = store.page(TelemetrySchema.AUTH, request());
+        var detail = store.detail(TelemetrySchema.AUTH, attempt, request());
+        var legacy = store.query(TelemetrySchema.AUTH, "home-01", request().getFrom(), request().getTo(), 100, 0, null);
+        for (var row : List.of(page.items().get(0), detail, legacy.get(0))) {
+            var analysis = (Map<?, ?>) row.get("analysis");
+            assertEquals("RESOLVED", analysis.get("geoLookupStatus"));
+            assertEquals("美国", analysis.get("sourceCountry"));
+            assertEquals(List.of(), analysis.get("riskTags"));
+            assertEquals("8.8.8.8", row.get("clientIp"));
+        }
+        verify(client, never()).execute(startsWith("INSERT"), any(Object[].class));
+        verify(client, never()).batchExecute(anyString(), anyList());
     }
 
     @Test

@@ -8,33 +8,63 @@ import com.maxmind.geoip2.exception.AddressNotFoundException;
 import org.congcong.common.telemetry.*;
 import org.congcong.common.util.geo.GeoIpDatabaseLocator;
 import org.springframework.stereotype.Component;
+import lombok.extern.slf4j.Slf4j;
 import jakarta.annotation.PreDestroy;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 @Component
+@Slf4j
 public class CredentialGeoAnalysis {
     private final Cache<String, CredentialAuthAnalysisV1> cache = CacheBuilder.newBuilder()
             .maximumSize(2000).expireAfterWrite(1, TimeUnit.HOURS).build();
     private DatabaseReader reader;
     private String databaseVersion;
+    private final Supplier<DatabaseReader> loader;
+    private final LongSupplier nanoTime;
+    private long nextLoadAttempt;
 
     public CredentialGeoAnalysis() {
+        this(CredentialGeoAnalysis::loadDatabase, System::nanoTime);
+    }
+
+    CredentialGeoAnalysis(Supplier<DatabaseReader> loader, LongSupplier nanoTime) {
+        this.loader = loader;
+        this.nanoTime = nanoTime;
+        reload();
+    }
+
+    private static DatabaseReader loadDatabase() {
         try {
             var path = GeoIpDatabaseLocator.resolveDefault();
             if (path.isPresent()) {
-                reader = new DatabaseReader.Builder(path.get().toFile()).build();
-                databaseVersion = reader.getMetadata().getBuildDate().toInstant().toString();
+                DatabaseReader loaded = new DatabaseReader.Builder(path.get().toFile()).build();
+                log.info("Authentication GeoIP database loaded from {}", path.get());
+                return loaded;
             }
-        } catch (Exception ignored) { reader = null; }
+            log.warn("Authentication GeoIP database missing; configure GEOIP_MMDB_PATH or data/geoip/GeoLite2-City.mmdb");
+        } catch (Exception error) { log.warn("Authentication GeoIP database load failed", error); }
+        return null;
     }
 
-    public CredentialAuthAnalysisV1 analyze(CredentialAuthLogV1 record) {
+    private void reload() {
+        reader = loader.get();
+        nextLoadAttempt = nanoTime.getAsLong() + TimeUnit.MINUTES.toNanos(1);
+        if (reader != null) {
+            databaseVersion = reader.getMetadata().getBuildDate().toInstant().toString();
+            cache.invalidateAll();
+        }
+    }
+
+    public synchronized CredentialAuthAnalysisV1 analyze(CredentialAuthLogV1 record) {
+        if (reader == null && nanoTime.getAsLong() - nextLoadAttempt >= 0) reload();
         String ip = record.getClientIp();
         CredentialAuthAnalysisV1 result = ip == null ? null : cache.getIfPresent(ip);
         if (result == null) {
             result = lookup(ip);
-            if (ip != null) cache.put(ip, result);
+            if (ip != null && !List.of("DB_UNAVAILABLE", "ERROR").contains(result.getGeoLookupStatus())) cache.put(ip, result);
         }
         // Analysis has its own identity/version and never changes the raw authentication fact.
         CredentialAuthAnalysisV1 copy = new CredentialAuthAnalysisV1();
@@ -68,9 +98,11 @@ public class CredentialGeoAnalysis {
         try {
             var response = reader.city(address);
             result.setSourceCountryCode(response.getCountry().getIsoCode());
-            result.setSourceCountry(response.getCountry().getName());
-            result.setSourceRegion(response.getMostSpecificSubdivision().getName());
-            result.setSourceCity(response.getCity().getName());
+            result.setSourceCountry(response.getCountry().getNames().getOrDefault("zh-CN", response.getCountry().getName()));
+            var subdivision = response.getMostSpecificSubdivision();
+            var city = response.getCity();
+            result.setSourceRegion(subdivision == null ? null : subdivision.getNames().getOrDefault("zh-CN", subdivision.getName()));
+            result.setSourceCity(city == null ? null : city.getNames().getOrDefault("zh-CN", city.getName()));
             result.setGeoLookupStatus("RESOLVED");
         } catch (AddressNotFoundException e) { result.setGeoLookupStatus("NOT_FOUND"); }
         catch (Exception e) { result.setGeoLookupStatus("ERROR"); }
@@ -78,5 +110,5 @@ public class CredentialGeoAnalysis {
     }
 
     @PreDestroy
-    void close() throws Exception { if (reader != null) reader.close(); }
+    synchronized void close() throws Exception { if (reader != null) reader.close(); }
 }

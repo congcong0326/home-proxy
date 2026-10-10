@@ -20,6 +20,8 @@ public class TelemetryController {
         Map<String, Object> result = new java.util.LinkedHashMap<>(Map.of("schemaVersion", 1, "ingestEnabled", properties.isIngestEnabled(),
                 "queryEnabled", properties.isQueryEnabled(), "delivery", "BEST_EFFORT_WITH_ACK",
                 "scope", "STAGE_A_INFRASTRUCTURE", "authenticationAnalysis", "GEOIP_CONTRACT_ONLY"));
+        result.put("acknowledgement", "MANAGER_MEMORY_QUEUE");
+        result.put("managerBuffer", store.bufferStatus());
         if (workerId != null && !workerId.isBlank()) result.put("worker", store.workerStatus(workerId));
         return result;
     }
