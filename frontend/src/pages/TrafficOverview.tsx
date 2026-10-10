@@ -6,12 +6,11 @@ import apiService from '../services/api';
 import { CountOverview, OverviewData, OverviewPoint, OverviewQuery, ResultFilter } from '../types/overview';
 import { ProxyWorkerDTO } from '../types/worker';
 import { TrafficCategory } from '../types/observability';
-import { LegacyTrafficOverview } from './LegacyTrafficOverview';
 import './TrafficOverview.css';
 
 const categories: { value: TrafficCategory | 'ALL'; label: string }[] = [
-  { value: 'EXTERNAL', label: '外网' }, { value: 'INTERNAL_REWRITE', label: '内网 · 目标重写' },
-  { value: 'OTHER_INTERNAL', label: '其他内网' }, { value: 'UNKNOWN', label: '未分类' }, { value: 'ALL', label: '全部流量' },
+  { value: 'EXTERNAL', label: '外网' }, { value: 'INTERNAL_REWRITE', label: '内网' },
+  { value: 'ALL', label: '全部流量' },
 ];
 const themeColor = (name: string, fallback: string) =>
   typeof document === 'undefined' ? fallback : getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
@@ -101,7 +100,6 @@ function countChart(data?: CountOverview) {
 }
 
 export function TrafficOverview() {
-  const [legacy, setLegacy] = useState(false);
   const [workers, setWorkers] = useState<ProxyWorkerDTO[]>([]);
   const [workerId, setWorkerId] = useState('default');
   const [workersReady, setWorkersReady] = useState(false);
@@ -112,7 +110,6 @@ export function TrafficOverview() {
   const [username, setUsername] = useState('');
   const [clientIp, setClientIp] = useState('');
   const [source, setSource] = useState({ username: '', clientIp: '' });
-  const [trafficResult, setTrafficResult] = useState<ResultFilter>('ALL');
   const [connectionResult, setConnectionResult] = useState<ResultFilter>('ALL');
   const [dnsResult, setDnsResult] = useState<ResultFilter>('ALL');
   const [authResult, setAuthResult] = useState<ResultFilter>('ALL');
@@ -138,13 +135,13 @@ export function TrafficOverview() {
     const end = preset === 'custom' ? new Date(to).toISOString() : new Date().toISOString();
     const start = preset === 'custom' ? new Date(from).toISOString() : new Date(new Date(end).getTime() - Number(preset) * 3600000).toISOString();
     return { workerId, from: start, to: end, timeZone, ...source, trafficCategory: category,
-      trafficResult, connectionResult, dnsResult, authResult, dnsOrigin };
+      trafficResult: 'ALL', connectionResult, dnsResult, authResult, dnsOrigin };
     // Refresh advances relative ranges even if filters remain unchanged.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerId, preset, from, to, source, category, trafficResult, connectionResult, dnsResult, authResult, dnsOrigin, timeZone, revision]);
+  }, [workerId, preset, from, to, source, category, connectionResult, dnsResult, authResult, dnsOrigin, timeZone, revision]);
 
   useEffect(() => {
-    if (!workersReady || legacy) return;
+    if (!workersReady) return;
     let active = true;
     setLoading(true); setError(''); setData(null);
     apiService.getObservabilityOverview(query).then(result => {
@@ -152,10 +149,10 @@ export function TrafficOverview() {
     }).catch(e => { if (active) setError(e.message || '统计查询失败'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [query, workersReady, legacy]);
+  }, [query, workersReady]);
 
   useEffect(() => {
-    if (!workersReady || legacy) return;
+    if (!workersReady) return;
     let active = true;
     let sequence = 0;
     const timer = window.setInterval(() => {
@@ -167,14 +164,14 @@ export function TrafficOverview() {
       });
     }, 5000);
     return () => { window.clearInterval(timer); active = false; };
-  }, [query, workersReady, legacy]);
+  }, [query, workersReady]);
 
   const refresh = useCallback(() => { setSource({ username: username.trim(), clientIp: clientIp.trim() }); setRevision(v => v + 1); }, [username, clientIp]);
   const selectedLabel = categories.find(c => c.value === category)?.label || '外网';
   const empty = !data;
   const trafficOption = useMemo(() => chartOption(data?.traffic.series || [], [
-    { key: 'download', label: '下载', color: chartColors.success, type: 'line', stack: 'bytes', area: true },
-    { key: 'upload', label: '上传', color: chartColors.info, type: 'line', stack: 'bytes', area: true },
+    { key: 'download', label: '下载', color: chartColors.success, type: 'line', area: true },
+    { key: 'upload', label: '上传', color: chartColors.info, type: 'line', area: true },
   ], true), [data?.traffic.series]);
   const concurrencyOption = useMemo(() => chartOption(data?.concurrency.series || [], [
     { key: 'peak', label: '桶内峰值', color: chartColors.info, type: 'line', step: true, area: true },
@@ -188,11 +185,9 @@ export function TrafficOverview() {
     {results.filter(r => data?.[kind].totals[r.value] !== undefined).map(r => <span key={r.value}><i style={{ background: r.color }} />{r.label} <b>{count(data?.[kind].totals[r.value])}</b></span>)}
   </div>;
 
-  if (legacy) return <div><div className="ov-legacy-bar"><span>旧版 · 原日志统计</span><button onClick={() => setLegacy(false)}>返回新版概览</button></div><LegacyTrafficOverview /></div>;
-
   return <div className="observability-overview">
-    <header className="ov-heading"><div><div className="ov-eyebrow">GATEWAY OBSERVABILITY <span>V1</span></div><h2>流量概览</h2><p>从流量规模到连接负载，查看网关的每一次访问。</p></div>
-      <button className="ov-text-button" onClick={() => setLegacy(true)}>查看旧版统计 ↗</button></header>
+    <header className="ov-heading"><div><div className="ov-eyebrow">GATEWAY OBSERVABILITY <span>V1</span></div><h2>流量概览</h2></div>
+    </header>
 
     <div className="ov-filter-bar">
       <label>代理节点<select aria-label="代理节点" value={workerId} onChange={e => setWorkerId(e.target.value)}>
@@ -219,12 +214,12 @@ export function TrafficOverview() {
     </div>
 
     <div className="ov-charts-grid">
-      <section className="ov-panel"><div className="ov-panel-header"><div><h3><GlobalOutlined />流量趋势</h3><p>{selectedLabel} · 已结束连接载荷</p></div><ResultSelect label="流量结束结果" value={trafficResult} onChange={setTrafficResult} kinds={['SUCCESS', 'FAILURE']} /></div>
+      <section className="ov-panel"><div className="ov-panel-header"><div><h3><GlobalOutlined />流量趋势</h3><p>{selectedLabel} · 已结束连接载荷</p></div></div>
         <div className="ov-panel-metrics"><span>今日 <b>{empty ? '—' : bytes(data?.traffic.daily)}</b></span><span>本月 <b>{empty ? '—' : bytes(data?.traffic.monthly)}</b></span><span className="ov-right">正常／异常结束筛选</span></div>
         <Chart option={trafficOption} empty={!!data && data.traffic.total === '0'} loading={loading} />
       </section>
       <section className="ov-panel"><div className="ov-panel-header"><div><h3><ApiOutlined />连接趋势</h3><p>{selectedLabel} · {connectionView === 'concurrency' ? '已落库连接区间重建' : '连接结束时归属'}</p></div><div className="ov-panel-controls"><select aria-label="连接指标" value={connectionView} onChange={e => setConnectionView(e.target.value)}><option value="concurrency">历史并发</option><option value="attempts">建连次数</option></select>{connectionView === 'attempts' && <ResultSelect label="建连结果" value={connectionResult} onChange={setConnectionResult} />}</div></div>
-        {connectionView === 'concurrency' ? <div className="ov-panel-metrics"><span>区间峰值 <b>{empty ? '—' : count(data?.concurrency.peak)}</b></span><span>区间平均 <b>{empty ? '—' : data?.concurrency.average}</b></span><span className="ov-right">跟随流量结束结果</span></div> : <div className="ov-panel-metrics"><span>建连记录 <b>{empty ? '—' : count(data?.connections.total)}</b></span>{totals('connections')}</div>}
+        {connectionView === 'concurrency' ? <div className="ov-panel-metrics"><span>区间峰值 <b>{empty ? '—' : count(data?.concurrency.peak)}</b></span><span>区间平均 <b>{empty ? '—' : data?.concurrency.average}</b></span></div> : <div className="ov-panel-metrics"><span>建连记录 <b>{empty ? '—' : count(data?.connections.total)}</b></span>{totals('connections')}</div>}
         <Chart option={connectionView === 'concurrency' ? concurrencyOption : connectionsOption} empty={!!data && (connectionView === 'concurrency' ? data.concurrency.peak === '0' : data.connections.total === '0')} loading={loading} />
       </section>
       <section className="ov-panel"><div className="ov-panel-header"><div><h3><CloudOutlined />DNS 查询趋势</h3><p>每次逻辑查询计一次</p></div><div className="ov-panel-controls"><select aria-label="DNS 查询来源" value={dnsOrigin} onChange={e => setDnsOrigin(e.target.value as typeof dnsOrigin)}><option value="CLIENT">客户端查询</option><option value="PROXY_RESOLVE">内部解析</option><option value="ALL">全部查询</option></select><ResultSelect label="DNS 结果" value={dnsResult} onChange={setDnsResult} /></div></div>

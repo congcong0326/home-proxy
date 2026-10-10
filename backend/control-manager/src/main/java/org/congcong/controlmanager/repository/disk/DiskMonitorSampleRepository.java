@@ -34,6 +34,18 @@ public interface DiskMonitorSampleRepository extends JpaRepository<DiskMonitorSa
 
     Optional<DiskMonitorSampleEntity> findTopByHostIdAndDeviceOrderBySampledAtDesc(String hostId, String device);
 
+    Optional<DiskMonitorSampleEntity> findTopByHostIdAndDeviceAndSampledAtLessThanEqualOrderBySampledAtDesc(
+            String hostId, String device, Instant sampledAt);
+
+    @Query("""
+            SELECT s FROM DiskMonitorSampleEntity s
+            WHERE s.hostId = :hostId AND s.device = :device
+              AND s.sampledAt >= :from AND s.sampledAt < :to
+            ORDER BY s.sampledAt ASC, s.id ASC
+            """)
+    List<DiskMonitorSampleEntity> findInspectionSamples(@Param("hostId") String hostId,
+            @Param("device") String device, @Param("from") Instant from, @Param("to") Instant to);
+
     Optional<DiskMonitorSampleEntity> findTopByDeviceOrderBySampledAtDesc(String device);
 
     List<DiskMonitorSampleEntity> findByHostIdAndDeviceAndSampledAtBetweenOrderBySampledAtAsc(

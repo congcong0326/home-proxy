@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.congcong.controlmanager.dto.mail.MailBizTypeRequest;
 import org.congcong.controlmanager.dto.mail.MailSendRequest;
 import org.congcong.controlmanager.dto.mail.MailSendResponse;
+import org.congcong.controlmanager.dto.mail.MailPreviewResponse;
 import org.congcong.controlmanager.service.MailSendService;
 import org.congcong.controlmanager.service.mail.MailBizHandler;
 import org.congcong.controlmanager.service.mail.MailBizHandlerFactory;
@@ -23,6 +24,11 @@ public class InternalMailController {
 
     private final MailSendService mailSendService;
     private final MailBizHandlerFactory mailBizHandlerFactory;
+
+    @PostMapping("/preview")
+    public MailPreviewResponse preview(@Valid @RequestBody MailBizTypeRequest request) {
+        return MailPreviewResponse.from(mailBizHandlerFactory.getHandler(request.getBizKey()).build(request));
+    }
 
     @PostMapping("/send")
     public ResponseEntity<MailSendResponse> send(@Valid @RequestBody MailBizTypeRequest request) {

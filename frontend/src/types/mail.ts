@@ -40,6 +40,14 @@ export interface MailBizTypeRequest {
   bizKey: string;
 }
 
+export interface MailPreviewResponse {
+  bizKey: string;
+  subject: string;
+  contentType: string;
+  content: string;
+  plainTextContent?: string;
+}
+
 export interface MailSendResponse {
   sendLogId: number;
   status: MailSendStatus;

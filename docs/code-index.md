@@ -88,6 +88,8 @@
 - `RateLimitManagement.tsx`：限流配置。
 - `LogAudit.tsx`、`AggregatedAnalysis.tsx`：保留的旧访问日志审计和聚合分析源码；“访问概览”入口已屏蔽，原地址跳转对应新版页面。
 - `WolManagement.tsx`、`DiskMonitor.tsx`、`MailGateway.tsx`：WOL、磁盘监控、邮件网关。
+
+每日巡检邮件：`control-manager/service/mail/InspectionMailHandler` 注册 `ops.inspection`，`service/mail/inspection` 聚合过去 24 小时磁盘、新日志、主网关外网流量与成功认证位置变化；复用收件目标 / `mail_biz` 定时任务。`InternalMailController` 的 `/api/mail/preview` 与邮件网关页面提供预览，发送支持 HTML / 纯文本替代正文。见 [配置与统计口径](development/mail-inspection.md)。
 - `types/*`：前端接口类型，通常需要和后端 DTO、请求对象同步更新。
 
 ## 关键调用链

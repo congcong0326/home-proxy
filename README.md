@@ -47,6 +47,7 @@ NasProxy 现在更像一个给家庭网络用的代理网关和控制台：管�
 - **规则集同步**：可以维护 AI、流媒体、SaaS、开发、广告、Geo 等分类规则，从 Git Raw 或 HTTP 文件同步后发布给 worker。
 - **日志和看板**：worker 上报访问日志，控制面用 ClickHouse 做日志审计、流量趋势、用户流量、目标 TopN 和聚合分析。
 - **家庭运维功能**：WOL、磁盘 SMART 上报、邮件网关、计划任务、MySQL 备份和恢复。
+- **每日巡检邮件**：新增 `ops.inspection`，按定时任务汇总过去 24 小时磁盘、网络质量、主网关外网流量和成功认证位置变化；支持邮件预览。配置与统计边界见 [每日巡检邮件](docs/development/mail-inspection.md)。
 - **Docker 部署**：镜像已经推到 Docker Hub，可以直接用 Docker Compose 拉起来。
 
 ---

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Card,
   Row,
@@ -15,7 +15,10 @@ import {
   Select,
   Typography,
   message,
-  Tooltip
+  Tooltip,
+  Tabs,
+  Alert,
+  Spin
 } from 'antd';
 import {
   MailOutlined,
@@ -25,19 +28,28 @@ import {
   ReloadOutlined,
   ThunderboltOutlined,
   SafetyOutlined,
-  ClockCircleOutlined
+  ClockCircleOutlined,
+  EyeOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { MailGateway, MailTarget, MailSendLog } from '../types/mail';
+import { MailGateway, MailTarget, MailSendLog, MailPreviewResponse } from '../types/mail';
 import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
 import './MailGateway.css';
 
 const { Title, Paragraph, Text } = Typography;
 const { TextArea } = Input;
 
-type TemplateKey = 'ops.alert' | 'ops.traffic_report';
+type TemplateKey = 'ops.inspection' | 'ops.alert' | 'ops.traffic_report';
 
 const templates: Record<TemplateKey, { title: string; desc: string; toList: string; ccList?: string; defaultSubject: string; defaultContent: string; contentType: 'text/plain' | 'text/html'; }> = {
+  'ops.inspection': {
+    title: '每日巡检',
+    desc: '过去24小时的磁盘、网络质量、外网流量与成功认证位置变化',
+    toList: '',
+    defaultSubject: '[每日巡检]',
+    defaultContent: '巡检时自动汇总过去24小时的数据，并附最新状态。',
+    contentType: 'text/html'
+  },
   'ops.alert': {
     title: '系统告警',
     desc: '线上异常/报警触发即时邮件',
@@ -68,6 +80,11 @@ const MailGatewayPage: React.FC = () => {
   const [loadingTargets, setLoadingTargets] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [sending, setSending] = useState(false);
+  const [preview, setPreview] = useState<MailPreviewResponse | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewSequence = useRef(0);
 
   const [gatewayModalOpen, setGatewayModalOpen] = useState(false);
   const [editingGateway, setEditingGateway] = useState<MailGateway | null>(null);
@@ -269,6 +286,27 @@ const MailGatewayPage: React.FC = () => {
     }
   };
 
+  const handlePreview = async (bizKey?: string) => {
+    try {
+      const selected = bizKey || (await sendForm.validateFields()).bizKey;
+      const sequence = ++previewSequence.current;
+      setPreview(null);
+      setPreviewError(null);
+      setPreviewOpen(true);
+      setPreviewing(true);
+      try {
+        const result = await apiService.previewMail({ bizKey: selected });
+        if (sequence === previewSequence.current) setPreview(result);
+      } catch (error: any) {
+        if (sequence === previewSequence.current) setPreviewError(error?.message || '预览生成失败');
+      } finally {
+        if (sequence === previewSequence.current) setPreviewing(false);
+      }
+    } catch {
+      // The form displays the missing business key.
+    }
+  };
+
   const applyTemplateToForms = (bizKey: TemplateKey) => {
     const tpl = templates[bizKey];
     targetForm.setFieldsValue({
@@ -300,7 +338,7 @@ const MailGatewayPage: React.FC = () => {
       scheduleForm.setFieldsValue({
         taskKey: '',
         taskType: MAIL_TASK_TYPE,
-        bizKey: targets[0]?.bizKey,
+        bizKey: targets.find(target => target.bizKey === 'ops.inspection' && target.enabled)?.bizKey || targets[0]?.bizKey,
         cronExpression: '0 0 9 * * ?',
         description: '自动发送邮件',
         enabled: true
@@ -518,7 +556,7 @@ const MailGatewayPage: React.FC = () => {
             const tpl = templates[key];
             const state = activeTemplateState(key);
             return (
-              <Col xs={24} md={12} key={key}>
+              <Col xs={24} lg={8} key={key}>
                 <div className="template-item">
                   <div className="template-title">
                     <MailOutlined />
@@ -536,7 +574,12 @@ const MailGatewayPage: React.FC = () => {
                       网关{state.gateway ? ` ${state.gateway.name}` : '未绑定'}
                     </Tag>
                   </Space>
-                  <Space>
+                  <Space wrap>
+                    {key === 'ops.inspection' && (
+                      <Button size="small" icon={<EyeOutlined />} onClick={() => handlePreview(key)}>
+                        预览巡检邮件
+                      </Button>
+                    )}
                     <Button size="small" icon={<PlusOutlined />} onClick={() => applyTemplateToForms(key)}>
                       一键建档
                     </Button>
@@ -597,20 +640,24 @@ const MailGatewayPage: React.FC = () => {
             <Form
               layout="vertical"
               form={sendForm}
-              initialValues={{ bizKey: 'ops.traffic_report' }}
+              initialValues={{ bizKey: 'ops.inspection' }}
             >
               <Form.Item label="业务 Key" name="bizKey" rules={[{ required: true, message: '请选择业务 Key' }]}>
                 <Select
                   placeholder="选择 bizKey"
-                  options={targets.map((t) => ({ label: t.bizKey, value: t.bizKey }))}
+                  options={Array.from(new Set([...Object.keys(templates), ...targets.map(t => t.bizKey)]))
+                    .map(key => ({ label: key, value: key }))}
                 />
               </Form.Item>
-              <Space>
+              <Space wrap>
+                <Button icon={<EyeOutlined />} onClick={() => handlePreview()} loading={previewing}>
+                  预览邮件
+                </Button>
                 <Button type="primary" icon={<SendOutlined />} onClick={handleSend} loading={sending}>
                   测试发送
                 </Button>
                 <Tooltip title="将快速选择模板 bizKey 并引导创建投递目标">
-                  <Button onClick={() => applyTemplateToForms('ops.traffic_report')}>填充流量报表</Button>
+                  <Button onClick={() => applyTemplateToForms('ops.inspection')}>配置巡检投递目标</Button>
                 </Tooltip>
               </Space>
             </Form>
@@ -670,6 +717,36 @@ const MailGatewayPage: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="邮件预览"
+        open={previewOpen}
+        width={1000}
+        footer={null}
+        onCancel={() => {
+          previewSequence.current += 1;
+          setPreviewOpen(false);
+          setPreviewing(false);
+        }}
+        destroyOnClose
+      >
+        {previewing && <Spin tip="正在汇总巡检数据"><div style={{ minHeight: 100 }} /></Spin>}
+        {previewError && <Alert type="error" showIcon message={previewError} />}
+        {preview && <>
+          <Paragraph strong>{preview.subject}</Paragraph>
+          <Tabs items={[
+            {
+              key: 'html', label: '邮件正文', children: preview.contentType === 'text/html'
+                ? <iframe title="邮件正文预览" sandbox="" referrerPolicy="no-referrer" srcDoc={preview.content}
+                    style={{ width: '100%', height: 560, border: '1px solid #ccd4d8' }} />
+                : <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.content}</pre>
+            },
+            ...(preview.plainTextContent ? [{
+              key: 'text', label: '纯文本', children: <pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{preview.plainTextContent}</pre>
+            }] : [])
+          ]} />
+        </>}
+      </Modal>
 
       <Modal
         title={editingGateway ? '编辑网关' : '新增网关'}
@@ -783,7 +860,7 @@ const MailGatewayPage: React.FC = () => {
             name="cronExpression"
             label="Cron 表达式"
             rules={[{ required: true, message: '请输入 cron 表达式' }]}
-            extra="示例：每天 09:00 -> 0 0 9 * * ? ，每10分钟 -> 0 */10 * * * ?"
+            extra="按服务端时区发送。每天 09:00：0 0 9 * * ?；巡检自动汇总发送前24小时。"
           >
             <Input placeholder="如：0 0 9 * * ?" />
           </Form.Item>

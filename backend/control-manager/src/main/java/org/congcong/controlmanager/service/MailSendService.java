@@ -128,8 +128,19 @@ public class MailSendService {
         properties.put("mail.smtp.ssl.trust", gateway.getHost());
         properties.put("mail.debug", Boolean.toString(mailDebug));
 
+        MimeMessage message = buildMessage(mailSender, gateway, target, request, normalizedContentType);
+        log.info("send mail for bizKey {} via {}:{} to [{}] cc [{}] bcc [{}]",
+                target.getBizKey(), gateway.getHost(), gateway.getPort(),
+                target.getToList(), target.getCcList(), target.getBccList());
+        mailSender.send(message);
+    }
+
+    MimeMessage buildMessage(JavaMailSenderImpl mailSender, MailGateway gateway, MailTarget target,
+                             MailSendRequest request, String normalizedContentType) throws Exception {
         MimeMessage message = mailSender.createMimeMessage();
-        MimeMessageHelper helper = new MimeMessageHelper(message, false, StandardCharsets.UTF_8.name());
+        boolean alternative = "text/html".equalsIgnoreCase(normalizedContentType)
+                && StringUtils.hasText(request.getPlainTextContent());
+        MimeMessageHelper helper = new MimeMessageHelper(message, alternative, StandardCharsets.UTF_8.name());
         helper.setFrom(StringUtils.hasText(gateway.getFromAddress()) ? gateway.getFromAddress() : gateway.getUsername());
 
         String[] to = splitAddresses(target.getToList());
@@ -148,16 +159,10 @@ public class MailSendService {
         }
         helper.setSubject(request.getSubject());
         boolean isHtml = "text/html".equalsIgnoreCase(normalizedContentType);
-        helper.setText(request.getContent(), isHtml);
+        if (alternative) helper.setText(request.getPlainTextContent(), request.getContent());
+        else helper.setText(request.getContent(), isHtml);
 
-        log.info("send mail for bizKey {} via {}:{} to [{}] cc [{}] bcc [{}]",
-                target.getBizKey(),
-                gateway.getHost(),
-                gateway.getPort(),
-                String.join(",", to),
-                String.join(",", cc),
-                String.join(",", bcc));
-        mailSender.send(message);
+        return message;
     }
 
     private String[] splitAddresses(String raw) {

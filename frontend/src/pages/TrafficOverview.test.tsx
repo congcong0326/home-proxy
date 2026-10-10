@@ -4,7 +4,7 @@ import apiService from '../services/api';
 import { TrafficOverview } from './TrafficOverview';
 import { OverviewData } from '../types/overview';
 
-jest.mock('echarts-for-react', () => ({ __esModule: true, default: () => <div data-testid="overview-chart" /> }));
+jest.mock('echarts-for-react', () => ({ __esModule: true, default: ({ option }: { option: unknown }) => <div data-testid="overview-chart" data-option={JSON.stringify(option)} /> }));
 jest.mock('echarts', () => ({ connect: jest.fn(), disconnect: jest.fn() }));
 jest.mock('chartjs-adapter-date-fns', () => ({}));
 jest.mock('../services/api', () => ({ __esModule: true, default: {
@@ -28,17 +28,32 @@ beforeEach(() => {
 });
 it('defaults to external traffic and shows four distinct charts without substituting legacy data', async () => {
   render(<TrafficOverview />);
-  await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL', dnsOrigin: 'CLIENT' })));
+  await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL', trafficResult: 'ALL', dnsOrigin: 'CLIENT' })));
+  expect(screen.queryByLabelText('流量结束结果')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '外网' })).toHaveAttribute('aria-pressed', 'true');
   await screen.findByText('1 KB');
   expect(screen.getAllByTestId('overview-chart')).toHaveLength(4);
   expect(screen.getByText('等待新版节点上报已建立连接')).toBeInTheDocument();
   expect(apiService.getDailyUserTrafficStats).not.toHaveBeenCalled();
 });
+it('plots upload and download independently when their volumes differ substantially', async () => {
+  const result = data('1100');
+  result.traffic.upload = '100';
+  result.traffic.download = '1000';
+  result.traffic.series = [{ ts: result.from, upload: '100', download: '1000' }];
+  (apiService.getObservabilityOverview as jest.Mock).mockResolvedValue(result);
+  render(<TrafficOverview />);
+  await screen.findByText('1.07 KB');
+  const option = JSON.parse(screen.getAllByTestId('overview-chart')[0].getAttribute('data-option')!);
+  expect(option.series.map((series: any) => ({ name: series.name, value: series.data[0][1] }))).toEqual([
+    { name: '下载', value: 1000 }, { name: '上传', value: 100 },
+  ]);
+  expect(option.series.every((series: any) => !series.stack)).toBe(true);
+});
 it('applies independent DNS/auth and traffic filters and submitted source constraints', async () => {
   render(<TrafficOverview />);
   await screen.findByText('1 KB');
-  fireEvent.click(screen.getByRole('button', { name: /内网 · 目标重写/ }));
+  fireEvent.click(screen.getByRole('button', { name: '内网' }));
   fireEvent.change(screen.getByLabelText('DNS 结果'), { target: { value: 'FAILURE' } });
   fireEvent.change(screen.getByLabelText('认证结果'), { target: { value: 'SUCCESS' } });
   fireEvent.change(screen.getByLabelText('用户／账号'), { target: { value: 'failed-account' } });
@@ -46,7 +61,7 @@ it('applies independent DNS/auth and traffic filters and submitted source constr
   await waitFor(() => expect(screen.getByRole('button', { name: /查询 \/ 刷新/ })).not.toBeDisabled());
   fireEvent.click(screen.getByRole('button', { name: /查询 \/ 刷新/ }));
   await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenLastCalledWith(expect.objectContaining({
-    trafficCategory: 'INTERNAL_REWRITE', dnsResult: 'FAILURE', authResult: 'SUCCESS', username: 'failed-account', clientIp: '192.168.1.2',
+    trafficCategory: 'INTERNAL_REWRITE', trafficResult: 'ALL', dnsResult: 'FAILURE', authResult: 'SUCCESS', username: 'failed-account', clientIp: '192.168.1.2',
   })));
 });
 it('ignores late responses after changing node', async () => {

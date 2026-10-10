@@ -76,6 +76,7 @@ import {
   MailGateway,
   MailTarget,
   MailBizTypeRequest,
+  MailPreviewResponse,
   MailSendResponse,
   MailSendLogPage,
   MailSendLogQuery
@@ -1015,6 +1016,13 @@ class ApiService {
 
   async sendMail(data: MailBizTypeRequest): Promise<MailSendResponse> {
     return this.request<MailSendResponse>('/mail/send', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async previewMail(data: MailBizTypeRequest): Promise<MailPreviewResponse> {
+    return this.request<MailPreviewResponse>('/mail/preview', {
       method: 'POST',
       body: JSON.stringify(data)
     });
