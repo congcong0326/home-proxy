@@ -12,10 +12,11 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class DistributionController {
     private final DistributionService service;
+    private final CredentialDistributionService credentials;
 
     @GetMapping
-    public DistributionService.Distribution distribution(@ModelAttribute DistributionQuery query) {
-        try { return service.aggregate(query); }
+    public Object distribution(@ModelAttribute DistributionQuery query) {
+        try { return "auth_geo".equals(query.getDimension()) ? credentials.aggregate(query) : service.aggregate(query); }
         catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (RuntimeException e) {

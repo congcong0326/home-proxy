@@ -13,3 +13,9 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+
+.distribution-location {
+  height: auto;
+  text-align: left;
+  padding-inline: 0;
+}

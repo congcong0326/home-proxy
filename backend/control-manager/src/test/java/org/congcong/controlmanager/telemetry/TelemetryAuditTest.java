@@ -56,6 +56,20 @@ class TelemetryAuditTest {
     }
 
     @Test
+    void geographicDrilldownKeepsExactAccountAndFailureGroupFilters() {
+        properties.setQueryEnabled(true);
+        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
+        when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
+        var request = request(); request.setExactAuthUsername("alice'"); request.setAuthOutcomeGroup("FAILURE");
+        store.page(TelemetrySchema.AUTH, request);
+        verify(client, times(2)).query(contains("(attempted_username = ? OR verified_username = ? OR username = ?) AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"), any(Object[].class));
+        request.setAuthOutcomeGroup("invalid");
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
+        request.setAuthOutcomeGroup("SUCCESS");
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
+    }
+
+    @Test
     void countAndPageShareServerFiltersAndNeverInterpolateUserText() {
         properties.setQueryEnabled(true);
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 123L)));

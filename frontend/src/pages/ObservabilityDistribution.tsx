@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Card, Col, Collapse, DatePicker, Empty, Input, Row, Select, Space, Table, Tag, Typography } from 'antd';
+import { Alert, Button, Card, Col, Collapse, DatePicker, Empty, Input, Drawer, Row, Select, Space, Table, Tag, Typography } from 'antd';
 import ReactECharts from 'echarts-for-react';
 import dayjs from 'dayjs';
 import apiService from '../services/api';
@@ -7,11 +7,13 @@ import { DistributionData, DistributionDimension, DistributionItem, Distribution
 import { ConnectOutcome, TrafficCategory } from '../types/observability';
 import { ProxyWorkerDTO } from '../types/worker';
 import './ObservabilityDistribution.css';
+import { AuditList, AuditDetail } from './ObservabilityLogAudit';
+import { AuditRecordV1, TelemetryType } from '../types/observability';
 
 const dimensions: { value: DistributionDimension; label: string }[] = [
   { value: 'users', label: '用户' }, { value: 'targets', label: '目标主机' },
   { value: 'user_targets', label: '用户－目标' }, { value: 'routes', label: '路由规则' },
-  { value: 'client_ips', label: '来源 IP' }, { value: 'categories', label: '流量分类' },
+  { value: 'auth_geo', label: '认证地理位置' }, { value: 'categories', label: '流量分类' },
 ];
 const metrics: { value: DistributionMetric; label: string }[] = [
   { value: 'connections', label: '连接数' }, { value: 'bytes', label: '总流量' },
@@ -23,6 +25,7 @@ const categories: Record<TrafficCategory, string> = {
 const outcomes: Record<ConnectOutcome, string> = {
   CONNECTED: '已建立', FAILED: '失败', BLOCKED: '阻断', CANCELLED: '取消', NOT_ATTEMPTED: '未尝试',
 };
+const geoReasons: Record<string, string> = { DB_UNAVAILABLE: 'GeoIP 数据库不可用', NOT_FOUND: 'IP 未收录', ERROR: '解析失败', UNKNOWN: '来源无法定位', RESOLVED: '缺少位置字段' };
 const digits = (value: string) => value.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const rawBytes = (value: string) => `${digits(value)} B`;
 const bytes = (value: string) => {
@@ -42,10 +45,14 @@ export function distributionPercent(value: string, total: string) {
   const rounded = (BigInt(value) * BigInt(10000) + BigInt(total) / BigInt(2)) / BigInt(total);
   return `${rounded / BigInt(100)}.${(rounded % BigInt(100)).toString().padStart(2, '0')}`;
 }
-function label(item: DistributionItem, dimension: DistributionDimension) {
+export function distributionLabel(item: DistributionItem, dimension: DistributionDimension) {
   const [id, name, target] = item.keys;
   const user = `${name || (id ? `用户 #${id}` : '未识别用户')}${name && id ? ` (#${id})` : ''}`;
   switch (dimension) {
+    case 'auth_geo':
+      if (id === '__PRIVATE__') return '内网来源';
+      if (id === '__UNKNOWN__') return '位置未知';
+      return `${id || '国家未知'} / ${name || '地区未知'} / ${target || '城市未知'}`;
     case 'users': return user;
     case 'user_targets': return `${user} → ${target || '未知目标'}`;
     case 'routes': return `${name || (id ? `规则 #${id}` : '未选定路由')}${name && id ? ` (#${id})` : ''}`;
@@ -73,6 +80,14 @@ export function ObservabilityDistribution() {
   const [metric, setMetric] = useState<DistributionMetric>('connections');
   const [category, setCategory] = useState<TrafficCategory | 'ALL'>('EXTERNAL');
   const [outcome, setOutcome] = useState<ConnectOutcome | 'ALL'>('ALL');
+  const [authOutcome, setAuthOutcome] = useState<'ALL' | 'SUCCESS' | 'FAILURE'>('ALL');
+  const authGeo = dimension === 'auth_geo';
+  const activeMetric = authGeo ? 'authentications' : metric;
+  const activeMetrics = authGeo ? [{ value: 'authentications', label: '认证次数' }] : metrics;
+  const [geoSelection, setGeoSelection] = useState<{ item: DistributionItem; query: DistributionQuery }>();
+  const [selectedIp, setSelectedIp] = useState('');
+  const [auditWindow, setAuditWindow] = useState(0);
+  const [auditDetail, setAuditDetail] = useState<{ type: TelemetryType; record: AuditRecordV1 }>();
   const [limit, setLimit] = useState(10);
   const [from, setFrom] = useState(() => dateInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1)));
   const [to, setTo] = useState(() => dateInput(new Date()));
@@ -101,9 +116,9 @@ export function ObservabilityDistribution() {
     const end = new Date(`${to}T00:00:00`);
     end.setDate(end.getDate() + 1);
     if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start || end.getTime() - start.getTime() > 93 * 86400000) return null;
-    return { workerId, from: start.toISOString(), to: end.toISOString(), dimension, metric, limit,
-      trafficCategory: category, connectOutcome: outcome, ...source };
-  }, [workerId, from, to, dimension, metric, limit, category, outcome, source]);
+    return { workerId, from: start.toISOString(), to: end.toISOString(), dimension, metric: activeMetric, limit,
+      trafficCategory: authGeo ? 'ALL' : category, connectOutcome: authGeo ? 'ALL' : outcome, authOutcome, ...source };
+  }, [workerId, from, to, dimension, activeMetric, authGeo, authOutcome, limit, category, outcome, source]);
 
   useEffect(() => {
     let active = true;
@@ -116,14 +131,35 @@ export function ObservabilityDistribution() {
     return () => { active = false; };
   }, [workerId, query, revision]);
 
+  const openLocation = (item: DistributionItem) => {
+    if (!query) return;
+    setGeoSelection({ item, query }); setSelectedIp(item.sources?.[0]?.clientIp || ''); setAuditWindow(0); setAuditDetail(undefined);
+  };
+  const auditWindows = useMemo(() => {
+    if (!geoSelection) return [];
+    const windows = [];
+    const end = new Date(geoSelection.query.to).getTime();
+    for (let start = new Date(geoSelection.query.from).getTime(); start < end; start += 31 * 86400000) {
+      windows.push({ from: new Date(start).toISOString(), to: new Date(Math.min(start + 31 * 86400000, end)).toISOString() });
+    }
+    return windows;
+  }, [geoSelection]);
+  const auditScope = geoSelection && auditWindows[auditWindow] ? {
+    workerId: geoSelection.query.workerId, ...auditWindows[auditWindow], clientIp: selectedIp,
+    exactAuthUsername: geoSelection.query.username || undefined,
+    authOutcomeGroup: geoSelection.query.authOutcome !== 'ALL' ? geoSelection.query.authOutcome : undefined,
+  } : undefined;
   const chart = useMemo(() => {
     if (!data) return {};
-    const entries = data.items.map((item, index) => ({ name: label(item, data.dimension), value: Number(item.value), id: index }));
-    if (data.otherValue !== '0') entries.push({ name: '其余项目', value: Number(data.otherValue), id: entries.length });
+    const entries = data.items.map((item, index) => ({ name: distributionLabel(item, data.dimension), value: Number(item.value), id: index, ...(data.dimension === 'auth_geo' && item.keys[0] === '__UNKNOWN__' ? { itemStyle: { color: '#a3a3a3' } } : {}) }));
+    if (data.otherValue !== '0') entries.push({ name: data.dimension === 'auth_geo' ? '其他位置' : '其余项目', value: Number(data.otherValue), id: entries.length });
     return {
       tooltip: { trigger: 'item', renderMode: 'richText', formatter: (point: { dataIndex: number; name: string }) => {
         const value = data.items[point.dataIndex]?.value || data.otherValue;
-        return `${point.name}\n${data.metric === 'connections' ? digits(value) : rawBytes(value)}\n占全部 ${distributionPercent(value, data.totalValue)}%`;
+        const item = data.items[point.dataIndex];
+        const auth = item?.auth;
+        const reasons = Object.entries(item?.unknownReasons || {}).map(([key, count]) => `${geoReasons[key] || key}：${digits(count)}`).join('\n');
+        return `${point.name}\n${data.metric === 'connections' || data.metric === 'authentications' ? `${digits(value)}${data.metric === 'authentications' ? ' 次认证' : ''}` : rawBytes(value)}\n占全部 ${distributionPercent(value, data.totalValue)}%${auth ? `\n成功：${digits(auth.success)}　失败：${digits(auth.failure)}　其他：${digits(auth.other)}` : ''}${reasons ? `\n${reasons}` : ''}`;
       } },
       legend: { type: 'scroll', bottom: 0 },
       series: [{ type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: true,
@@ -139,7 +175,7 @@ export function ObservabilityDistribution() {
       <form onSubmit={e => { e.preventDefault(); setSource({ username: username.trim(), clientIp: clientIp.trim() }); setRevision(v => v + 1); }}>
         <Row gutter={[16, 16]}>
           <FilterField title="维度"><Select aria-label="维度" options={dimensions} value={dimension} onChange={setDimension} style={{ width: '100%' }} /></FilterField>
-          <FilterField title="指标"><Select aria-label="指标" options={metrics} value={metric} onChange={setMetric} style={{ width: '100%' }} /></FilterField>
+          <FilterField title="指标"><Select aria-label="指标" options={activeMetrics} value={activeMetric} disabled={authGeo} onChange={setMetric} style={{ width: '100%' }} /></FilterField>
           <Col xs={24} sm={24} md={8} lg={8}>
             <Space direction="vertical" style={{ width: '100%' }}>
               <Typography.Text strong>日期范围</Typography.Text>
@@ -152,16 +188,16 @@ export function ObservabilityDistribution() {
           <FilterField title="代理节点"><Select aria-label="代理节点" value={workerId || undefined} placeholder="等待节点"
             options={workers.map(w => ({ value: w.workerId, label: `${w.displayName || w.workerId}${w.enabled ? '' : '（已停用）'}` }))}
             onChange={setWorkerId} style={{ width: '100%' }} /></FilterField>
-          <FilterField title="流量分类"><Select aria-label="流量分类" value={category} onChange={setCategory} style={{ width: '100%' }}
-            options={[{ value: 'ALL', label: '全部分类' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]} /></FilterField>
-          <FilterField title="建连结果"><Select aria-label="建连结果" value={outcome} onChange={setOutcome} style={{ width: '100%' }}
-            options={[{ value: 'ALL', label: '全部结果' }, ...Object.entries(outcomes).map(([value, label]) => ({ value, label }))]} /></FilterField>
+          {!authGeo && <FilterField title="流量分类"><Select aria-label="流量分类" value={category} onChange={setCategory} style={{ width: '100%' }}
+            options={[{ value: 'ALL', label: '全部分类' }, ...Object.entries(categories).map(([value, label]) => ({ value, label }))]} /></FilterField>}
+          {authGeo ? <FilterField title="认证结果"><Select aria-label="认证结果" value={authOutcome} onChange={setAuthOutcome} style={{ width: '100%' }} options={[{ value: 'ALL', label: '全部' }, { value: 'SUCCESS', label: '成功' }, { value: 'FAILURE', label: '失败' }]} /></FilterField> : <FilterField title="建连结果"><Select aria-label="建连结果" value={outcome} onChange={setOutcome} style={{ width: '100%' }}
+            options={[{ value: 'ALL', label: '全部结果' }, ...Object.entries(outcomes).map(([value, label]) => ({ value, label }))]} /></FilterField>}
           <Col xs={24} sm={12} md={8} lg={6} className="distribution-query">
             <Button type="primary" htmlType="submit" loading={loading} disabled={!query || !workerId}>查询 / 刷新</Button>
           </Col>
         </Row>
         <Collapse ghost className="distribution-more-filters" items={[{ key: 'source', label: '更多筛选', children: <Row gutter={[16, 16]}>
-          <FilterField title="用户" span={12}><Input aria-label="用户" value={username} onChange={e => setUsername(e.target.value)} placeholder="已识别用户名（精确匹配）" maxLength={256} /></FilterField>
+          <FilterField title="用户" span={12}><Input aria-label="用户" value={username} onChange={e => setUsername(e.target.value)} placeholder={authGeo ? '尝试或已验证账号（精确匹配）' : '已识别用户名（精确匹配）'} maxLength={256} /></FilterField>
           <FilterField title="来源 IP" span={12}><Input aria-label="来源 IP" value={clientIp} onChange={e => setClientIp(e.target.value)} placeholder="精确匹配" maxLength={256} /></FilterField>
         </Row> }]} />
       </form>
@@ -172,19 +208,31 @@ export function ObservabilityDistribution() {
     <Card variant="outlined" title="TopN 结果">
       {data && <Typography.Paragraph type="secondary" className="distribution-summary">
         <Space wrap size="middle">
-          <span>全部连接：{digits(data.totals.connections)}</span><span>上行：{byteCell(data.totals.upload)}</span>
-          <span>下行：{byteCell(data.totals.download)}</span><span>总流量：{byteCell(data.totals.bytes)}</span>
+          {data.authTotals ? <><span>全部认证：{digits(data.authTotals.attempts)}</span><span>成功：{digits(data.authTotals.success)}</span><span>失败：{digits(data.authTotals.failure)}</span><span>其他：{digits(data.authTotals.other)}</span></> : data.totals && <>
+            <span>全部连接：{digits(data.totals.connections)}</span><span>上行：{byteCell(data.totals.upload)}</span>
+            <span>下行：{byteCell(data.totals.download)}</span><span>总流量：{byteCell(data.totals.bytes)}</span></> }
         </Space>
       </Typography.Paragraph>}
       <Table<DistributionItem> rowKey={row => JSON.stringify(row.keys)} loading={loading} dataSource={data?.items || []} pagination={false} scroll={{ x: 540 }}
         locale={{ emptyText: error || workerError ? '查询不可用' : '所选范围暂无记录' }}
         columns={[
           { title: '排名', width: 80, render: (_, __, index) => index + 1 },
-          { title: dimensions.find(d => d.value === dimension)?.label, render: (_, item) => <Tag className="distribution-key">{label(item, dimension)}</Tag> },
-          { title: metrics.find(m => m.value === metric)?.label, render: (_, item) => metric === 'connections' ? digits(item.value) : byteCell(item.value) },
+          { title: dimensions.find(d => d.value === dimension)?.label, render: (_, item) => authGeo ? <Button type="link" className="distribution-key distribution-location" onClick={() => openLocation(item)}>{distributionLabel(item, dimension)}</Button> : <Tag className="distribution-key">{distributionLabel(item, dimension)}</Tag> },
+          { title: activeMetrics.find(m => m.value === activeMetric)?.label, render: (_, item) => activeMetric === 'connections' || authGeo ? digits(item.value) : byteCell(item.value) },
           { title: '占全部', render: (_, item) => `${distributionPercent(item.value, data?.totalValue || '0')}%` },
         ]} />
     </Card>
-    <Card variant="outlined" title="TopN 饼图">{data && data.totalValue !== '0' ? <ReactECharts option={chart} notMerge opts={{ renderer: 'svg' }} style={{ height: 360 }} /> : <Empty description={loading ? '正在查询…' : error || workerError ? '查询不可用' : '暂无可展示的占比'} />}</Card>
+    <Card variant="outlined" title="TopN 饼图">{data && data.totalValue !== '0' ? <ReactECharts option={chart} onEvents={{ click: (point: { dataIndex: number }) => { const item = data?.items[point.dataIndex]; if (authGeo && item) openLocation(item); } }} notMerge opts={{ renderer: 'svg' }} style={{ height: 360 }} /> : <Empty description={loading ? '正在查询…' : error || workerError ? '查询不可用' : '暂无可展示的占比'} />}</Card>
+    <Drawer open={!!geoSelection} title={geoSelection ? distributionLabel(geoSelection.item, 'auth_geo') : ''} width={Math.min(1100, window.innerWidth)} onClose={() => { setGeoSelection(undefined); setAuditDetail(undefined); }}>
+      <Table dataSource={geoSelection?.item.sources || []} rowKey="clientIp" scroll={{ x: 550 }} pagination={{ pageSize: 10 }} columns={[
+        { title: '来源 IP', dataIndex: 'clientIp', render: ip => ip ? <Button type="link" onClick={() => { setSelectedIp(ip); setAuditDetail(undefined); }}>{ip}</Button> : '来源未记录' },
+        { title: '认证次数', render: (_, row) => digits(row.counts.attempts) },
+        { title: '成功', render: (_, row) => digits(row.counts.success) },
+        { title: '失败', render: (_, row) => digits(row.counts.failure) },
+      ]} />
+      {auditWindows.length > 1 && <Select aria-label="明细时间段" value={auditWindow} onChange={setAuditWindow} style={{ width: '100%', marginBottom: 16 }} options={auditWindows.map((range, index) => ({ value: index, label: `${dayjs(range.from).format('YYYY-MM-DD HH:mm')} 至 ${dayjs(range.to).format('YYYY-MM-DD HH:mm')}（结束不含）` }))} />}
+      {selectedIp && auditScope && <><Typography.Title level={5}>{selectedIp} 认证审计</Typography.Title><AuditList key={`${selectedIp}-${auditWindow}`} type="credential-auth" query={auditScope} onDetail={(type, record) => setAuditDetail({ type, record })} /></>}
+      {auditDetail && auditScope && <AuditDetail selected={auditDetail} scope={auditScope} onClose={() => setAuditDetail(undefined)} />}
+    </Drawer>
   </Space>;
 }

@@ -1,15 +1,16 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import apiService from '../services/api';
-import { distributionPercent, ObservabilityDistribution } from './ObservabilityDistribution';
+import { distributionLabel, distributionPercent, ObservabilityDistribution } from './ObservabilityDistribution';
 import { DistributionData } from '../types/distribution';
 
 jest.setTimeout(15000);
 
 jest.mock('echarts-for-react', () => ({ __esModule: true, default: ({ option }: { option: { series: { data: { name: string }[] }[] } }) => <div data-testid="distribution-chart">{option.series[0].data.map(item => item.name).join(', ')}</div> }));
-jest.mock('../services/api', () => ({ __esModule: true, default: {
-  getWorkers: jest.fn(), getObservabilityDistribution: jest.fn(), getAccessDailyTop: jest.fn(),
-} }));
+jest.mock('../services/api', () => {
+  const service = { queryTelemetryPage: jest.fn(), getWorkers: jest.fn(), getObservabilityDistribution: jest.fn(), getAccessDailyTop: jest.fn() };
+  return { __esModule: true, default: service, apiService: service };
+});
 const data = (): DistributionData => ({
   from: '2026-10-01T00:00:00Z', to: '2026-11-01T00:00:00Z', dimension: 'users', metric: 'connections',
   items: [{ keys: ['42', 'alice'], counters: { connections: '3', upload: '18446744073709551620', download: '20', bytes: '18446744073709551640' }, value: '3' }],
@@ -70,4 +71,33 @@ it('shows query failure without fabricated zero totals or legacy fallback', asyn
   expect(await screen.findByRole('alert')).toHaveTextContent('新版查询未启用');
   expect(screen.queryByText('0 B')).not.toBeInTheDocument();
   expect(apiService.getAccessDailyTop).not.toHaveBeenCalled();
+});
+
+it('groups location labels without discarding partial geography', () => {
+  const item = { value: '1', keys: ['中国', '', ''] };
+  expect(distributionLabel(item, 'auth_geo')).toBe('中国 / 地区未知 / 城市未知');
+  expect(distributionLabel({ ...item, keys: ['中国', '广东', '深圳'] }, 'auth_geo')).toBe('中国 / 广东 / 深圳');
+  expect(distributionLabel({ ...item, keys: ['__PRIVATE__', '', ''] }, 'auth_geo')).toBe('内网来源');
+  expect(distributionLabel({ ...item, keys: ['__UNKNOWN__', '', ''] }, 'auth_geo')).toBe('位置未知');
+});
+it('switches to authentication units and drills into the same filtered audit scope', async () => {
+  const auth = { attempts: '10', success: '2', failure: '7', other: '1' };
+  (apiService.getObservabilityDistribution as jest.Mock).mockImplementation(query => Promise.resolve(query.dimension === 'auth_geo' ? {
+    from: query.from, to: query.to, dimension: 'auth_geo', metric: 'authentications',
+    items: [{ keys: ['中国', '', ''], value: '10', auth, sources: [{ clientIp: '1.1.1.1', counts: auth }] }],
+    authTotals: auth, totalValue: '20', otherValue: '10', groups: '2', historyBasis: 'AUTH_ATTEMPTS_ONLY', timeBoundary: '[from,to)',
+  } : data()));
+  (apiService.queryTelemetryPage as jest.Mock).mockResolvedValue({ items: [], total: '0', limit: 50, offset: 0 });
+  render(<ObservabilityDistribution />);
+  await screen.findByText('30.00%');
+  await choose('维度', '认证地理位置');
+  await screen.findByText('全部认证：10');
+  expect(screen.queryByRole('combobox', { name: '流量分类' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: '建连结果' })).not.toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: '指标' })).toBeDisabled();
+  expect(screen.getByTestId('distribution-chart')).toHaveTextContent('中国 / 地区未知 / 城市未知, 其他位置');
+  await choose('认证结果', '失败');
+  expect(apiService.getObservabilityDistribution).toHaveBeenLastCalledWith(expect.objectContaining({ dimension: 'auth_geo', metric: 'authentications', trafficCategory: 'ALL', connectOutcome: 'ALL', authOutcome: 'FAILURE' }));
+  fireEvent.click(screen.getByRole('button', { name: '中国 / 地区未知 / 城市未知' }));
+  await waitFor(() => expect(apiService.queryTelemetryPage).toHaveBeenCalledWith('credential-auth', expect.objectContaining({ workerId: 'home-01', clientIp: '1.1.1.1', authOutcomeGroup: 'FAILURE' })));
 });

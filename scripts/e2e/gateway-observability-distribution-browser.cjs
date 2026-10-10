@@ -34,6 +34,19 @@ const assert = require('node:assert/strict');
       const params = new URL(route.request().url()).searchParams;
       if (params.get('workerId') === 'unavailable') return route.fulfill({ status: 503, json: { message: '访问分布暂不可用，请检查新版日志查询服务' } });
       const dimension = params.get('dimension');
+      if (dimension === 'auth_geo') {
+        const auth = { attempts: '400', success: '300', failure: '80', other: '20' };
+        return route.fulfill({ json: {
+          from: params.get('from'), to: params.get('to'), dimension, metric: 'authentications',
+          items: [
+            { keys: ['中国', '广东', '深圳'], value: '400', auth, sources: [{ clientIp: '1.1.1.1', counts: auth }] },
+            { keys: ['美国', '', ''], value: '300', auth: { attempts: '300', success: '100', failure: '200', other: '0' }, sources: [] },
+            { keys: ['__UNKNOWN__', '', ''], value: '100', auth: { attempts: '100', success: '0', failure: '100', other: '0' }, unknownReasons: { NOT_FOUND: '100' }, sources: [] },
+          ],
+          authTotals: { attempts: '1000', success: '500', failure: '480', other: '20' },
+          totalValue: '1000', otherValue: '200', groups: '6', historyBasis: 'AUTH_ATTEMPTS_ONLY', timeBoundary: '[from,to)',
+        } });
+      }
       const keys = {
         users: [['42', 'alice'], ['7', 'bob'], ['', '']],
         targets: [['example.com'], ['video.example.com'], ['']],
@@ -57,6 +70,7 @@ const assert = require('node:assert/strict');
         firstSessionAt: '2026-10-01 01:00:00', historyBasis: 'ENDED_SESSIONS_ONLY', timeBoundary: '[from,to)',
       } });
     });
+    await page.route('**/api/observability/v1/credential-auth/page?*', route => route.fulfill({ json: { items: [], total: '0', limit: 50, offset: 0 } }));
     await page.goto(base + '/config/observability/distribution');
     // Startup auth may redirect to the dashboard before /admin/me completes.
     await page.getByRole('menuitem').filter({ hasText: '访问分布' }).click();
@@ -73,6 +87,23 @@ const assert = require('node:assert/strict');
     await page.screenshot({ path: path.join(output, 'mobile.png'), fullPage: true });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     assert.equal(overflow, false, 'Mobile document must not overflow horizontally');
+    await choose('维度', '认证地理位置');
+    await page.getByText('全部认证：1,000', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '美国 / 地区未知 / 城市未知', exact: true }).waitFor();
+    assert.equal(await page.getByRole('combobox', { name: '流量分类', exact: true }).count(), 0);
+    await page.waitForTimeout(800);
+    await page.screenshot({ path: path.join(output, 'auth-geo-mobile.png'), fullPage: true });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth), false);
+    await page.setViewportSize({ width: 1680, height: 1050 });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(output, 'auth-geo-desktop.png'), fullPage: true });
+    await choose('认证结果', '失败');
+    await page.getByRole('button', { name: '中国 / 广东 / 深圳', exact: true }).click();
+    await page.getByText('1.1.1.1 认证审计', { exact: true }).waitFor();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: path.join(output, 'auth-geo-detail.png'), fullPage: true });
+    await page.locator('.ant-drawer-close').click();
+    await page.waitForTimeout(500);
     await choose('代理节点', '查询不可用示例（已停用）');
     await page.getByRole('alert').waitFor();
     assert.equal(await page.locator('.distribution-summary').count(), 0, 'Failed queries must not show zero/stale totals');

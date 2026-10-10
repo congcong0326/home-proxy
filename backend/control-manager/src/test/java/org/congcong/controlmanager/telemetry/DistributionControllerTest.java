@@ -10,8 +10,20 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 class DistributionControllerTest {
     private final DistributionService service = mock(DistributionService.class);
-    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new DistributionController(service)).build();
+    private final CredentialDistributionService credentials = mock(CredentialDistributionService.class);
+    private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new DistributionController(service, credentials)).build();
     private static final String PATH = "/api/observability/v1/distribution";
+
+    @Test
+    void authenticationDimensionUsesIndependentSourceAndResultFilter() throws Exception {
+        mvc.perform(get(PATH).param("workerId", "home-01").param("from", "2026-10-01T00:00:00Z")
+                .param("to", "2026-11-01T00:00:00Z").param("dimension", "auth_geo")
+                .param("metric", "authentications").param("authOutcome", "FAILURE")).andExpect(status().isOk());
+        verify(credentials).aggregate(argThat(query -> query.getAuthOutcome().equals("FAILURE") && query.getMetric().equals("authentications")));
+        verifyNoInteractions(service);
+        when(credentials.aggregate(any())).thenThrow(new IllegalArgumentException("Invalid metric"));
+        mvc.perform(get(PATH).param("dimension", "auth_geo")).andExpect(status().isBadRequest());
+    }
 
     @Test
     void bindsInstantsAndFilters() throws Exception {

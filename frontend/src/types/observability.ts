@@ -187,6 +187,8 @@ export interface TelemetryQuery {
   qtype?: string;
   eventType?: string;
   authMethod?: string;
+  authOutcomeGroup?: 'SUCCESS' | 'FAILURE';
+  exactAuthUsername?: string;
 }
 
 export type AuditRecordV1 = SessionLogV1 | DnsQueryLogV1 | ProxyEventLogV1 | CredentialAuthLogV1;

@@ -180,7 +180,7 @@ function SessionUser({ row }: { row: AuditRecordV1 }) {
 const resultOf = (type: TelemetryType, record: AuditRecordV1) => getField(record, type === 'sessions' ? 'sessionOutcome' : type === 'credential-auth' ? 'authOutcome' : 'outcome');
 const errorText = (error: unknown) => error instanceof Error ? error.message : '请求失败';
 
-function AuditList({ type, query, onDetail }: { type: TelemetryType; query: TelemetryQuery; onDetail: (type: TelemetryType, record: AuditRecordV1) => void }) {
+export function AuditList({ type, query, onDetail }: { type: TelemetryType; query: TelemetryQuery; onDetail: (type: TelemetryType, record: AuditRecordV1) => void }) {
   const [page, setPage] = useState<TelemetryPageV1>();
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -293,7 +293,7 @@ function RecordFields({ record, type }: { record: AuditRecordV1; type: Telemetry
   </>;
 }
 
-function AuditDetail({ selected, scope, onClose }: { selected: { type: TelemetryType; record: AuditRecordV1 }; scope: TelemetryQuery; onClose: () => void }) {
+export function AuditDetail({ selected, scope, onClose }: { selected: { type: TelemetryType; record: AuditRecordV1 }; scope: TelemetryQuery; onClose: () => void }) {
   const [record, setRecord] = useState<AuditRecordV1>();
   const [error, setError] = useState('');
   const [reload, setReload] = useState(0);

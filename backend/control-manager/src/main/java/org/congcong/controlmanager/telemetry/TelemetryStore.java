@@ -369,11 +369,17 @@ public class TelemetryStore implements ApplicationRunner {
             addFilter(where, params, request.getEventType(), "event_type = ?", 1);
         } else {
             addFilter(where, params, request.getAuthMethod(), "auth_method = ?", 1);
+            addFilter(where, params, request.getExactAuthUsername(), "(attempted_username = ? OR verified_username = ? OR username = ?)", 3);
+            if (has(request.getAuthOutcomeGroup())) {
+                if ("SUCCESS".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome = 'SUCCESS'");
+                else if ("FAILURE".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
+                else throw new IllegalArgumentException("Invalid authentication result group");
+            }
         }
         if (schema != TelemetrySchema.SESSIONS && (has(request.getRoute()) || has(request.getTrafficCategory()) || has(request.getConnectOutcome()))
                 || schema != TelemetrySchema.DNS && has(request.getQtype())
                 || schema != TelemetrySchema.EVENTS && has(request.getEventType())
-                || schema != TelemetrySchema.AUTH && has(request.getAuthMethod())
+                || schema != TelemetrySchema.AUTH && (has(request.getAuthMethod()) || has(request.getAuthOutcomeGroup()) || has(request.getExactAuthUsername()))
                 || schema != TelemetrySchema.DNS && schema != TelemetrySchema.SESSIONS && has(request.getTarget())) {
             throw new IllegalArgumentException("Filter unsupported for this record type");
         }

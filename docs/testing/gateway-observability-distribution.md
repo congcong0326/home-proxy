@@ -4,7 +4,7 @@
 
 原 `AggregatedAnalysis` 的用户、应用（实际是目标主机）、用户－应用、路由规则 TopN 迁移能力以独立页面提供：`/config/observability/distribution`，导航为“网关观测 → 访问分布”。目标字段名称改为“目标主机”；新增来源 IP、流量分类维度。指标提供连接数、上行、下行和总流量。
 
-来源国家和目标国家暂不迁移。当前 V1 连接事实没有相应 GeoIP 字段；密码认证来源 GeoIP 属于认证尝试，不能直接作为连接或目标地理信息。DNS、认证与诊断事件也不计入连接 TopN，避免混合记录单位和分母。
+连接维度不提供来源国家和目标国家：V1 连接事实没有对应 GeoIP 字段。认证地理位置作为独立认证尝试维度提供，具体口径见下文；DNS、认证与诊断事件不计入连接 TopN。
 
 旧 `/config/overview/aggregate`、`getAccessDailyTop`、旧日志采集和数据库均保留；新页提供旧版链接。新增查询不修改配置、采集协议或数据库结构，也不替换旧入口。此次交付独立预览，已按用户要求更新本地管理端容器，不表示其他阶段已验收。
 
@@ -110,3 +110,31 @@ docker compose -f deploy/docker/docker-compose.control.yml \
 直接读取原始事实并全量分组，93 天高基数目标可能增加查询成本。当前限制单节点、93 天、Top100，未进行大规模容量压测。部署后应按实际规模评估查询耗时，再考虑独立物化聚合；不能通过截断输入样本改善速度而改变分母。
 
 回退使用旧聚合分析入口即可，无需改表或 Worker；移除新导航／路由亦不影响现有业务。此次不清理旧代码、旧表和旧查询依赖。
+
+## 认证地理位置（三元组，2026-10-10）
+
+页面将“来源 IP”维度替换为“认证地理位置”；来源 IP 精确筛选继续保留，后端旧 `client_ips` 维度兼容保留。新 `dimension=auth_geo` 仅支持 `metric=authentications`，独立查询 `telemetry.credential_auth_log_v1 FINAL`，以认证发生时间和选中节点限定范围，最长 93 天。`authOutcome=ALL/SUCCESS/FAILURE` 默认全部；失败包含 FAILURE、DENIED、MALFORMED、ERROR，CHALLENGE、CANCELLED 和未记录结果计入其他。用户名精确匹配尝试账号、已验证账号或原始 username，不受连接结果和流量分类影响。
+
+ClickHouse 先按来源 IP 全量计数，管理端复用 `CredentialGeoAnalysis` 解析每个 IP，再按国家、地区、城市三个独立字段合并。三字段统一去除首尾空白，null、空字符串、空白均归一为空值；只在前端拼接展示，例如“中国 / 地区未知 / 城市未知”。内网来源单独归为“内网来源”，三个位置字段都缺失的归为“位置未知”。未知原因按查询状态计数，提示区分数据库不可用、未收录、解析失败等；位置未知为灰色扇区。
+
+统计使用查询时 GeoIP 数据库，因此数据库恢复后历史记录也可以定位，无需改写事实或迁移表；审计原来已存储的位置仍保留历史分析，数据库更新后可能与当前统计有差异。所有认证次数（含未知、内网）先合计分母再做 TopN，剩余部分显示“其他位置”，所有计数及占比使用大整数；认证响应返回 `authTotals`、每项 `auth` 和 `sources`，不伪造连接数和流量字段。成功、失败与其他之和等于认证次数。
+
+点击表格位置或饼图扇区可查看该位置的来源 IP、次数和成功／失败情况，再选择来源 IP 查看认证审计与完整详情。明细复用独立账号精确筛选 `exactAuthUsername` 和认证结果组筛选 `authOutcomeGroup`，避免失败统计进入明细后混入成功记录；两项仅适用于认证审计。超过 31 天的范围拆成连续半开时间段供用户选择，统计范围和分母不变。来源 IP 缺失的记录仍保留计数，但不以空筛选打开所有认证记录。
+
+无需变更 common DTO、Worker 采集和数据库。与原有连接聚合相比，新维度增加按 IP 的 GeoIP 查询与管理端内存合并，TopN 项携带完整 IP 列表；大规模来源数量下仍需评估查询、响应体和内存成本，不能提前截断来源而改变分母。回退可恢复原前端来源 IP 选项，旧接口与表均保留。
+
+验证命令：
+
+```bash
+mvn -f backend/pom.xml -B -ntp -Dmaven.repo.local="$PWD/.m2/repository" \
+  -pl control-manager -am test -DskipTests=false \
+  -Dtest=CredentialDistributionServiceTest,DistributionServiceTest,DistributionControllerTest,TelemetryAuditTest \
+  -Dsurefire.failIfNoSpecifiedTests=false
+cd frontend
+CI=true npm test -- --watch=false --runInBand --runTestsByPath \
+  src/pages/ObservabilityDistribution.test.tsx src/pages/ObservabilityLogAudit.test.tsx
+```
+
+覆盖三元组合并、null／空白归一、部分地理信息、内网／未知原因、超过 UInt64 的计数、全量分母与其余项、独立认证数据源、参数化账号筛选、认证失败分组、切换维度及来源 IP 明细关联。生产构建使用 `make frontend-build`。
+
+验证结果：后端 17 项测试通过；前端访问分布 6 项和认证审计 28 项测试通过。ClickHouse 24.8 内联只读样本验证按 IP 分组、空 IP、成功／失败／其他结果计数。浏览器 UI 样例验证桌面、390px 手机布局、认证结果切换、来源 IP 审计抽屉和查询失败清空结果，无页面错误或文档横向溢出。截图：[认证地理位置](assets/gateway-distribution/auth-geo/desktop.png)、[手机](assets/gateway-distribution/auth-geo/mobile.png)、[来源明细](assets/gateway-distribution/auth-geo/detail.png)。前端生产构建通过，仅有既有页面 lint 警告。此次未更新运行中的管理端容器。
