@@ -49,7 +49,10 @@ public final class TelemetryBuffer {
             var dns = new ArrayList<DnsQueryLogV1>();
             var events = new ArrayList<ProxyEventLogV1>();
             var auth = new ArrayList<CredentialAuthLogV1>();
-            batch.setSessions(sessions); batch.setDnsQueries(dns); batch.setEvents(events); batch.setCredentialAuth(auth);
+            batch.setSessions(sessions);
+            batch.setDnsQueries(dns);
+            batch.setEvents(events);
+            batch.setCredentialAuth(auth);
             long recordBytes = 0;
             int wireBytes = 1024;
             while (batch.recordCount() < 100 && !queue.isEmpty()) {
@@ -78,11 +81,19 @@ public final class TelemetryBuffer {
         return true;
     }
 
-    public synchronized int depth() { return queue.size() + (pending == null ? 0 : pending.recordCount); }
-    public synchronized long bytesUsed() { return bufferedBytes; }
+    public synchronized int depth() {
+        return queue.size() + (pending == null ? 0 : pending.recordCount);
+    }
+
+    public synchronized long bytesUsed() {
+        return bufferedBytes;
+    }
+
     public synchronized int clear() {
         int discarded = depth();
-        queue.clear(); pending = null; bufferedBytes = 0;
+        queue.clear();
+        pending = null;
+        bufferedBytes = 0;
         return discarded;
     }
     private record Frozen(byte[] json, Class<? extends TelemetryRecordV1> type) { }

@@ -17,7 +17,9 @@ public class InspectionMailHandler implements MailBizHandler {
     private final InspectionMailRenderer renderer;
 
     @Override
-    public boolean supports(String bizKey) { return BIZ_KEY.equalsIgnoreCase(bizKey); }
+    public boolean supports(String bizKey) {
+        return BIZ_KEY.equalsIgnoreCase(bizKey);
+    }
 
     @Override
     public MailSendRequest build(MailBizTypeRequest request) {

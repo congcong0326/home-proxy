@@ -20,9 +20,14 @@ class InspectionReportServiceTest {
         var workers = mock(ProxyWorkerRepository.class);
         var statuses = mock(WorkerStatusRepository.class);
         var telemetry = mock(TelemetryStore.class);
-        var properties = new InspectionProperties(); properties.setTimeZone("Europe/Berlin");
-        var enabled = new ProxyWorker(); enabled.setWorkerId("default"); enabled.setEnabled(true);
-        var disabled = new ProxyWorker(); disabled.setWorkerId("disabled"); disabled.setEnabled(false);
+        var properties = new InspectionProperties();
+        properties.setTimeZone("Europe/Berlin");
+        var enabled = new ProxyWorker();
+        enabled.setWorkerId("default");
+        enabled.setEnabled(true);
+        var disabled = new ProxyWorker();
+        disabled.setWorkerId("disabled");
+        disabled.setEnabled(false);
         when(workers.findAll()).thenReturn(List.of(enabled, disabled));
         Instant to = Instant.parse("2026-10-25T09:00:00Z");
         Instant from = to.minus(Duration.ofHours(24));
@@ -49,9 +54,12 @@ class InspectionReportServiceTest {
         var report = new InspectionReport("id", to.minus(Duration.ofHours(24)), to, ZoneId.of("Asia/Shanghai"), List.of(section));
         var renderer = new InspectionMailRenderer();
         String html = renderer.html(report), plain = renderer.plainText(report);
-        assertFalse(html.contains("<script>")); assertFalse(html.contains("<img src="));
-        assertTrue(html.contains("&lt;script&gt;")); assertTrue(html.contains("18446744073709551620 B"));
-        assertTrue(plain.contains("18446744073709551620 B")); assertTrue(plain.contains("位置未知，无法判断"));
+        assertFalse(html.contains("<script>"));
+        assertFalse(html.contains("<img src="));
+        assertTrue(html.contains("&lt;script&gt;"));
+        assertTrue(html.contains("18446744073709551620 B"));
+        assertTrue(plain.contains("18446744073709551620 B"));
+        assertTrue(plain.contains("位置未知，无法判断"));
         assertTrue(html.contains("2026-10-10T09:00:00+08:00"));
         assertTrue(plain.contains("起含止不含"));
     }

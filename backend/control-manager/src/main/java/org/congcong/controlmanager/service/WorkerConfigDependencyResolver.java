@@ -84,9 +84,17 @@ public class WorkerConfigDependencyResolver {
         return result;
     }
 
-    public boolean isUserReferenced(Long userId) { return !resolveAffectedWorkerIds("user", userId).isEmpty(); }
-    public boolean isRouteReferenced(Long routeId) { return !resolveAffectedWorkerIds("route", routeId).isEmpty(); }
-    public boolean isRuleSetReferenced(String key) { return !resolveAffectedWorkerIds("ruleSet", key).isEmpty(); }
+    public boolean isUserReferenced(Long userId) {
+        return !resolveAffectedWorkerIds("user", userId).isEmpty();
+    }
+
+    public boolean isRouteReferenced(Long routeId) {
+        return !resolveAffectedWorkerIds("route", routeId).isEmpty();
+    }
+
+    public boolean isRuleSetReferenced(String key) {
+        return !resolveAffectedWorkerIds("ruleSet", key).isEmpty();
+    }
 
     public void validateInboundReferences(InboundConfig inbound) {
         if (inbound.getWorkerId() == null || !proxyWorkerRepository.existsById(inbound.getWorkerId())) {
@@ -123,7 +131,10 @@ public class WorkerConfigDependencyResolver {
         return routes;
     }
 
-    private <T> Collection<T> safe(Collection<T> values) { return values == null ? List.of() : values; }
+    private <T> Collection<T> safe(Collection<T> values) {
+        return values == null ? List.of() : values;
+    }
+
     private <T> Set<T> nonNull(Collection<T> values) {
         Set<T> result = new LinkedHashSet<>();
         if (values != null) values.stream().filter(Objects::nonNull).forEach(result::add);

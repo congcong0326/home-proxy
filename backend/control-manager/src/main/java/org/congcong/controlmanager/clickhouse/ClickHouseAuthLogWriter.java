@@ -35,6 +35,11 @@ public class ClickHouseAuthLogWriter {
         return values.size();
     }
 
-    private String empty(String value) { return value == null ? "" : value; }
-    private long zero(Long value) { return value == null ? 0L : value; }
+    private String empty(String value) {
+        return value == null ? "" : value;
+    }
+
+    private long zero(Long value) {
+        return value == null ? 0L : value;
+    }
 }

@@ -40,8 +40,14 @@ public class InspectionReportService {
     InspectionReportService(DiskInspectionService disks, NetworkInspectionService network,
             AuthLocationInspectionService auth, ProxyWorkerRepository workers, WorkerStatusRepository statuses,
             TelemetryStore telemetry, InspectionProperties properties, Clock clock) {
-        this.disks = disks; this.network = network; this.auth = auth; this.workers = workers;
-        this.statuses = statuses; this.telemetry = telemetry; this.properties = properties; this.clock = clock;
+        this.disks = disks;
+        this.network = network;
+        this.auth = auth;
+        this.workers = workers;
+        this.statuses = statuses;
+        this.telemetry = telemetry;
+        this.properties = properties;
+        this.clock = clock;
     }
 
     public InspectionReport build() {
@@ -121,8 +127,9 @@ public class InspectionReportService {
     }
 
     private static InspectionSection safe(String title, Supplier<InspectionSection> build) {
-        try { return build.get(); }
-        catch (RuntimeException error) {
+        try {
+            return build.get();
+        } catch (RuntimeException error) {
             log.warn("巡检项生成失败 title={}", title, error);
             return InspectionSection.unavailable(title);
         }

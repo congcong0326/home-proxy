@@ -38,5 +38,7 @@ public final class OutboundTimingHandler extends ChannelDuplexHandler {
         if (proxy) TelemetryHooks.beginStage(inbound, PROXY_HANDSHAKE);
     }
 
-    public String readyOutcome() { return readyOutcome; }
+    public String readyOutcome() {
+        return readyOutcome;
+    }
 }

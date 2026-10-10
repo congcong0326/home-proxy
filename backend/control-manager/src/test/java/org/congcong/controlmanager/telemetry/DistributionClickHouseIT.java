@@ -39,7 +39,10 @@ class DistributionClickHouseIT {
         for (String dimension : List.of("users", "targets", "user_targets", "routes", "client_ips", "categories")) {
             for (String metric : List.of("connections", "bytes", "upload", "download")) {
                 var request = DistributionServiceTest.query();
-                request.setTrafficCategory("ALL"); request.setDimension(dimension); request.setMetric(metric); request.setLimit(1);
+                request.setTrafficCategory("ALL");
+                request.setDimension(dimension);
+                request.setMetric(metric);
+                request.setLimit(1);
                 var result = service.aggregate(request);
                 assertEquals("4", result.totals().connections(), dimension + "/" + metric);
                 assertEquals("36893488147419103550", result.totals().bytes());
@@ -62,7 +65,8 @@ class DistributionClickHouseIT {
         var service = new DistributionService(client, mock(TelemetryStore.class));
         when(client.query(anyString(), any(Object[].class))).thenAnswer(invocation ->
                 execute(bind(invocation.getArgument(0), (Object[]) invocation.getRawArguments()[1])));
-        var request = DistributionServiceTest.query(); request.setTrafficCategory("ALL");
+        var request = DistributionServiceTest.query();
+        request.setTrafficCategory("ALL");
         var result = service.aggregate(request);
         var reference = execute("SELECT toString(count()) AS connections FROM " + TelemetrySchema.SESSIONS.table
                 + " FINAL WHERE worker_id = 'home-01' AND occurred_at >= '2026-10-01' AND occurred_at < '2026-11-01'");
@@ -83,7 +87,9 @@ class DistributionClickHouseIT {
         var process = new ProcessBuilder("docker", "exec", "-i", System.getenv("DISTRIBUTION_CLICKHOUSE_CONTAINER"),
                 "sh", "-c", "exec clickhouse-client --user \"$CLICKHOUSE_USER\" --password \"$CLICKHOUSE_PASSWORD\" --format JSON")
                 .redirectErrorStream(true).start();
-        try (var input = process.getOutputStream()) { input.write(sql.getBytes(StandardCharsets.UTF_8)); }
+        try (var input = process.getOutputStream()) {
+            input.write(sql.getBytes(StandardCharsets.UTF_8));
+        }
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         assertTrue(process.waitFor(15, TimeUnit.SECONDS), "ClickHouse query timed out");
         assertEquals(0, process.exitValue(), output);

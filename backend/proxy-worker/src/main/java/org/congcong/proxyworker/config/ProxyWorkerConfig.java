@@ -245,12 +245,35 @@ public class ProxyWorkerConfig {
         return tlsKeyPassword;
     }
 
-    public String getTlsKeyPasswordFile() { return tlsKeyPasswordFile; }
-    public boolean isTlsAllowSelfSigned() { return tlsAllowSelfSigned; }
-    public String getWorkerTokenFile() { return workerTokenFile; }
-    public String getLastKnownGoodConfig() { return lastKnownGoodConfig; }
-    public boolean isManagementEnabled() { return managementEnabled; }
-    public int getManagementPort() { return managementPort; }
-    public String getManagementTokenFile() { return managementTokenFile; }
-    public long getManagementPollIntervalMs() { return managementPollIntervalMs; }
+    public String getTlsKeyPasswordFile() {
+        return tlsKeyPasswordFile;
+    }
+
+    public boolean isTlsAllowSelfSigned() {
+        return tlsAllowSelfSigned;
+    }
+
+    public String getWorkerTokenFile() {
+        return workerTokenFile;
+    }
+
+    public String getLastKnownGoodConfig() {
+        return lastKnownGoodConfig;
+    }
+
+    public boolean isManagementEnabled() {
+        return managementEnabled;
+    }
+
+    public int getManagementPort() {
+        return managementPort;
+    }
+
+    public String getManagementTokenFile() {
+        return managementTokenFile;
+    }
+
+    public long getManagementPollIntervalMs() {
+        return managementPollIntervalMs;
+    }
 }

@@ -176,9 +176,14 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
             destinationChannel = inbound;
         }
 
-        private void setChannel(Channel channel) { destinationChannel = channel; }
+        private void setChannel(Channel channel) {
+            destinationChannel = channel;
+        }
 
-        @Override public Channel channel() { return destinationChannel; }
+        @Override
+        public Channel channel() {
+            return destinationChannel;
+        }
     }
 
     private boolean requiresPublicAddressValidation(ProxyTunnelRequest request) {

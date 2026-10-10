@@ -154,9 +154,13 @@ public class AggregateConfigService {
         this.configChangeListener = listener;
     }
 
-    public WorkerControlService.ConfigApplicationStatus getApplicationStatus() { return applicationStatus; }
+    public WorkerControlService.ConfigApplicationStatus getApplicationStatus() {
+        return applicationStatus;
+    }
 
-    public String getFetchedConfigHash() { return fetchedConfigHash; }
+    public String getFetchedConfigHash() {
+        return fetchedConfigHash;
+    }
 
     /** Hash advertised to the controller. Failed applies deliberately advertise no hash so they retry. */
     public String getManagedPollingConfigHash() {

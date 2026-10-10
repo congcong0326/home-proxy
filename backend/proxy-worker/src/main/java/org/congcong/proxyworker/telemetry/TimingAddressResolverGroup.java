@@ -26,25 +26,44 @@ final class TimingAddressResolverGroup extends AddressResolverGroup<InetSocketAd
     protected AddressResolver<InetSocketAddress> newResolver(EventExecutor executor) {
         AddressResolver<InetSocketAddress> delegate = (AddressResolver<InetSocketAddress>) delegateGroup.getResolver(executor);
         return new AddressResolver<>() {
-            public boolean isSupported(SocketAddress address) { return delegate.isSupported(address); }
-            public boolean isResolved(SocketAddress address) { return delegate.isResolved(address); }
-            public Future<InetSocketAddress> resolve(SocketAddress address) { return resolve(address, executor.newPromise()); }
-            public Future<InetSocketAddress> resolve(SocketAddress address, Promise<InetSocketAddress> promise) {
+            public boolean isSupported(SocketAddress address) {
+                return delegate.isSupported(address);
+            }
+
+            public boolean isResolved(SocketAddress address) {
+                return delegate.isResolved(address);
+            }
+
+            public Future<InetSocketAddress> resolve(SocketAddress address) {
+                return resolve(address, executor.newPromise());
+            }
+
+            public Future<InetSocketAddress> resolve(
+                    SocketAddress address, Promise<InetSocketAddress> promise) {
                 observe(address, promise);
                 return delegate.resolve(address, promise);
             }
-            public Future<List<InetSocketAddress>> resolveAll(SocketAddress address) { return resolveAll(address, executor.newPromise()); }
-            public Future<List<InetSocketAddress>> resolveAll(SocketAddress address, Promise<List<InetSocketAddress>> promise) {
+
+            public Future<List<InetSocketAddress>> resolveAll(SocketAddress address) {
+                return resolveAll(address, executor.newPromise());
+            }
+
+            public Future<List<InetSocketAddress>> resolveAll(
+                    SocketAddress address, Promise<List<InetSocketAddress>> promise) {
                 observe(address, promise);
                 return delegate.resolveAll(address, promise);
             }
+
             private void observe(SocketAddress address, Promise<?> promise) {
                 if (address instanceof InetSocketAddress endpoint && endpoint.isUnresolved()) {
                     TelemetryHooks.beginStage(inbound, DNS);
                     promise.addListener(done -> TelemetryHooks.endStage(inbound, DNS));
                 }
             }
-            public void close() { /* delegate belongs to its original group */ }
+
+            public void close() {
+                /* delegate belongs to its original group */
+            }
         };
     }
 }

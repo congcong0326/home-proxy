@@ -8,7 +8,8 @@ class InspectionSmartSnapshotTest {
     @Test
     void distinguishesMissingFieldsFromRealZeroAndPreservesNvmeUnits() {
         var missing = InspectionSmartSnapshot.parse("Serial Number: SN", "NVME_SSD");
-        assertNull(missing.lifeUsed()); assertNull(missing.temperature());
+        assertNull(missing.lifeUsed());
+        assertNull(missing.temperature());
         assertNull(missing.errors().get("媒体与数据完整性错误"));
         var present = InspectionSmartSnapshot.parse("""
                 Serial Number: SN
@@ -20,7 +21,8 @@ class InspectionSmartSnapshotTest {
                 Media and Data Integrity Errors: 0
                 Data Units Written: 18,446,744,073,709,551,615
                 """, "NVME_SSD");
-        assertEquals(0, present.lifeUsed()); assertEquals(BigInteger.ZERO, present.criticalWarning());
+        assertEquals(0, present.lifeUsed());
+        assertEquals(BigInteger.ZERO, present.criticalWarning());
         assertEquals(BigInteger.ZERO, present.errors().get("异常断电次数"));
         assertEquals(new BigInteger("18446744073709551615").multiply(BigInteger.valueOf(512000)), present.writtenBytes());
     }
@@ -34,7 +36,8 @@ class InspectionSmartSnapshotTest {
                 198 Offline_Uncorrectable 0x0008 100 100 000 Old_age Offline - 0
                 199 UDMA_CRC_Error_Count 0x000a 200 200 000 Old_age Always - 7
                 """, "HDD");
-        assertEquals(35, value.temperature()); assertEquals(BigInteger.valueOf(2), value.errors().get("待处理扇区"));
+        assertEquals(35, value.temperature());
+        assertEquals(BigInteger.valueOf(2), value.errors().get("待处理扇区"));
         assertEquals(BigInteger.ZERO, value.errors().get("不可修复扇区"));
         assertFalse(value.errors().containsKey("异常断电次数"));
         assertNull(value.errors().get("重映射扇区"));
@@ -74,6 +77,7 @@ class InspectionSmartSnapshotTest {
         assertEquals(BigInteger.valueOf(14087).shiftLeft(30), value.writtenBytes());
         var other = InspectionSmartSnapshot.parse(attributes.replace("SSD_Life_Left", "Temperature_Celsius")
                 .replace("Lifetime_Writes_GiB", "Vendor_Writes"), "SATA_SSD");
-        assertNull(other.lifeUsed()); assertNull(other.writtenBytes());
+        assertNull(other.lifeUsed());
+        assertNull(other.writtenBytes());
     }
 }

@@ -42,6 +42,12 @@ public final class ConcurrencyTimeline {
         }
         return new Result(points, decimal(globalArea / (end - start)), Long.toString(globalPeak));
     }
-    private static long micros(Instant time) { return time.getEpochSecond() * 1_000_000 + time.getNano() / 1000; }
-    private static String decimal(double value) { return String.format(Locale.ROOT, "%.2f", value); }
+
+    private static long micros(Instant time) {
+        return time.getEpochSecond() * 1_000_000 + time.getNano() / 1000;
+    }
+
+    private static String decimal(double value) {
+        return String.format(Locale.ROOT, "%.2f", value);
+    }
 }

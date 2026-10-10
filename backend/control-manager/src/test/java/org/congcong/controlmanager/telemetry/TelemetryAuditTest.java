@@ -39,7 +39,9 @@ class TelemetryAuditTest {
                 "raw_json", raw, "received_at", "2026-10-09 00:00:00",
                 "analysis_json", "{\"geoLookupStatus\":\"DB_UNAVAILABLE\",\"riskTags\":[\"LOCATION_UNKNOWN\"]}")));
         var resolved = new org.congcong.common.telemetry.CredentialAuthAnalysisV1();
-        resolved.setGeoLookupStatus("RESOLVED"); resolved.setSourceCountry("美国"); resolved.setRiskTags(List.of());
+        resolved.setGeoLookupStatus("RESOLVED");
+        resolved.setSourceCountry("美国");
+        resolved.setRiskTags(List.of());
         when(geo.analyze(any())).thenReturn(resolved);
         var page = store.page(TelemetrySchema.AUTH, request());
         var detail = store.detail(TelemetrySchema.AUTH, attempt, request());
@@ -60,7 +62,9 @@ class TelemetryAuditTest {
         properties.setQueryEnabled(true);
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
-        var request = request(); request.setExactAuthUsername("alice'"); request.setAuthOutcomeGroup("FAILURE");
+        var request = request();
+        request.setExactAuthUsername("alice'");
+        request.setAuthOutcomeGroup("FAILURE");
         store.page(TelemetrySchema.AUTH, request);
         verify(client, times(2)).query(contains("(attempted_username = ? OR verified_username = ? OR username = ?) AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"), any(Object[].class));
         request.setAuthOutcomeGroup("invalid");
@@ -75,12 +79,21 @@ class TelemetryAuditTest {
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 123L)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         var request = request();
-        request.setUsername("' OR 1=1 --"); request.setTarget("nas.test"); request.setRoute("NAS");
-        request.setTrafficCategory("INTERNAL_REWRITE"); request.setClientIp("192.168.1.1");
-        request.setOutcome("ERROR_END"); request.setConnectOutcome("CONNECTED"); request.setProtocol("SOCKS5"); request.setOffset(50);
+        request.setUsername("' OR 1=1 --");
+        request.setTarget("nas.test");
+        request.setRoute("NAS");
+        request.setTrafficCategory("INTERNAL_REWRITE");
+        request.setClientIp("192.168.1.1");
+        request.setOutcome("ERROR_END");
+        request.setConnectOutcome("CONNECTED");
+        request.setProtocol("SOCKS5");
+        request.setOffset(50);
         var page = store.page(TelemetrySchema.SESSIONS, request);
-        assertEquals("123", page.total()); assertEquals(50, page.offset()); assertEquals("[from,to)", page.timeBoundary());
-        var sql = ArgumentCaptor.forClass(String.class); var params = ArgumentCaptor.forClass(Object[].class);
+        assertEquals("123", page.total());
+        assertEquals(50, page.offset());
+        assertEquals("[from,to)", page.timeBoundary());
+        var sql = ArgumentCaptor.forClass(String.class);
+        var params = ArgumentCaptor.forClass(Object[].class);
         verify(client, times(2)).query(sql.capture(), params.capture());
         String countSql = sql.getAllValues().get(0);
         String countWhere = countSql.substring(countSql.indexOf(" FINAL WHERE ") + " FINAL WHERE ".length());
@@ -95,7 +108,9 @@ class TelemetryAuditTest {
         properties.setQueryEnabled(true);
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
-        var request = request(); request.setConnectionId(UUID.randomUUID().toString()); request.setQtype("AAAA");
+        var request = request();
+        request.setConnectionId(UUID.randomUUID().toString());
+        request.setQtype("AAAA");
         store.page(TelemetrySchema.DNS, request);
         verify(client).query(contains("(connection_id = ? OR parent_connection_id = ?) AND qtype = ?"),
                 eq(new Object[]{"home-01", java.sql.Timestamp.from(request.getFrom()), java.sql.Timestamp.from(request.getTo()), request.getConnectionId(), request.getConnectionId(), "AAAA"}));
@@ -104,7 +119,9 @@ class TelemetryAuditTest {
     @Test
     void authFilteringIncludesAttemptedUsernameAndDetailKeepsLargeIntegersAndNulls() {
         properties.setQueryEnabled(true);
-        var request = request(); request.setUsername("unknown-user"); request.setAuthMethod("HTTP_BASIC");
+        var request = request();
+        request.setUsername("unknown-user");
+        request.setAuthMethod("HTTP_BASIC");
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
                 "raw_json", "{\"authDurationUs\":\"9007199254740993\",\"userId\":null}", "received_at", "2026-10-09 00:00:00")));
@@ -129,7 +146,8 @@ class TelemetryAuditTest {
                 Map.of("worker_instance_id", instance, "connection_id", connection, "auth_attempt_id", "attempt-2",
                         "attempted_username", "second-account", "auth_outcome", "DENIED", "auth_method", "SOCKS5_PASSWORD", "occurred_at", "2026-10-09 00:59:58")));
         var detail = store.detail(TelemetrySchema.SESSIONS, connection, request());
-        assertNull(detail.get("username")); assertNull(detail.get("userId"));
+        assertNull(detail.get("username"));
+        assertNull(detail.get("userId"));
         var attempts = (List<Map<String, Object>>) detail.get("credentialAuthAttempts");
         assertEquals(List.of("nonexistent-account", "second-account"), attempts.stream().map(a -> a.get("attemptedUsername")).toList());
         assertEquals(false, detail.get("credentialAuthAttemptsTruncated"));
@@ -144,9 +162,11 @@ class TelemetryAuditTest {
         properties.setQueryEnabled(true);
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
-        var request = request(); request.setUsername("unknown-account");
+        var request = request();
+        request.setUsername("unknown-account");
         store.page(TelemetrySchema.SESSIONS, request);
-        var sql = ArgumentCaptor.forClass(String.class); var params = ArgumentCaptor.forClass(Object[].class);
+        var sql = ArgumentCaptor.forClass(String.class);
+        var params = ArgumentCaptor.forClass(Object[].class);
         verify(client, times(2)).query(sql.capture(), params.capture());
         for (String query : sql.getAllValues()) {
             assertTrue(query.contains("SELECT worker_instance_id, connection_id FROM telemetry.credential_auth_log_v1 FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"));
@@ -158,13 +178,17 @@ class TelemetryAuditTest {
     @Test
     void queryBoundsAndUnsupportedFiltersAreRejectedBeforeDatabaseAccess() {
         properties.setQueryEnabled(true);
-        var request = request(); request.setOffset(10001);
+        var request = request();
+        request.setOffset(10001);
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
-        request.setOffset(0); request.setLimit(201);
+        request.setOffset(0);
+        request.setLimit(201);
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
-        request.setLimit(50); request.setTarget("domain.test");
+        request.setLimit(50);
+        request.setTarget("domain.test");
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
-        request.setTarget(null); request.setTo(request.getFrom().plusSeconds(31 * 86400L + 1));
+        request.setTarget(null);
+        request.setTo(request.getFrom().plusSeconds(31 * 86400L + 1));
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
         verifyNoInteractions(client);
     }

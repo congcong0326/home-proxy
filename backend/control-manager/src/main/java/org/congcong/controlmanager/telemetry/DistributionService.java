@@ -70,7 +70,9 @@ public class DistributionService {
             try {
                 keys = new com.fasterxml.jackson.databind.ObjectMapper().readValue(row.get("keys_json").toString(),
                         new com.fasterxml.jackson.core.type.TypeReference<List<String>>() { });
-            } catch (Exception e) { throw new IllegalStateException("Invalid distribution keys", e); }
+            } catch (Exception e) {
+                throw new IllegalStateException("Invalid distribution keys", e);
+            }
             String value = number(row, "value");
             items.add(new Item(keys, counters(row, ""), value));
             top = top.add(new BigInteger(value));

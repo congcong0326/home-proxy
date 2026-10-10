@@ -12,8 +12,10 @@ class OverviewControllerTest {
     void queryOutageReturnsServiceUnavailableForBothEndpointsRatherThanAnAuthenticationFailure() {
         var service = mock(OverviewService.class);
         var controller = new OverviewController(service);
-        var query = new OverviewQuery(); query.setWorkerId("edge");
-        query.setTo(Instant.now()); query.setFrom(query.getTo().minusSeconds(3600));
+        var query = new OverviewQuery();
+        query.setWorkerId("edge");
+        query.setTo(Instant.now());
+        query.setFrom(query.getTo().minusSeconds(3600));
         when(service.overview(query)).thenThrow(new IllegalStateException("QUERY_DISABLED"));
         when(service.live(query)).thenThrow(new IllegalStateException("QUERY_DISABLED"));
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE,

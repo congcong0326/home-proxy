@@ -211,6 +211,8 @@ public class WorkerControlService {
 
     public record ConfigApplicationStatus(String appliedConfigHash, Boolean success, String errorSummary,
                                           java.time.LocalDateTime appliedAt) {
-        static ConfigApplicationStatus empty() { return new ConfigApplicationStatus(null, null, null, null); }
+        static ConfigApplicationStatus empty() {
+            return new ConfigApplicationStatus(null, null, null, null);
+        }
     }
 }

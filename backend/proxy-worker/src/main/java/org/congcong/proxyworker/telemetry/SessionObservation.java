@@ -44,8 +44,15 @@ public final class SessionObservation {
         summary.setDownloadBytes(0L);
         summary.setCloseInitiator("UNKNOWN");
     }
-    public SessionLogV1 summary() { return summary; }
-    public boolean isFinished() { return finished; }
+
+    public SessionLogV1 summary() {
+        return summary;
+    }
+
+    public boolean isFinished() {
+        return finished;
+    }
+
     public void begin(Stage stage, long now) {
         if (!finished && !closing) activeStages.putIfAbsent(stage, now);
     }
@@ -66,13 +73,21 @@ public final class SessionObservation {
             case DOWNLOAD_BACKPRESSURE -> summary.setDownloadBackpressureDurationUs(add(summary.getDownloadBackpressureDurationUs(), us));
         }
     }
-    private static long add(Long value, long us) { return (value == null ? 0 : value) + us; }
+
+    private static long add(Long value, long us) {
+        return (value == null ? 0 : value) + us;
+    }
+
     public void relayStarted() {
         if (finished) return;
         if (summary.getUploadBackpressureDurationUs() == null) summary.setUploadBackpressureDurationUs(0L);
         if (summary.getDownloadBackpressureDurationUs() == null) summary.setDownloadBackpressureDurationUs(0L);
     }
-    public void beginConnect() { connectNanos = clock.getAsLong(); }
+
+    public void beginConnect() {
+        connectNanos = clock.getAsLong();
+    }
+
     public void connected() {
         if (finished || closing) return;
         end(Stage.PROXY_HANDSHAKE, clock.getAsLong());
@@ -140,7 +155,11 @@ public final class SessionObservation {
         if ("TARGET_RECOVERY_RESULT".equals(type)) event.setDurationUs(summary.getTargetRecoveryDurationUs());
         sink.accept(event);
     }
-    public void writeStarted() { if (!finished) pendingWrites++; }
+
+    public void writeStarted() {
+        if (!finished) pendingWrites++;
+    }
+
     public void writeCompleted(boolean upload, int bytes, boolean success) {
         if (finished) return;
         if (success && bytes > 0) {

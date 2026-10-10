@@ -27,7 +27,8 @@ class TelemetryBufferTest {
         assertFalse(buffer.acknowledge(ack(UUID.randomUUID().toString(), true)));
         assertEquals(1, buffer.depth());
         assertTrue(buffer.acknowledge(ack(retry.getBatchId(), true)));
-        assertNull(buffer.peek()); assertEquals(0, buffer.bytesUsed());
+        assertNull(buffer.peek());
+        assertEquals(0, buffer.bytesUsed());
     }
 
     @Test
@@ -48,9 +49,11 @@ class TelemetryBufferTest {
     void byteLimitAndOversizedFactCannotCreateEmptyPendingBatch() throws Exception {
         var limited = new TelemetryBuffer(10, 1);
         assertFalse(limited.offer(record()));
-        assertNull(limited.peek()); assertEquals(0, limited.bytesUsed());
+        assertNull(limited.peek());
+        assertEquals(0, limited.bytesUsed());
         var buffer = new TelemetryBuffer(10, 1000000);
-        var oversized = record(); oversized.setErrorMessage("x".repeat(TelemetryBuffer.MAX_BATCH_BYTES));
+        var oversized = record();
+        oversized.setErrorMessage("x".repeat(TelemetryBuffer.MAX_BATCH_BYTES));
         assertFalse(buffer.offer(oversized));
         assertNull(buffer.peek());
         assertTrue(buffer.offer(record()));
@@ -75,7 +78,9 @@ class TelemetryBufferTest {
         buffer.peek();
         assertNull(new TelemetryBuffer(10, 1000000).peek());
         assertEquals(1, buffer.clear());
-        assertNull(buffer.peek()); assertEquals(0, buffer.depth()); assertEquals(0, buffer.bytesUsed());
+        assertNull(buffer.peek());
+        assertEquals(0, buffer.depth());
+        assertEquals(0, buffer.bytesUsed());
     }
 
     @Test
@@ -83,16 +88,24 @@ class TelemetryBufferTest {
         var buffer = new TelemetryBuffer(10, 1000000);
         assertTrue(buffer.offer(record()));
         var pending = buffer.peek();
-        var ack = ack(pending.getBatchId(), true); ack.setProtocolVersion(2);
+        var ack = ack(pending.getBatchId(), true);
+        ack.setProtocolVersion(2);
         assertFalse(buffer.acknowledge(ack));
         assertEquals(pending.getBatchId(), buffer.peek().getBatchId());
     }
     private TelemetryAckV1 ack(String id, boolean persisted) {
-        var ack = new TelemetryAckV1(); ack.setBatchId(id); ack.setPersisted(persisted); return ack;
+        var ack = new TelemetryAckV1();
+        ack.setBatchId(id);
+        ack.setPersisted(persisted);
+        return ack;
     }
     private SessionLogV1 record() {
-        var record = new SessionLogV1(); record.setRecordId(UUID.randomUUID().toString()); record.setConnectionId(record.getRecordId());
-        record.setWorkerInstanceId(UUID.randomUUID().toString()); record.setOccurredAt(Instant.now());
-        record.setDownloadBytes(9007199254740993L); return record;
+        var record = new SessionLogV1();
+        record.setRecordId(UUID.randomUUID().toString());
+        record.setConnectionId(record.getRecordId());
+        record.setWorkerInstanceId(UUID.randomUUID().toString());
+        record.setOccurredAt(Instant.now());
+        record.setDownloadBytes(9007199254740993L);
+        return record;
     }
 }

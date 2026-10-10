@@ -80,7 +80,9 @@ public class TelemetryStore implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         if (!properties.isIngestEnabled() && !properties.isQueryEnabled()) return;
-        try { initialize(); } catch (RuntimeException e) {
+        try {
+            initialize();
+        } catch (RuntimeException e) {
             // A new-table outage must not prevent the legacy application from starting.
             org.slf4j.LoggerFactory.getLogger(getClass()).warn("Telemetry initialization deferred: {}", e.toString());
         }
@@ -191,16 +193,24 @@ public class TelemetryStore implements ApplicationRunner {
     @Scheduled(fixedDelayString = "${observability.flush-check-ms:1000}")
     public void flushDue() {
         if (!flushLock.tryLock()) return;
-        try { flush(false); }
-        finally { flushLock.unlock(); }
+        try {
+            flush(false);
+        } finally {
+            flushLock.unlock();
+        }
     }
 
     @PreDestroy
     void stop() {
-        synchronized (bufferLock) { stopping = true; }
+        synchronized (bufferLock) {
+            stopping = true;
+        }
         flushLock.lock();
-        try { flush(true); }
-        finally { flushLock.unlock(); }
+        try {
+            flush(true);
+        } finally {
+            flushLock.unlock();
+        }
     }
 
     private void flush(boolean force) {
@@ -279,24 +289,52 @@ public class TelemetryStore implements ApplicationRunner {
         initialize();
         List<Object> params = new ArrayList<>(List.of(workerId, Timestamp.from(from), Timestamp.from(to)));
         String filter = "";
-        if (connectionId != null) { filter = " AND connection_id = ?"; params.add(connectionId); }
-        params.add(limit); params.add(offset);
-        return client.query("SELECT raw_json, received_at, analysis_json FROM " + schema.table
-                + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?" + filter
-                + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?", params.toArray()).stream().map(row -> {
-                    try {
-                        Map<String, Object> result = new LinkedHashMap<>(mapper.readValue(row.get("raw_json").toString(), Map.class));
-                        result.remove("rateLimitPolicyId");
-                        result.remove("rateLimitWaitUs");
-                        Object received = row.get("received_at");
-                        String receivedAt = received instanceof Timestamp time ? time.toInstant().toString()
-                                : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
-                                : received.toString().replace(" ", "T") + (received.toString().endsWith("Z") ? "" : "Z");
-                        result.put("receivedAt", receivedAt);
-                        attachAnalysis(result, row.get("analysis_json"), row.get("raw_json").toString());
-                        return result;
-                    } catch (Exception e) { throw new IllegalStateException(e); }
-                }).toList();
+        if (connectionId != null) {
+            filter = " AND connection_id = ?";
+            params.add(connectionId);
+        }
+        params.add(limit);
+        params.add(offset);
+        return client
+                .query(
+                        "SELECT raw_json, received_at, analysis_json FROM "
+                                + schema.table
+                                + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                                + filter
+                                + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?",
+                        params.toArray())
+                .stream()
+                .map(
+                        row -> {
+                            try {
+                                Map<String, Object> result =
+                                        new LinkedHashMap<>(
+                                                mapper.readValue(
+                                                        row.get("raw_json").toString(), Map.class));
+                                result.remove("rateLimitPolicyId");
+                                result.remove("rateLimitWaitUs");
+                                Object received = row.get("received_at");
+                                String receivedAt =
+                                        received instanceof Timestamp time
+                                                ? time.toInstant().toString()
+                                                : received instanceof java.time.LocalDateTime time
+                                                        ? time.toInstant(java.time.ZoneOffset.UTC)
+                                                                .toString()
+                                                        : received.toString().replace(" ", "T")
+                                                                + (received.toString().endsWith("Z")
+                                                                        ? ""
+                                                                        : "Z");
+                                result.put("receivedAt", receivedAt);
+                                attachAnalysis(
+                                        result,
+                                        row.get("analysis_json"),
+                                        row.get("raw_json").toString());
+                                return result;
+                            } catch (Exception e) {
+                                throw new IllegalStateException(e);
+                            }
+                        })
+                .toList();
     }
 
     public record AuditPage(List<Map<String, Object>> items, String total, int limit, int offset,
@@ -386,7 +424,9 @@ public class TelemetryStore implements ApplicationRunner {
         return new SqlScope(where.toString(), params);
     }
 
-    private boolean has(String value) { return value != null && !value.isBlank(); }
+    private boolean has(String value) {
+        return value != null && !value.isBlank();
+    }
 
     /** Read-time association; neither the original session fact nor verified identity is rewritten. */
     private void attachCredentialAttempts(List<Map<String, Object>> sessions, TelemetryQueryRequest request) {
@@ -434,19 +474,38 @@ public class TelemetryStore implements ApplicationRunner {
     }
 
     private List<Map<String, Object>> readAuditRows(String sql, List<Object> params) {
-        return client.query(sql, params.toArray()).stream().map(row -> {
-            try {
-                Map<String, Object> result = new LinkedHashMap<>(mapper.readValue(row.get("raw_json").toString(), Map.class));
-                result.remove("rateLimitPolicyId");
-                result.remove("rateLimitWaitUs");
-                Object received = row.get("received_at");
-                result.put("receivedAt", received instanceof Timestamp time ? time.toInstant().toString()
-                        : received instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
-                        : received.toString().replace(" ", "T") + (received.toString().endsWith("Z") ? "" : "Z"));
-                attachAnalysis(result, row.get("analysis_json"), row.get("raw_json").toString());
-                return result;
-            } catch (Exception e) { throw new IllegalStateException("INVALID_STORED_FACT", e); }
-        }).toList();
+        return client.query(sql, params.toArray()).stream()
+                .map(
+                        row -> {
+                            try {
+                                Map<String, Object> result =
+                                        new LinkedHashMap<>(
+                                                mapper.readValue(
+                                                        row.get("raw_json").toString(), Map.class));
+                                result.remove("rateLimitPolicyId");
+                                result.remove("rateLimitWaitUs");
+                                Object received = row.get("received_at");
+                                result.put(
+                                        "receivedAt",
+                                        received instanceof Timestamp time
+                                                ? time.toInstant().toString()
+                                                : received instanceof java.time.LocalDateTime time
+                                                        ? time.toInstant(java.time.ZoneOffset.UTC)
+                                                                .toString()
+                                                        : received.toString().replace(" ", "T")
+                                                                + (received.toString().endsWith("Z")
+                                                                        ? ""
+                                                                        : "Z"));
+                                attachAnalysis(
+                                        result,
+                                        row.get("analysis_json"),
+                                        row.get("raw_json").toString());
+                                return result;
+                            } catch (Exception e) {
+                                throw new IllegalStateException("INVALID_STORED_FACT", e);
+                            }
+                        })
+                .toList();
     }
 
     private void attachAnalysis(Map<String, Object> result, Object storedAnalysis, String rawJson) throws Exception {

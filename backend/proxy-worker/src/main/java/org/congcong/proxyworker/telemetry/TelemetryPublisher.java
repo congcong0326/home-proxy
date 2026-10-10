@@ -26,12 +26,27 @@ public final class TelemetryPublisher {
     private final AtomicLong acks = new AtomicLong();
 
     private TelemetryPublisher() { }
-    public static TelemetryPublisher getInstance() { return INSTANCE; }
+
+    public static TelemetryPublisher getInstance() {
+        return INSTANCE;
+    }
+
     /** Existing per-worker setting now controls V1 collection and transport. */
-    public void setLogReportingEnabled(Boolean enabled) { logReportingEnabled = enabled == null || enabled; }
-    public boolean enabled() { return enabled && logReportingEnabled; }
-    public boolean authEnabled() { return enabled() && authEnabled; }
-    public boolean eventsEnabled() { return enabled() && eventsEnabled; }
+    public void setLogReportingEnabled(Boolean enabled) {
+        logReportingEnabled = enabled == null || enabled;
+    }
+
+    public boolean enabled() {
+        return enabled && logReportingEnabled;
+    }
+
+    public boolean authEnabled() {
+        return enabled() && authEnabled;
+    }
+
+    public boolean eventsEnabled() {
+        return enabled() && eventsEnabled;
+    }
 
     public void publish(TelemetryRecordV1 record) {
         if (!enabled()) return;
@@ -40,15 +55,17 @@ public final class TelemetryPublisher {
             record.setWorkerInstanceId(INSTANCE_ID);
             if (!buffer.offer(record)) dropped.incrementAndGet();
         } catch (Exception error) {
-            dropped.incrementAndGet(); serializationFailures.incrementAndGet();
+            dropped.incrementAndGet();
+            serializationFailures.incrementAndGet();
         }
     }
 
     /** Independent sender reads a stable batch; no file I/O or recovery is involved. */
     public TelemetryBatchV1 peek() {
         if (!enabled()) return null;
-        try { return buffer.peek(); }
-        catch (Exception error) {
+        try {
+            return buffer.peek();
+        } catch (Exception error) {
             serializationFailures.incrementAndGet();
             log.warn("Telemetry batch serialization failed: {}", error.toString());
             return null;
@@ -57,7 +74,11 @@ public final class TelemetryPublisher {
     public void acknowledge(TelemetryAckV1 ack) {
         if (buffer.acknowledge(ack)) acks.incrementAndGet();
     }
-    public void retried() { retries.incrementAndGet(); }
+
+    public void retried() {
+        retries.incrementAndGet();
+    }
+
     public Map<String, Object> status() {
         return Map.ofEntries(Map.entry("enabled", enabled()), Map.entry("instanceId", INSTANCE_ID),
                 Map.entry("bufferMode", "MEMORY"), Map.entry("restartRecoverySupported", false),

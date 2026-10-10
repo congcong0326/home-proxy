@@ -46,7 +46,10 @@ class TelemetryStoreTest {
             for (int j = 0; j < 100; j++) records.add(batch().getSessions().get(0));
             batch.setSessions(records);
             store.ingest("node", batch);
-            if (i < 9) { store.flushDue(); verifyNoInteractions(client); }
+            if (i < 9) {
+                store.flushDue();
+                verifyNoInteractions(client);
+            }
         }
         store.flushDue();
         verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 1000));
@@ -133,9 +136,13 @@ class TelemetryStoreTest {
 
     private TelemetryBatchV1 authBatch() {
         var record = new CredentialAuthLogV1();
-        record.setRecordId(UUID.randomUUID().toString()); record.setAuthAttemptId(record.getRecordId());
-        record.setWorkerInstanceId(UUID.randomUUID().toString()); record.setOccurredAt(Instant.now());
-        var batch = new TelemetryBatchV1(); batch.setBatchId(UUID.randomUUID().toString()); batch.setCredentialAuth(List.of(record));
+        record.setRecordId(UUID.randomUUID().toString());
+        record.setAuthAttemptId(record.getRecordId());
+        record.setWorkerInstanceId(UUID.randomUUID().toString());
+        record.setOccurredAt(Instant.now());
+        var batch = new TelemetryBatchV1();
+        batch.setBatchId(UUID.randomUUID().toString());
+        batch.setCredentialAuth(List.of(record));
         return batch;
     }
 
@@ -161,16 +168,28 @@ class TelemetryStoreTest {
             String ddl = schema.ddl();
             assertTrue(ddl.startsWith("CREATE TABLE IF NOT EXISTS telemetry."));
             assertTrue(ddl.contains("DateTime64(6, 'UTC')"));
-            assertFalse(ddl.contains("default.")); assertFalse(ddl.contains("DROP")); assertFalse(ddl.contains("TTL"));
+            assertFalse(ddl.contains("default."));
+            assertFalse(ddl.contains("DROP"));
+            assertFalse(ddl.contains("TTL"));
         }
         assertTrue(TelemetrySchema.SESSIONS.ddl().contains("dns_duration_us Nullable(UInt64)"));
     }
     private TelemetryBatchV1 batch() {
-        var record = new SessionLogV1(); record.setRecordId(UUID.randomUUID().toString()); record.setConnectionId(record.getRecordId());
-        record.setWorkerId("spoofed-node"); record.setWorkerInstanceId(UUID.randomUUID().toString()); record.setOccurredAt(Instant.now());
-        record.setStartedAt(record.getOccurredAt().minusSeconds(1)); record.setEndedAt(record.getOccurredAt());
-        record.setConnectOutcome(ConnectOutcome.NOT_ATTEMPTED); record.setSessionOutcome(SessionOutcome.CANCELLED);
-        record.setUploadBytes(0L); record.setDownloadBytes(0L);
-        var batch = new TelemetryBatchV1(); batch.setBatchId(UUID.randomUUID().toString()); batch.setSessions(List.of(record)); return batch;
+        var record = new SessionLogV1();
+        record.setRecordId(UUID.randomUUID().toString());
+        record.setConnectionId(record.getRecordId());
+        record.setWorkerId("spoofed-node");
+        record.setWorkerInstanceId(UUID.randomUUID().toString());
+        record.setOccurredAt(Instant.now());
+        record.setStartedAt(record.getOccurredAt().minusSeconds(1));
+        record.setEndedAt(record.getOccurredAt());
+        record.setConnectOutcome(ConnectOutcome.NOT_ATTEMPTED);
+        record.setSessionOutcome(SessionOutcome.CANCELLED);
+        record.setUploadBytes(0L);
+        record.setDownloadBytes(0L);
+        var batch = new TelemetryBatchV1();
+        batch.setBatchId(UUID.randomUUID().toString());
+        batch.setSessions(List.of(record));
+        return batch;
     }
 }

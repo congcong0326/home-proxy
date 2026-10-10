@@ -82,9 +82,17 @@ final class DnsUpstreamPool {
         return result;
     }
 
-    long truncations() { return truncations.sum(); }
-    Map<Long, Long> timeoutsByRoute() { return DnsQueryService.snapshot(timeoutsByRoute); }
-    Map<Long, Long> truncationsByRoute() { return DnsQueryService.snapshot(truncationsByRoute); }
+    long truncations() {
+        return truncations.sum();
+    }
+
+    Map<Long, Long> timeoutsByRoute() {
+        return DnsQueryService.snapshot(timeoutsByRoute);
+    }
+
+    Map<Long, Long> truncationsByRoute() {
+        return DnsQueryService.snapshot(truncationsByRoute);
+    }
 
     CompletableFuture<Integer> pendingCount(EventLoop loop) {
         CompletableFuture<Integer> result = new CompletableFuture<>();
@@ -127,7 +135,9 @@ final class DnsUpstreamPool {
     private record Key(EventLoop loop, ProtocolType type, boolean tcp, String host, int port) {}
 
     private static final class TruncatedResponseException extends Exception {
-        private TruncatedResponseException() { super("DNS response truncated"); }
+        private TruncatedResponseException() {
+            super("DNS response truncated");
+        }
     }
 
     private final class Transport {
@@ -138,7 +148,9 @@ final class DnsUpstreamPool {
         private int consecutiveTimeouts;
         private boolean retired;
 
-        private Transport(Key key) { this.key = key; }
+        private Transport(Key key) {
+            this.key = key;
+        }
 
         private void send(String domain, DnsRecordType type, Long routeId, CompletableFuture<DnsResult> answer) {
             if (answer.isCancelled()) return;

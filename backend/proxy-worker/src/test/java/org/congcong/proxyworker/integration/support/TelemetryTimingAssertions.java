@@ -22,12 +22,17 @@ public final class TelemetryTimingAssertions {
                                 && protocol.equals(row.getOutboundProtocol())).findFirst().orElse(null);
                 // The publisher retains one immutable in-flight batch until ACK; drain it like a controller.
                 var ack = new org.congcong.common.telemetry.TelemetryAckV1();
-                ack.setBatchId(batch.getBatchId()); ack.setPersisted(true);
+                ack.setBatchId(batch.getBatchId());
+                ack.setPersisted(true);
                 publisher.acknowledge(ack);
             }
             if (record == null) {
-                try { Thread.sleep(10); }
-                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); fail(interrupted); }
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    fail(interrupted);
+                }
             }
         }
         assertNotNull(record, "Expected a completed session with outbound timings");

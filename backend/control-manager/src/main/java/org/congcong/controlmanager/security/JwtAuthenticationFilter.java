@@ -93,7 +93,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             return;
         }
         String auth = Optional.ofNullable(request.getHeader("Authorization")).orElse("");
-        if (!auth.startsWith("Bearer ")) { unauthorized(response, "UNAUTHORIZED", "invalid or expired token"); return; }
+        if (!auth.startsWith("Bearer ")) {
+            unauthorized(response, "UNAUTHORIZED", "invalid or expired token");
+            return;
+        }
         String token = auth.substring(7);
         try {
             DecodedJWT jwt = jwtService.verify(token);

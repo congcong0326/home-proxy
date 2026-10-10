@@ -38,7 +38,9 @@ class TrafficClassifierV1Test {
 
     private SessionLogV1 classify(String ip, boolean override, String route) {
         SessionLogV1 record = new SessionLogV1();
-        record.setSelectedTargetIp(ip); record.setDestinationOverrideApplied(override); record.setRouteAction(route);
+        record.setSelectedTargetIp(ip);
+        record.setDestinationOverrideApplied(override);
+        record.setRouteAction(route);
         TrafficClassifierV1.classify(record);
         return record;
     }

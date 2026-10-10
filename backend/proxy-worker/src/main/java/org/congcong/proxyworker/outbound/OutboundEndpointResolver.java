@@ -129,7 +129,14 @@ public final class OutboundEndpointResolver {
             super(inbound, inbound.eventLoop());
             destinationChannel = inbound;
         }
-        private void setChannel(Channel channel) { destinationChannel = channel; }
-        @Override public Channel channel() { return destinationChannel; }
+
+        private void setChannel(Channel channel) {
+            destinationChannel = channel;
+        }
+
+        @Override
+        public Channel channel() {
+            return destinationChannel;
+        }
     }
 }

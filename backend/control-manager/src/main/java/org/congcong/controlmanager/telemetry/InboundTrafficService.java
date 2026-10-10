@@ -50,8 +50,11 @@ public class InboundTrafficService {
         BigInteger upload = BigInteger.ZERO, download = BigInteger.ZERO;
         for (var row : rows) {
             TrafficCategory category;
-            try { category = TrafficCategory.valueOf(row.get("category").toString()); }
-            catch (IllegalArgumentException e) { category = TrafficCategory.UNKNOWN; }
+            try {
+                category = TrafficCategory.valueOf(row.get("category").toString());
+            } catch (IllegalArgumentException e) {
+                category = TrafficCategory.UNKNOWN;
+            }
             BigInteger up = new BigInteger(row.get("upload").toString());
             BigInteger down = new BigInteger(row.get("download").toString());
             var previous = categories.get(category);

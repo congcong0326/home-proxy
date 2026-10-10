@@ -27,17 +27,34 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Real socket probes verify timings at protocol boundaries without external services or Xray. */
 class OutboundTimingTest {
     @Test
-    void directIpHasTcpButNoDnsOrProxyHandshake() throws Exception { probe("direct", "127.0.0.1", false); }
+    void directIpHasTcpButNoDnsOrProxyHandshake() throws Exception {
+        probe("direct", "127.0.0.1", false);
+    }
+
     @Test
-    void directHostnameSeparatesSystemDnsFromTcp() throws Exception { probe("direct", "localhost", false); }
+    void directHostnameSeparatesSystemDnsFromTcp() throws Exception {
+        probe("direct", "localhost", false);
+    }
+
     @Test
-    void httpConnectMeasuresUntilUpstreamAcknowledges() throws Exception { probe("http", "localhost", false); }
+    void httpConnectMeasuresUntilUpstreamAcknowledges() throws Exception {
+        probe("http", "localhost", false);
+    }
+
     @Test
-    void socks5MeasuresNegotiationAndConnectResponse() throws Exception { probe("socks", "127.0.0.1", false); }
+    void socks5MeasuresNegotiationAndConnectResponse() throws Exception {
+        probe("socks", "127.0.0.1", false);
+    }
+
     @Test
-    void upstreamRejectionRetainsHandshakeDuration() throws Exception { probe("http", "127.0.0.1", true); }
+    void upstreamRejectionRetainsHandshakeDuration() throws Exception {
+        probe("http", "127.0.0.1", true);
+    }
+
     @Test
-    void shadowsocksMeasuresLocalSendWithoutClaimingRemoteAcknowledgement() throws Exception { probe("ss", "127.0.0.1", false); }
+    void shadowsocksMeasuresLocalSendWithoutClaimingRemoteAcknowledgement() throws Exception {
+        probe("ss", "127.0.0.1", false);
+    }
 
     private void probe(String kind, String host, boolean reject) throws Exception {
         String previous = System.getProperty("proxyworker.netty.epoll.enabled");
@@ -47,35 +64,53 @@ class OutboundTimingTest {
         Channel outbound = null;
         CompletableFuture<Void> served = new CompletableFuture<>();
         try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getByName("127.0.0.1"))) {
-            Thread fixture = new Thread(() -> {
-                try (Socket socket = server.accept()) {
-                    socket.setSoTimeout(5000);
-                    InputStream input = socket.getInputStream();
-                    OutputStream output = socket.getOutputStream();
-                    if (kind.equals("http")) {
-                        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-                        while (!bytes.toString(StandardCharsets.US_ASCII).endsWith("\r\n\r\n")) {
-                            int value = input.read();
-                            if (value < 0) throw new EOFException();
-                            bytes.write(value);
-                        }
-                        output.write((reject ? "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n" : "HTTP/1.1 200 Connection Established\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
-                        output.flush();
-                    } else if (kind.equals("socks")) {
-                        byte[] greeting = input.readNBytes(2);
-                        input.readNBytes(greeting[1] & 255);
-                        output.write(new byte[]{5, 0}); output.flush();
-                        byte[] command = input.readNBytes(4);
-                        int count = switch (command[3]) { case 1 -> 4; case 4 -> 16; default -> input.read(); };
-                        input.readNBytes(count + 2);
-                        output.write(new byte[]{5, 0, 0, 1, 127, 0, 0, 1, 0, 80}); output.flush();
-                    }
-                    // Wait for the test to close its outbound socket.
-                    while (input.read() >= 0) { }
-                    served.complete(null);
-                } catch (Throwable failure) { served.completeExceptionally(failure); }
-            }, "timing-protocol-fixture");
-            fixture.setDaemon(true); fixture.start();
+            Thread fixture =
+                    new Thread(
+                            () -> {
+                                try (Socket socket = server.accept()) {
+                                    socket.setSoTimeout(5000);
+                                    InputStream input = socket.getInputStream();
+                                    OutputStream output = socket.getOutputStream();
+                                    if (kind.equals("http")) {
+                                        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+                                        while (!bytes.toString(StandardCharsets.US_ASCII)
+                                                .endsWith("\r\n\r\n")) {
+                                            int value = input.read();
+                                            if (value < 0) throw new EOFException();
+                                            bytes.write(value);
+                                        }
+                                        output.write(
+                                                (reject
+                                                                ? "HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n"
+                                                                : "HTTP/1.1 200 Connection Established\r\n\r\n")
+                                                        .getBytes(StandardCharsets.US_ASCII));
+                                        output.flush();
+                                    } else if (kind.equals("socks")) {
+                                        byte[] greeting = input.readNBytes(2);
+                                        input.readNBytes(greeting[1] & 255);
+                                        output.write(new byte[] {5, 0});
+                                        output.flush();
+                                        byte[] command = input.readNBytes(4);
+                                        int count =
+                                                switch (command[3]) {
+                                                    case 1 -> 4;
+                                                    case 4 -> 16;
+                                                    default -> input.read();
+                                                };
+                                        input.readNBytes(count + 2);
+                                        output.write(new byte[] {5, 0, 0, 1, 127, 0, 0, 1, 0, 80});
+                                        output.flush();
+                                    }
+                                    // Wait for the test to close its outbound socket.
+                                    while (input.read() >= 0) {}
+                                    served.complete(null);
+                                } catch (Throwable failure) {
+                                    served.completeExceptionally(failure);
+                                }
+                            },
+                            "timing-protocol-fixture");
+            fixture.setDaemon(true);
+            fixture.start();
             inbound = new Bootstrap().group(group).channel(NioSocketChannel.class)
                     .handler(new ChannelInboundHandlerAdapter()).register().sync().channel();
             Channel owner = inbound;
@@ -95,7 +130,8 @@ class OutboundTimingTest {
                 default -> new DirectOutboundConnector();
             };
             ProxyTunnelRequest request = new ProxyTunnelRequest(ProtocolType.SOCKS5, "example.test", 80, null, new InboundConfig(), null);
-            request.setRouteConfig(route); request.setDnsInboundConfig(null);
+            request.setRouteConfig(route);
+            request.setDnsInboundConfig(null);
             var relay = owner.eventLoop().<Channel>newPromise();
             var connection = owner.eventLoop().submit(() -> {
                 TelemetryHooks.beginConnect(owner);
@@ -120,7 +156,8 @@ class OutboundTimingTest {
                 assertEquals(reject ? "FAILED" : kind.equals("ss") ? "LOCAL_REQUEST_SENT" : "SUCCESS", state.summary().getProxyHandshakeOutcome());
             }
             assertEquals(reject ? ConnectOutcome.FAILED : ConnectOutcome.CONNECTED, state.summary().getConnectOutcome());
-            outbound.close().sync(); outbound = null;
+            outbound.close().sync();
+            outbound = null;
             served.get(5, TimeUnit.SECONDS);
         } finally {
             if (outbound != null) outbound.close().syncUninterruptibly();

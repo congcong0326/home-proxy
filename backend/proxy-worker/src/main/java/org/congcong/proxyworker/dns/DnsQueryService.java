@@ -37,7 +37,9 @@ public final class DnsQueryService {
 
     private DnsQueryService() {}
 
-    public static DnsQueryService getInstance() { return INSTANCE; }
+    public static DnsQueryService getInstance() {
+        return INSTANCE;
+    }
 
     public CompletableFuture<DnsResult> query(String domain, DnsRecordType type, QueryMode mode,
                                               DnsQueryContext context, EventLoop loop) {
@@ -112,15 +114,41 @@ public final class DnsQueryService {
         return subscriber;
     }
 
-    public long cacheHits() { return cacheHits.sum(); }
-    public long upstreamQueries() { return upstreamQueries.sum(); }
-    public long upstreamFailures() { return upstreamFailures.sum(); }
-    public Map<Long, Long> queriesByRoute() { return snapshot(queriesByRoute); }
-    public Map<Long, Long> cacheHitsByRoute() { return snapshot(cacheHitsByRoute); }
-    public Map<Long, Long> timeoutsByRoute() { return upstream.timeoutsByRoute(); }
-    public Map<Long, Long> truncationsByRoute() { return upstream.truncationsByRoute(); }
-    CompletableFuture<Integer> pendingCount(EventLoop loop) { return upstream.pendingCount(loop); }
-    int inFlightCount() { return inFlight.size(); }
+    public long cacheHits() {
+        return cacheHits.sum();
+    }
+
+    public long upstreamQueries() {
+        return upstreamQueries.sum();
+    }
+
+    public long upstreamFailures() {
+        return upstreamFailures.sum();
+    }
+
+    public Map<Long, Long> queriesByRoute() {
+        return snapshot(queriesByRoute);
+    }
+
+    public Map<Long, Long> cacheHitsByRoute() {
+        return snapshot(cacheHitsByRoute);
+    }
+
+    public Map<Long, Long> timeoutsByRoute() {
+        return upstream.timeoutsByRoute();
+    }
+
+    public Map<Long, Long> truncationsByRoute() {
+        return upstream.truncationsByRoute();
+    }
+
+    CompletableFuture<Integer> pendingCount(EventLoop loop) {
+        return upstream.pendingCount(loop);
+    }
+
+    int inFlightCount() {
+        return inFlight.size();
+    }
 
     private static void increment(ConcurrentMap<Long, LongAdder> counters, Long routeId) {
         counters.computeIfAbsent(routeId == null ? -1L : routeId, ignored -> new LongAdder()).increment();
@@ -214,7 +242,9 @@ public final class DnsQueryService {
         private final AtomicInteger subscribers = new AtomicInteger();
         private volatile CompletableFuture<DnsResult> upstream;
 
-        private Flight(Key key) { this.key = key; }
+        private Flight(Key key) {
+            this.key = key;
+        }
 
         private synchronized CompletableFuture<DnsResult> subscribe() {
             if (result.isCancelled()) return null;

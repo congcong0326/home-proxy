@@ -36,8 +36,12 @@ public class CredentialDistributionService {
     public Distribution aggregate(DistributionQuery request) {
         // Reuse the existing bounds and source-filter validation without allowing connection metrics here.
         var validation = new DistributionQuery();
-        validation.setWorkerId(request.getWorkerId()); validation.setFrom(request.getFrom()); validation.setTo(request.getTo());
-        validation.setLimit(request.getLimit()); validation.setUsername(request.getUsername()); validation.setClientIp(request.getClientIp());
+        validation.setWorkerId(request.getWorkerId());
+        validation.setFrom(request.getFrom());
+        validation.setTo(request.getTo());
+        validation.setLimit(request.getLimit());
+        validation.setUsername(request.getUsername());
+        validation.setClientIp(request.getClientIp());
         DistributionService.validate(validation);
         if (!"auth_geo".equals(request.getDimension()) || !"authentications".equals(request.getMetric())
                 || !List.of("ALL", "SUCCESS", "FAILURE").contains(request.getAuthOutcome())) {
@@ -51,7 +55,8 @@ public class CredentialDistributionService {
             params.addAll(Collections.nCopies(3, request.getUsername()));
         }
         if (request.getClientIp() != null && !request.getClientIp().isBlank()) {
-            where.append(" AND client_ip = ?"); params.add(request.getClientIp());
+            where.append(" AND client_ip = ?");
+            params.add(request.getClientIp());
         }
         if ("SUCCESS".equals(request.getAuthOutcome())) where.append(" AND auth_outcome = 'SUCCESS'");
         if ("FAILURE".equals(request.getAuthOutcome())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
@@ -64,7 +69,8 @@ public class CredentialDistributionService {
         Group totals = new Group();
         for (var row : rows) {
             String ip = Objects.toString(row.get("ip"), "");
-            var fact = new CredentialAuthLogV1(); fact.setClientIp(ip);
+            var fact = new CredentialAuthLogV1();
+            fact.setClientIp(ip);
             // Use the same lookup/cache as audit repair, including retry after an unavailable database.
             var analysis = geo.analyze(fact);
             String country = normalized(analysis.getSourceCountry());
@@ -79,7 +85,9 @@ public class CredentialDistributionService {
             BigInteger success = new BigInteger(row.get("success").toString());
             BigInteger failure = new BigInteger(row.get("failure").toString());
             for (Group target : List.of(group, totals)) {
-                target.attempts = target.attempts.add(count); target.success = target.success.add(success); target.failure = target.failure.add(failure);
+                target.attempts = target.attempts.add(count);
+                target.success = target.success.add(success);
+                target.failure = target.failure.add(failure);
             }
             group.sources.add(new Source(ip, new Counts(count.toString(), success.toString(), failure.toString(), count.subtract(success).subtract(failure).toString())));
             if (unknown && !privateIp) group.reasons.merge(Objects.toString(analysis.getGeoLookupStatus(), "UNKNOWN"), count, BigInteger::add);
@@ -91,7 +99,8 @@ public class CredentialDistributionService {
         BigInteger top = BigInteger.ZERO;
         for (var entry : sorted.subList(0, Math.min(request.getLimit(), sorted.size()))) {
             var group = entry.getValue();
-            Map<String, String> reasons = new TreeMap<>(); group.reasons.forEach((key, value) -> reasons.put(key, value.toString()));
+            Map<String, String> reasons = new TreeMap<>();
+            group.reasons.forEach((key, value) -> reasons.put(key, value.toString()));
             items.add(new Item(entry.getKey(), group.attempts.toString(), group.counts(), reasons, group.sources));
             top = top.add(group.attempts);
         }
@@ -100,5 +109,7 @@ public class CredentialDistributionService {
                 "AUTH_ATTEMPTS_ONLY", "[from,to)");
     }
 
-    static String normalized(String value) { return value == null ? "" : value.strip(); }
+    static String normalized(String value) {
+        return value == null ? "" : value.strip();
+    }
 }

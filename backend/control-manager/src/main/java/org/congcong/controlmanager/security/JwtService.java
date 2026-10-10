@@ -15,9 +15,14 @@ import java.util.UUID;
 @Service
 public class JwtService {
     private final AdminAuthProperties props;
-    private Algorithm algorithm() { return Algorithm.HMAC256(props.getJwt().getSecret()); }
 
-    public JwtService(AdminAuthProperties props) { this.props = props; }
+    private Algorithm algorithm() {
+        return Algorithm.HMAC256(props.getJwt().getSecret());
+    }
+
+    public JwtService(AdminAuthProperties props) {
+        this.props = props;
+    }
 
     public String issue(AdminUser user) {
         Instant now = Instant.now();

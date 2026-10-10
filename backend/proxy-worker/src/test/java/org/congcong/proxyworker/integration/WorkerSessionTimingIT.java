@@ -18,9 +18,20 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Run with -Dobservability.enabled=true to verify the actual accept/protocol/router/relay chain. */
 @org.junit.jupiter.api.condition.EnabledIfSystemProperty(named = "observability.enabled", matches = "true")
 class WorkerSessionTimingIT {
-    @Test void socks5CollectsHandshakeRoutingDnsTcpAndRelayTimes() throws Exception { verify(false, false); }
-    @Test void httpConnectCollectsHandshakeRoutingDnsTcpAndRelayTimes() throws Exception { verify(true, false); }
-    @Test void authenticationFailureMeasuresHandshakeWithoutInventingOutboundStages() throws Exception { verify(true, true); }
+    @Test
+    void socks5CollectsHandshakeRoutingDnsTcpAndRelayTimes() throws Exception {
+        verify(false, false);
+    }
+
+    @Test
+    void httpConnectCollectsHandshakeRoutingDnsTcpAndRelayTimes() throws Exception {
+        verify(true, false);
+    }
+
+    @Test
+    void authenticationFailureMeasuresHandshakeWithoutInventingOutboundStages() throws Exception {
+        verify(true, true);
+    }
 
     private void verify(boolean http, boolean invalidCredentials) throws Exception {
         String previous = System.getProperty("proxyworker.netty.epoll.enabled");
@@ -32,15 +43,22 @@ class WorkerSessionTimingIT {
             var route = ProxyWorkerIntegrationFixtures.destinationOverrideRoute("localhost", echo.port());
             var inbound = http ? ProxyWorkerIntegrationFixtures.httpInbound(0, List.of(), route)
                     : ProxyWorkerIntegrationFixtures.socksInbound(0, List.of(), route);
-            ChannelHandler initializer = http ? new HttpServerInitializer(inbound) {
-                @Override protected void pipeLineContextInit(Channel ch) {
-                    super.pipeLineContextInit(ch); capture(ch, summary);
-                }
-            } : new SocksServerInitializer(inbound) {
-                @Override protected void pipeLineContextInit(Channel ch) {
-                    super.pipeLineContextInit(ch); capture(ch, summary);
-                }
-            };
+            ChannelHandler initializer =
+                    http
+                            ? new HttpServerInitializer(inbound) {
+                                @Override
+                                protected void pipeLineContextInit(Channel ch) {
+                                    super.pipeLineContextInit(ch);
+                                    capture(ch, summary);
+                                }
+                            }
+                            : new SocksServerInitializer(inbound) {
+                                @Override
+                                protected void pipeLineContextInit(Channel ch) {
+                                    super.pipeLineContextInit(ch);
+                                    capture(ch, summary);
+                                }
+                            };
             server = new ServerBootstrap().group(group).channel(NioServerSocketChannel.class)
                     .childHandler(initializer).bind("127.0.0.1", 0).sync().channel();
             int port = ((java.net.InetSocketAddress) server.localAddress()).getPort();

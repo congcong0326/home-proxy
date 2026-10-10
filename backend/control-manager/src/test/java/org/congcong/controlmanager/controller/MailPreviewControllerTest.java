@@ -17,10 +17,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class MailPreviewControllerTest {
     @Test
     void previewBuildsTheInspectionWithoutSendingOrRequiringARecipient() throws Exception {
-        var sender = mock(MailSendService.class); var factory = mock(MailBizHandlerFactory.class);
+        var sender = mock(MailSendService.class);
+        var factory = mock(MailBizHandlerFactory.class);
         var handler = mock(MailBizHandler.class);
-        var request = new MailSendRequest(); request.setBizKey("ops.inspection"); request.setSubject("巡检");
-        request.setContentType("text/html"); request.setContent("<p>巡检内容</p>"); request.setPlainTextContent("巡检内容");
+        var request = new MailSendRequest();
+        request.setBizKey("ops.inspection");
+        request.setSubject("巡检");
+        request.setContentType("text/html");
+        request.setContent("<p>巡检内容</p>");
+        request.setPlainTextContent("巡检内容");
         when(factory.getHandler("ops.inspection")).thenReturn(handler);
         when(handler.build(any(MailBizTypeRequest.class))).thenReturn(request);
         var mvc = MockMvcBuilders.standaloneSetup(new InternalMailController(sender, factory)).build();

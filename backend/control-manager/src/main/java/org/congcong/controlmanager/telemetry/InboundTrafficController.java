@@ -19,8 +19,9 @@ public class InboundTrafficController {
     public InboundTrafficService.MonthlyTraffic monthly(@PathVariable long inboundId,
             @RequestParam String workerId, @RequestParam(required = false) String month,
             @RequestParam(defaultValue = "Asia/Shanghai") String timeZone) {
-        try { return service.monthly(inboundId, workerId, month, timeZone); }
-        catch (IllegalArgumentException | DateTimeException e) {
+        try {
+            return service.monthly(inboundId, workerId, month, timeZone);
+        } catch (IllegalArgumentException | DateTimeException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "入站、节点、月份或时区无效");
         } catch (RuntimeException e) {
             log.warn("Inbound monthly traffic unavailable: {}", e.toString());

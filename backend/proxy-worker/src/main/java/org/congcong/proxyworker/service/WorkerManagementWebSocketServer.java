@@ -196,8 +196,11 @@ public final class WorkerManagementWebSocketServer {
     }
 
     private void safeSendTelemetry() {
-        try { sendTelemetry(); }
-        catch (Exception error) { log.warn("独立 telemetry 发送失败，保留内存批次等待重试: {}", error.toString()); }
+        try {
+            sendTelemetry();
+        } catch (Exception error) {
+            log.warn("独立 telemetry 发送失败，保留内存批次等待重试: {}", error.toString());
+        }
     }
 
     private void sendTelemetry() throws Exception {

@@ -49,7 +49,9 @@ class TelemetryBufferClickHouseIT {
                 var sessions = store.query(TelemetrySchema.SESSIONS, worker, Instant.now().minusSeconds(60), Instant.now(), 100, 0, null);
                 assertEquals("9007199254740993", sessions.get(0).get("uploadBytes"));
                 store.stop();
-            } finally { geo.close(); }
+            } finally {
+                geo.close();
+            }
         }
     }
 
@@ -69,21 +71,30 @@ class TelemetryBufferClickHouseIT {
     private SessionLogV1 session() {
         var record = base(new SessionLogV1());
         record.setConnectionId(record.getRecordId());
-        record.setStartedAt(record.getOccurredAt().minusSeconds(1)); record.setEndedAt(record.getOccurredAt());
-        record.setConnectOutcome(ConnectOutcome.NOT_ATTEMPTED); record.setSessionOutcome(SessionOutcome.CANCELLED);
-        record.setUploadBytes(9007199254740993L); record.setDownloadBytes(0L);
+        record.setStartedAt(record.getOccurredAt().minusSeconds(1));
+        record.setEndedAt(record.getOccurredAt());
+        record.setConnectOutcome(ConnectOutcome.NOT_ATTEMPTED);
+        record.setSessionOutcome(SessionOutcome.CANCELLED);
+        record.setUploadBytes(9007199254740993L);
+        record.setDownloadBytes(0L);
         return record;
     }
 
     private DnsQueryLogV1 dns() {
-        var record = base(new DnsQueryLogV1()); record.setQueryId(record.getRecordId()); return record;
+        var record = base(new DnsQueryLogV1());
+        record.setQueryId(record.getRecordId());
+        return record;
     }
 
     private ProxyEventLogV1 event() {
-        var record = base(new ProxyEventLogV1()); record.setEventId(record.getRecordId()); return record;
+        var record = base(new ProxyEventLogV1());
+        record.setEventId(record.getRecordId());
+        return record;
     }
 
     private CredentialAuthLogV1 auth() {
-        var record = base(new CredentialAuthLogV1()); record.setAuthAttemptId(record.getRecordId()); return record;
+        var record = base(new CredentialAuthLogV1());
+        record.setAuthAttemptId(record.getRecordId());
+        return record;
     }
 }

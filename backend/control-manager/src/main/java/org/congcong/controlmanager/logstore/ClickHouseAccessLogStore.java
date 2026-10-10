@@ -66,8 +66,14 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     public long sumBytes(LocalDateTime from, LocalDateTime to) {
         StringBuilder sb = new StringBuilder("SELECT sum(bytes_in + bytes_out) AS total_bytes FROM default.access_log WHERE 1=1");
         List<Object> params = new ArrayList<>();
-        if (from != null) { sb.append(" AND ts >= ?"); params.add(toTimestamp(from)); }
-        if (to != null) { sb.append(" AND ts <= ?"); params.add(toTimestamp(to)); }
+        if (from != null) {
+            sb.append(" AND ts >= ?");
+            params.add(toTimestamp(from));
+        }
+        if (to != null) {
+            sb.append(" AND ts <= ?");
+            params.add(toTimestamp(to));
+        }
         List<Map<String,Object>> rows = client.query(sb.toString(), params.toArray());
         if (rows.isEmpty()) return 0L;
         Long v = toLong(rows.get(0).get("total_bytes"));
@@ -237,9 +243,18 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
             sb.append("count() AS v ");
         }
         sb.append("FROM default.access_log WHERE 1=1 ");
-        if (fromTs != null) { sb.append(" AND ts >= ?"); params.add(toTimestamp(fromTs)); }
-        if (toTs != null) { sb.append(" AND ts <= ?"); params.add(toTimestamp(toTs)); }
-        if (userId != null) { sb.append(" AND user_id = ?"); params.add(userId); }
+        if (fromTs != null) {
+            sb.append(" AND ts >= ?");
+            params.add(toTimestamp(fromTs));
+        }
+        if (toTs != null) {
+            sb.append(" AND ts <= ?");
+            params.add(toTimestamp(toTs));
+        }
+        if (userId != null) {
+            sb.append(" AND user_id = ?");
+            params.add(userId);
+        }
         sb.append(" GROUP BY k ORDER BY v DESC LIMIT ?");
         params.add(limit <= 0 ? 10 : Math.min(limit, 100));
         List<Map<String,Object>> rows = client.query(sb.toString(), params.toArray());
@@ -251,36 +266,94 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     private void buildWhere(AccessLogQueryRequest req, StringBuilder sb, List<Object> params) {
-        if (notBlank(req.getWorkerId())) { sb.append(" AND worker_id = ?"); params.add(req.getWorkerId()); }
+        if (notBlank(req.getWorkerId())) {
+            sb.append(" AND worker_id = ?");
+            params.add(req.getWorkerId());
+        }
         LocalDateTime from = parseDate(req.getFrom());
         LocalDateTime to = parseDate(req.getTo());
-        if (from != null) { sb.append(" AND ts >= ?"); params.add(toTimestamp(from)); }
-        if (to != null) { sb.append(" AND ts <= ?"); params.add(toTimestamp(to)); }
-        if (req.getUserId() != null) { sb.append(" AND user_id = ?"); params.add(req.getUserId()); }
-        if (notBlank(req.getUsername())) { sb.append(" AND username = ?"); params.add(req.getUsername()); }
-        if (notBlank(req.getProxyName())) { sb.append(" AND proxy_name = ?"); params.add(req.getProxyName()); }
-        if (req.getInboundId() != null) { sb.append(" AND inbound_id = ?"); params.add(req.getInboundId()); }
-        if (notBlank(req.getClientIp())) { sb.append(" AND client_ip = ?"); params.add(req.getClientIp()); }
-        if (req.getStatus() != null) { sb.append(" AND status = ?"); params.add(req.getStatus()); }
+        if (from != null) {
+            sb.append(" AND ts >= ?");
+            params.add(toTimestamp(from));
+        }
+        if (to != null) {
+            sb.append(" AND ts <= ?");
+            params.add(toTimestamp(to));
+        }
+        if (req.getUserId() != null) {
+            sb.append(" AND user_id = ?");
+            params.add(req.getUserId());
+        }
+        if (notBlank(req.getUsername())) {
+            sb.append(" AND username = ?");
+            params.add(req.getUsername());
+        }
+        if (notBlank(req.getProxyName())) {
+            sb.append(" AND proxy_name = ?");
+            params.add(req.getProxyName());
+        }
+        if (req.getInboundId() != null) {
+            sb.append(" AND inbound_id = ?");
+            params.add(req.getInboundId());
+        }
+        if (notBlank(req.getClientIp())) {
+            sb.append(" AND client_ip = ?");
+            params.add(req.getClientIp());
+        }
+        if (req.getStatus() != null) {
+            sb.append(" AND status = ?");
+            params.add(req.getStatus());
+        }
         if (notBlank(req.getProtocol())) {
             if ("inbound".equalsIgnoreCase(req.getProtocol())) sb.append(" AND inbound_protocol_type != ''");
             else if ("outbound".equalsIgnoreCase(req.getProtocol())) sb.append(" AND outbound_protocol_type != ''");
         }
         if (notBlank(req.getRoutePolicyName())) {
-            sb.append(" AND route_policy_name = ?"); params.add(req.getRoutePolicyName());
+            sb.append(" AND route_policy_name = ?");
+            params.add(req.getRoutePolicyName());
         }
-        if (req.getRoutePolicyId() != null) { sb.append(" AND route_policy_id = ?"); params.add(req.getRoutePolicyId()); }
-        if (notBlank(req.getSrcGeoCountry())) { sb.append(" AND src_geo_country = ?"); params.add(req.getSrcGeoCountry()); }
-        if (notBlank(req.getSrcGeoCity())) { sb.append(" AND src_geo_city = ?"); params.add(req.getSrcGeoCity()); }
-        if (notBlank(req.getDstGeoCountry())) { sb.append(" AND dst_geo_country = ?"); params.add(req.getDstGeoCountry()); }
-        if (notBlank(req.getDstGeoCity())) { sb.append(" AND dst_geo_city = ?"); params.add(req.getDstGeoCity()); }
-        if (notBlank(req.getHost())) { sb.append(" AND (original_target_host = ? OR rewrite_target_host = ?)"); params.add(req.getHost()); params.add(req.getHost()); }
-        if (notBlank(req.getOriginalTargetHost())) { sb.append(" AND original_target_host like ?"); params.add("%" + req.getOriginalTargetHost() + "%"); }
-        if (notBlank(req.getRewriteTargetHost())) { sb.append(" AND rewrite_target_host = ?"); params.add(req.getRewriteTargetHost()); }
+        if (req.getRoutePolicyId() != null) {
+            sb.append(" AND route_policy_id = ?");
+            params.add(req.getRoutePolicyId());
+        }
+        if (notBlank(req.getSrcGeoCountry())) {
+            sb.append(" AND src_geo_country = ?");
+            params.add(req.getSrcGeoCountry());
+        }
+        if (notBlank(req.getSrcGeoCity())) {
+            sb.append(" AND src_geo_city = ?");
+            params.add(req.getSrcGeoCity());
+        }
+        if (notBlank(req.getDstGeoCountry())) {
+            sb.append(" AND dst_geo_country = ?");
+            params.add(req.getDstGeoCountry());
+        }
+        if (notBlank(req.getDstGeoCity())) {
+            sb.append(" AND dst_geo_city = ?");
+            params.add(req.getDstGeoCity());
+        }
+        if (notBlank(req.getHost())) {
+            sb.append(" AND (original_target_host = ? OR rewrite_target_host = ?)");
+            params.add(req.getHost());
+            params.add(req.getHost());
+        }
+        if (notBlank(req.getOriginalTargetHost())) {
+            sb.append(" AND original_target_host like ?");
+            params.add("%" + req.getOriginalTargetHost() + "%");
+        }
+        if (notBlank(req.getRewriteTargetHost())) {
+            sb.append(" AND rewrite_target_host = ?");
+            params.add(req.getRewriteTargetHost());
+        }
         if (notBlank(req.getQ())) {
             sb.append(" AND (client_ip LIKE ? OR username LIKE ? OR proxy_name LIKE ? OR original_target_host LIKE ? OR rewrite_target_host LIKE ? OR error_msg LIKE ?)");
             String like = "%" + req.getQ().trim() + "%";
-            params.add(like); params.add(like); params.add(like); params.add(like); params.add(like); params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
+            params.add(like);
         }
     }
 
@@ -296,7 +369,9 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         return parts[0] + " DESC";
     }
 
-    private boolean notBlank(String s) { return s != null && !s.isBlank(); }
+    private boolean notBlank(String s) {
+        return s != null && !s.isBlank();
+    }
 
     private LocalDateTime parseDate(String s) {
         if (s == null || s.isBlank()) return null;
@@ -330,9 +405,17 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
         return displayTime == null ? LocalDateTime.now(AccessLogTimeZone.DISPLAY_ZONE) : displayTime;
     }
 
-    private String toStr(Object o) { return o == null ? null : String.valueOf(o); }
-    private Long toLong(Object o) { return o == null ? null : ((Number)o).longValue(); }
-    private Integer toInt(Object o) { return o == null ? null : ((Number)o).intValue(); }
+    private String toStr(Object o) {
+        return o == null ? null : String.valueOf(o);
+    }
+
+    private Long toLong(Object o) {
+        return o == null ? null : ((Number) o).longValue();
+    }
+
+    private Integer toInt(Object o) {
+        return o == null ? null : ((Number) o).intValue();
+    }
 
     @SuppressWarnings("unchecked")
     private List<String> toStringList(Object sqlArray) {

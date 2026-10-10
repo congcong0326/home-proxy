@@ -105,7 +105,10 @@ public class AuthLocationInspectionService {
 
     private List<Map<String, Object>> query(List<String> workers, Instant from, Instant to, ZoneId zone) {
         var params = new ArrayList<Object>();
-        params.add(zone.getId()); params.addAll(workers); params.add(Timestamp.from(from)); params.add(Timestamp.from(to));
+        params.add(zone.getId());
+        params.addAll(workers);
+        params.add(Timestamp.from(from));
+        params.add(Timestamp.from(to));
         return client.query("""
                 SELECT coalesce(toString(user_id), '') AS account_id,
                   coalesce(nullIf(verified_username, ''), nullIf(username, ''), '') AS account,
@@ -157,12 +160,23 @@ public class AuthLocationInspectionService {
                 : "城市变化（仅供参考）";
     }
 
-    private static String normalized(String value) { return value == null ? "" : value.strip(); }
+    private static String normalized(String value) {
+        return value == null ? "" : value.strip();
+    }
 
     record Location(String code, String country, String region, String city, String status, String version) {
-        boolean resolved() { return "RESOLVED".equals(status) && (!code.isBlank() || !country.isBlank()); }
-        String countryKey() { return code.isBlank() ? country : code; }
-        String regionKey() { return countryKey() + "/" + region; }
+        boolean resolved() {
+            return "RESOLVED".equals(status) && (!code.isBlank() || !country.isBlank());
+        }
+
+        String countryKey() {
+            return code.isBlank() ? country : code;
+        }
+
+        String regionKey() {
+            return countryKey() + "/" + region;
+        }
+
         String label() {
             if ("PRIVATE".equals(status)) return "内网来源";
             if (!resolved()) return "位置未知";
@@ -177,7 +191,11 @@ public class AuthLocationInspectionService {
         final Set<Location> history = new HashSet<>();
         final Set<String> days = new HashSet<>();
         final Map<Location, Occurrence> current = new LinkedHashMap<>();
-        Account(String name, boolean unknownIdentity) { this.name = name; this.unknownIdentity = unknownIdentity; }
+
+        Account(String name, boolean unknownIdentity) {
+            this.name = name;
+            this.unknownIdentity = unknownIdentity;
+        }
     }
 
     private static class Occurrence {

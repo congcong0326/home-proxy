@@ -33,8 +33,11 @@ public class InspectionProperties {
 
     @AssertTrue(message = "认证历史最小天数必须不大于基线窗口，并且巡检时区必须有效")
     public boolean isInspectionConfigurationValid() {
-        try { ZoneId.of(timeZone); }
-        catch (RuntimeException error) { return false; }
+        try {
+            ZoneId.of(timeZone);
+        } catch (RuntimeException error) {
+            return false;
+        }
         return authMinimumHistoryDays <= authBaselineDays;
     }
 }

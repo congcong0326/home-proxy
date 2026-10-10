@@ -16,15 +16,20 @@ class CredentialDistributionServiceTest {
 
     private DistributionQuery query() {
         var query = DistributionServiceTest.query();
-        query.setDimension("auth_geo"); query.setMetric("authentications");
+        query.setDimension("auth_geo");
+        query.setMetric("authentications");
         return query;
     }
     private Map<String, Object> row(String ip, String count, String success, String failure) {
         return Map.of("ip", ip, "attempts", count, "success", success, "failure", failure);
     }
     private CredentialAuthAnalysisV1 location(String country, String region, String city, String status) {
-        var value = new CredentialAuthAnalysisV1(); value.setSourceCountry(country); value.setSourceRegion(region);
-        value.setSourceCity(city); value.setGeoLookupStatus(status); return value;
+        var value = new CredentialAuthAnalysisV1();
+        value.setSourceCountry(country);
+        value.setSourceRegion(region);
+        value.setSourceCity(city);
+        value.setGeoLookupStatus(status);
+        return value;
     }
 
     @Test
@@ -42,10 +47,12 @@ class CredentialDistributionServiceTest {
                 default -> location(null, null, null, "DB_UNAVAILABLE");
             };
         });
-        var query = query(); query.setLimit(1);
+        var query = query();
+        query.setLimit(1);
         var result = service.aggregate(query);
         assertEquals("18446744073709551634", result.totalValue());
-        assertEquals("9", result.otherValue()); assertEquals("4", result.groups());
+        assertEquals("9", result.otherValue());
+        assertEquals("4", result.groups());
         assertEquals(List.of("中国", "", ""), result.items().get(0).keys());
         assertEquals("18446744073709551625", result.items().get(0).value());
         assertEquals("6", result.items().get(0).auth().success());
@@ -70,11 +77,17 @@ class CredentialDistributionServiceTest {
             assertEquals(List.of("alice'", "alice'", "alice'", "8.8.8.8"), params.subList(3, 7));
             return List.of();
         });
-        var query = query(); query.setAuthOutcome("FAILURE"); query.setUsername("alice'"); query.setClientIp("8.8.8.8");
+        var query = query();
+        query.setAuthOutcome("FAILURE");
+        query.setUsername("alice'");
+        query.setClientIp("8.8.8.8");
         var result = service.aggregate(query);
-        assertEquals("0", result.totalValue()); assertTrue(result.items().isEmpty());
-        query.setMetric("bytes"); assertThrows(IllegalArgumentException.class, () -> service.aggregate(query));
-        query.setMetric("authentications"); query.setAuthOutcome("FAILED");
+        assertEquals("0", result.totalValue());
+        assertTrue(result.items().isEmpty());
+        query.setMetric("bytes");
+        assertThrows(IllegalArgumentException.class, () -> service.aggregate(query));
+        query.setMetric("authentications");
+        query.setAuthOutcome("FAILED");
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(query));
     }
 }

@@ -45,7 +45,9 @@ public class CredentialGeoAnalysis {
                 return loaded;
             }
             log.warn("Authentication GeoIP database missing; configure GEOIP_MMDB_PATH or data/geoip/GeoLite2-City.mmdb");
-        } catch (Exception error) { log.warn("Authentication GeoIP database load failed", error); }
+        } catch (Exception error) {
+            log.warn("Authentication GeoIP database load failed", error);
+        }
         return null;
     }
 
@@ -94,7 +96,10 @@ public class CredentialGeoAnalysis {
             return result;
         }
         if (result.getSourceNetworkScope() != NetworkScope.EXTERNAL) return result;
-        if (reader == null) { result.setGeoLookupStatus("DB_UNAVAILABLE"); return result; }
+        if (reader == null) {
+            result.setGeoLookupStatus("DB_UNAVAILABLE");
+            return result;
+        }
         try {
             var response = reader.city(address);
             result.setSourceCountryCode(response.getCountry().getIsoCode());
@@ -104,11 +109,16 @@ public class CredentialGeoAnalysis {
             result.setSourceRegion(subdivision == null ? null : subdivision.getNames().getOrDefault("zh-CN", subdivision.getName()));
             result.setSourceCity(city == null ? null : city.getNames().getOrDefault("zh-CN", city.getName()));
             result.setGeoLookupStatus("RESOLVED");
-        } catch (AddressNotFoundException e) { result.setGeoLookupStatus("NOT_FOUND"); }
-        catch (Exception e) { result.setGeoLookupStatus("ERROR"); }
+        } catch (AddressNotFoundException e) {
+            result.setGeoLookupStatus("NOT_FOUND");
+        } catch (Exception e) {
+            result.setGeoLookupStatus("ERROR");
+        }
         return result;
     }
 
     @PreDestroy
-    synchronized void close() throws Exception { if (reader != null) reader.close(); }
+    synchronized void close() throws Exception {
+        if (reader != null) reader.close();
+    }
 }

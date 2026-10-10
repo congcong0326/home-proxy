@@ -9,8 +9,19 @@ public final class ProxySafetyCounters {
 
     private ProxySafetyCounters() {}
 
-    public static void rejectedPoolAddress() { POOL_ADDRESSES.increment(); }
-    public static void rejectedDestinationAddress() { DESTINATION_ADDRESSES.increment(); }
-    public static long rejectedPoolAddresses() { return POOL_ADDRESSES.sum(); }
-    public static long rejectedDestinationAddresses() { return DESTINATION_ADDRESSES.sum(); }
+    public static void rejectedPoolAddress() {
+        POOL_ADDRESSES.increment();
+    }
+
+    public static void rejectedDestinationAddress() {
+        DESTINATION_ADDRESSES.increment();
+    }
+
+    public static long rejectedPoolAddresses() {
+        return POOL_ADDRESSES.sum();
+    }
+
+    public static long rejectedDestinationAddresses() {
+        return DESTINATION_ADDRESSES.sum();
+    }
 }

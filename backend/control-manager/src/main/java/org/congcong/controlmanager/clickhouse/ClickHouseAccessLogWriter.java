@@ -164,7 +164,15 @@ public class ClickHouseAccessLogWriter {
         return Timestamp.from(instant);
     }
 
-    private long nullToZero(Long v) { return v == null ? 0L : v; }
-    private int nullToZero(Integer v) { return v == null ? 0 : v; }
-    private String nullToEmpty(String s) { return s == null ? "" : s; }
+    private long nullToZero(Long v) {
+        return v == null ? 0L : v;
+    }
+
+    private int nullToZero(Integer v) {
+        return v == null ? 0 : v;
+    }
+
+    private String nullToEmpty(String s) {
+        return s == null ? "" : s;
+    }
 }

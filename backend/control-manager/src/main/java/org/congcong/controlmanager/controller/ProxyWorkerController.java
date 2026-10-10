@@ -31,7 +31,9 @@ public class ProxyWorkerController {
     private final AggregateConfigCacheService aggregateConfigCacheService;
 
     @GetMapping
-    public List<ProxyWorkerDTO> list() { return proxyWorkerService.list(); }
+    public List<ProxyWorkerDTO> list() {
+        return proxyWorkerService.list();
+    }
 
     @PostMapping
     public ResponseEntity<WorkerTokenResponse> create(@Valid @RequestBody WorkerCreateRequest request) {
@@ -39,7 +41,9 @@ public class ProxyWorkerController {
     }
 
     @GetMapping("/{workerId}")
-    public ProxyWorkerDTO get(@PathVariable String workerId) { return proxyWorkerService.get(workerId); }
+    public ProxyWorkerDTO get(@PathVariable String workerId) {
+        return proxyWorkerService.get(workerId);
+    }
 
     @PutMapping("/{workerId}")
     public ProxyWorkerDTO update(@PathVariable String workerId, @Valid @RequestBody WorkerUpdateRequest request) {
@@ -53,7 +57,9 @@ public class ProxyWorkerController {
     }
 
     @PostMapping("/{workerId}/disable")
-    public ProxyWorkerDTO disable(@PathVariable String workerId) { return proxyWorkerService.disable(workerId); }
+    public ProxyWorkerDTO disable(@PathVariable String workerId) {
+        return proxyWorkerService.disable(workerId);
+    }
 
     @GetMapping("/{workerId}/status")
     public WorkerStatusSnapshot status(@PathVariable String workerId) {

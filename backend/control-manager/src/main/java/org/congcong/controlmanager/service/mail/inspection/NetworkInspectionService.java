@@ -177,7 +177,8 @@ public class NetworkInspectionService {
 
     private static Scope scope(List<String> workers, Instant from, Instant to) {
         var params = new ArrayList<Object>(workers);
-        params.add(Timestamp.from(from)); params.add(Timestamp.from(to));
+        params.add(Timestamp.from(from));
+        params.add(Timestamp.from(to));
         return new Scope(workerScope(workers) + " AND occurred_at >= ? AND occurred_at < ?", params);
     }
 

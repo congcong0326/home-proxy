@@ -20,8 +20,11 @@ class OverviewServiceTest {
     private final WorkerStatusRepository workers = mock(WorkerStatusRepository.class);
     private final OverviewService service = new OverviewService(client, store, workers);
     private OverviewQuery query() {
-        var q = new OverviewQuery(); q.setWorkerId("edge");
-        q.setFrom(Instant.parse("2026-10-09T00:00:00Z")); q.setTo(q.getFrom().plusSeconds(600)); return q;
+        var q = new OverviewQuery();
+        q.setWorkerId("edge");
+        q.setFrom(Instant.parse("2026-10-09T00:00:00Z"));
+        q.setTo(q.getFrom().plusSeconds(600));
+        return q;
     }
     @Test
     void aggregationUsesCompleteDeduplicatedFactsAndPreservesLargeCounters() {
@@ -32,7 +35,9 @@ class OverviewServiceTest {
                     "upload", "9007199254740993", "download", "7"));
             return List.of();
         });
-        var q = query(); q.setUsername("failed-account"); q.setClientIp("192.168.1.2");
+        var q = query();
+        q.setUsername("failed-account");
+        q.setClientIp("192.168.1.2");
         var result = service.overview(q);
         var traffic = (Map<?, ?>) result.get("traffic");
         assertEquals("9007199254741000", traffic.get("total"));
@@ -50,10 +55,13 @@ class OverviewServiceTest {
     }
     @Test
     void rejectsInvalidScopeBeforeQueryAndDoesNotSilentlyFallbackWhenDisabled() {
-        var q = query(); q.setTo(q.getFrom().plusSeconds(31 * 86400L + 1));
-        assertThrows(IllegalArgumentException.class, () -> service.overview(q)); verifyNoInteractions(client, store);
+        var q = query();
+        q.setTo(q.getFrom().plusSeconds(31 * 86400L + 1));
+        assertThrows(IllegalArgumentException.class, () -> service.overview(q));
+        verifyNoInteractions(client, store);
         doThrow(new IllegalStateException("QUERY_DISABLED")).when(store).requireQueryAvailable();
-        assertThrows(IllegalStateException.class, () -> service.overview(query())); verifyNoInteractions(client);
+        assertThrows(IllegalStateException.class, () -> service.overview(query()));
+        verifyNoInteractions(client);
     }
     @Test
     void currentCountsUseCategoryAndSourceButNeverFinalOutcome() throws Exception {
@@ -63,24 +71,38 @@ class OverviewServiceTest {
                 List.of(new EstablishedConnectionsV1.Group(TrafficCategory.EXTERNAL, "alice", "192.168.1.2", 1L, 3),
                         new EstablishedConnectionsV1.Group(TrafficCategory.EXTERNAL, "bob", "192.168.1.3", 1L, 2)), false));
         install(metrics);
-        var q = query(); assertEquals("5", service.live(q).get("count"));
-        q.setUsername("alice"); q.setTrafficResult("FAILURE");
+        var q = query();
+        assertEquals("5", service.live(q).get("count"));
+        q.setUsername("alice");
+        q.setTrafficResult("FAILURE");
         assertEquals("3", service.live(q).get("count"));
-        q.setClientIp("192.168.1.3"); assertEquals("0", service.live(q).get("count"));
+        q.setClientIp("192.168.1.3");
+        assertEquals("0", service.live(q).get("count"));
     }
     @Test
     void staleOrTruncatedMetricsNeverAppearAsZeroConnections() throws Exception {
         var metrics = new WorkerMetricsDTO();
-        metrics.setEstablishedConnectionsV1(new EstablishedConnectionsV1("instance", Instant.now().minusSeconds(60),
-                Map.of(), List.of(), false)); install(metrics);
+        metrics.setEstablishedConnectionsV1(
+                new EstablishedConnectionsV1(
+                        "instance", Instant.now().minusSeconds(60), Map.of(), List.of(), false));
+        install(metrics);
         assertEquals("STALE", service.live(query()).get("reason"));
-        metrics.setEstablishedConnectionsV1(new EstablishedConnectionsV1("instance", Instant.now(),
-                Map.of(TrafficCategory.EXTERNAL, 300L), List.of(), true)); install(metrics);
-        var q = query(); assertEquals("300", service.live(q).get("count"));
-        q.setUsername("alice"); assertEquals("GROUPS_TRUNCATED", service.live(q).get("reason"));
+        metrics.setEstablishedConnectionsV1(
+                new EstablishedConnectionsV1(
+                        "instance",
+                        Instant.now(),
+                        Map.of(TrafficCategory.EXTERNAL, 300L),
+                        List.of(),
+                        true));
+        install(metrics);
+        var q = query();
+        assertEquals("300", service.live(q).get("count"));
+        q.setUsername("alice");
+        assertEquals("GROUPS_TRUNCATED", service.live(q).get("reason"));
     }
     private void install(WorkerMetricsDTO metrics) throws Exception {
-        var status = new WorkerStatus(); status.setWorkerId("edge");
+        var status = new WorkerStatus();
+        status.setWorkerId("edge");
         status.setMetricsJson(new ObjectMapper().registerModule(new JavaTimeModule()).writeValueAsString(metrics));
         when(workers.findById("edge")).thenReturn(Optional.of(status));
     }

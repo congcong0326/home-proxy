@@ -52,7 +52,9 @@ public final class ControlPlaneHttpClientFactory {
         return INSTANCE.compareAndSet(null, created) ? created : INSTANCE.get();
     }
 
-    public HttpClient getHttpClient() { return httpClient; }
+    public HttpClient getHttpClient() {
+        return httpClient;
+    }
 
     public HttpRequest.Builder requestBuilder(URI uri) {
         HttpRequest.Builder builder = HttpRequest.newBuilder().uri(uri);

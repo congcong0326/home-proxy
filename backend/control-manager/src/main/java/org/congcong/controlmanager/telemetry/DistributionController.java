@@ -16,8 +16,11 @@ public class DistributionController {
 
     @GetMapping
     public Object distribution(@ModelAttribute DistributionQuery query) {
-        try { return "auth_geo".equals(query.getDimension()) ? credentials.aggregate(query) : service.aggregate(query); }
-        catch (IllegalArgumentException e) {
+        try {
+            return "auth_geo".equals(query.getDimension())
+                    ? credentials.aggregate(query)
+                    : service.aggregate(query);
+        } catch (IllegalArgumentException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (RuntimeException e) {
             log.warn("Distribution query unavailable: {}", e.toString());

@@ -85,9 +85,17 @@ public final class FakeIpRegistry {
         return address != null && isInPool(address);
     }
 
-    public long allocations() { return allocations.sum(); }
-    public long evictions() { return evictions.sum(); }
-    public long reverseMisses() { return reverseMisses.sum(); }
+    public long allocations() {
+        return allocations.sum();
+    }
+
+    public long evictions() {
+        return evictions.sum();
+    }
+
+    public long reverseMisses() {
+        return reverseMisses.sum();
+    }
 
     private static boolean isInPool(int address) {
         return Integer.compareUnsigned(address, POOL_START) >= 0

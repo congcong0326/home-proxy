@@ -38,8 +38,12 @@ class DistributionServiceTest {
             row.put("total_value", "18446744073709551660"); row.put("groups", "5"); row.put("missing_connections", "2");
             return List.of(row);
         });
-        var request = query(); request.setMetric("bytes"); request.setLimit(1);
-        request.setUsername("alice' OR 1=1 --"); request.setClientIp("192.168.1.2"); request.setConnectOutcome("CONNECTED");
+        var request = query();
+        request.setMetric("bytes");
+        request.setLimit(1);
+        request.setUsername("alice' OR 1=1 --");
+        request.setClientIp("192.168.1.2");
+        request.setConnectOutcome("CONNECTED");
         var result = service.aggregate(request);
         assertEquals("18446744073709551660", result.totals().bytes());
         assertEquals("18446744073709551640", result.items().get(0).counters().bytes());
@@ -60,22 +64,31 @@ class DistributionServiceTest {
     void emptyRangeHasNoFakeHistoryAndAllDimensionsAreBounded() {
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
         for (String dimension : List.of("users", "targets", "user_targets", "routes", "client_ips", "categories")) {
-            var request = query(); request.setDimension(dimension); request.setTrafficCategory("ALL");
+            var request = query();
+            request.setDimension(dimension);
+            request.setTrafficCategory("ALL");
             var result = service.aggregate(request);
-            assertEquals("0", result.totalValue()); assertEquals("0", result.otherValue());
-            assertEquals("0", result.totals().bytes()); assertNull(result.firstSessionAt()); assertTrue(result.items().isEmpty());
+            assertEquals("0", result.totalValue());
+            assertEquals("0", result.otherValue());
+            assertEquals("0", result.totals().bytes());
+            assertNull(result.firstSessionAt());
+            assertTrue(result.items().isEmpty());
         }
     }
 
     @Test
     void invalidInputsAndUnavailableSourceNeverQueryLegacyData() {
-        var request = query(); request.setDimension("users; DROP TABLE x");
+        var request = query();
+        request.setDimension("users; DROP TABLE x");
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(request));
-        request.setDimension("users"); request.setMetric("src_geo");
+        request.setDimension("users");
+        request.setMetric("src_geo");
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(request));
-        request.setMetric("connections"); request.setLimit(101);
+        request.setMetric("connections");
+        request.setLimit(101);
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(request));
-        request.setLimit(10); request.setTo(request.getFrom());
+        request.setLimit(10);
+        request.setTo(request.getFrom());
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(request));
         request.setTo(request.getFrom().plusSeconds(94 * 86400));
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(request));

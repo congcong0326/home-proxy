@@ -14,14 +14,20 @@ public final class EstablishedConnectionRegistry {
     private static final EstablishedConnectionRegistry INSTANCE = new EstablishedConnectionRegistry();
     private final ConcurrentHashMap<String, Key> connections = new ConcurrentHashMap<>();
     private record Key(TrafficCategory category, String username, String clientIp, Long inboundId) { }
-    public static EstablishedConnectionRegistry getInstance() { return INSTANCE; }
+
+    public static EstablishedConnectionRegistry getInstance() {
+        return INSTANCE;
+    }
 
     public void connected(SessionLogV1 record) {
         connections.putIfAbsent(record.getConnectionId(), new Key(
                 record.getTrafficCategory() == null ? TrafficCategory.UNKNOWN : record.getTrafficCategory(),
                 record.getUsername(), record.getClientIp(), record.getInboundId()));
     }
-    public void closed(String connectionId) { connections.remove(connectionId); }
+
+    public void closed(String connectionId) {
+        connections.remove(connectionId);
+    }
 
     public EstablishedConnectionsV1 snapshot(String instanceId) {
         var totals = new EnumMap<TrafficCategory, Long>(TrafficCategory.class);

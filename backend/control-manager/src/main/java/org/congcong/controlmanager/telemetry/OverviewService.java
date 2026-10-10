@@ -198,7 +198,9 @@ public class OverviewService {
                     .filter(e -> request.getTrafficCategory().equals("ALL") || e.getKey().name().equals(request.getTrafficCategory()))
                     .mapToLong(Map.Entry::getValue).sum();
             return Map.of("available", true, "count", Long.toString(count), "sampledAt", sample.sampledAt().toString());
-        } catch (Exception e) { return Map.of("available", false, "reason", "UNSUPPORTED"); }
+        } catch (Exception e) {
+            return Map.of("available", false, "reason", "UNSUPPORTED");
+        }
     }
 
     private String firstSession(OverviewQuery request) {
@@ -210,7 +212,8 @@ public class OverviewService {
     private Scope scope(OverviewQuery request, Instant from, Instant to, boolean category) {
         Scope scope = sourceScope(request);
         scope.where += " AND occurred_at >= ? AND occurred_at < ?";
-        scope.params.add(Timestamp.from(from)); scope.params.add(Timestamp.from(to));
+        scope.params.add(Timestamp.from(from));
+        scope.params.add(Timestamp.from(to));
         if (category) {
             scope.where += categoryFilter(request) + trafficResult(request);
             if (!request.getTrafficCategory().equals("ALL")) scope.params.add(request.getTrafficCategory());
@@ -222,13 +225,17 @@ public class OverviewService {
     }
     private Scope sourceScope(OverviewQuery request, boolean authentication) {
         Scope scope = new Scope("worker_id = ?", new ArrayList<>(List.of(request.getWorkerId())));
-        if (hasText(request.getClientIp())) { scope.where += " AND client_ip = ?"; scope.params.add(request.getClientIp()); }
+        if (hasText(request.getClientIp())) {
+            scope.where += " AND client_ip = ?";
+            scope.params.add(request.getClientIp());
+        }
         if (hasText(request.getUsername())) {
             // Failed authentication has no verified user: include its submitted account only in auth facts.
             scope.where += authentication ? " AND (username = ? OR attempted_username = ? OR verified_username = ?)" : " AND username = ?";
             scope.params.add(request.getUsername());
             if (authentication) {
-                scope.params.add(request.getUsername()); scope.params.add(request.getUsername());
+                scope.params.add(request.getUsername());
+                scope.params.add(request.getUsername());
             }
         }
         return scope;
@@ -246,7 +253,9 @@ public class OverviewService {
     private static List<Map<String, Object>> fill(OverviewQuery request, int bucket) {
         var points = new ArrayList<Map<String, Object>>();
         for (Instant time = request.getFrom(); time.isBefore(request.getTo()); time = time.plusSeconds(bucket)) {
-            var point = new LinkedHashMap<String, Object>(); point.put("ts", time.toString()); points.add(point);
+            var point = new LinkedHashMap<String, Object>();
+            point.put("ts", time.toString());
+            points.add(point);
         }
         return points;
     }
@@ -268,12 +277,26 @@ public class OverviewService {
         if (hasText(request.getClientIp()) && !com.google.common.net.InetAddresses.isInetAddress(request.getClientIp())) throw new IllegalArgumentException("来源 IP 格式不正确");
         if (hasText(request.getUsername()) && request.getUsername().length() > 128) throw new IllegalArgumentException("账号过长");
     }
-    private static boolean hasText(String value) { return value != null && !value.isBlank(); }
-    private static long micros(Instant time) { return time.getEpochSecond() * 1_000_000 + time.getNano() / 1000; }
-    private static String number(Object value) { return value == null ? "0" : value.toString(); }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static long micros(Instant time) {
+        return time.getEpochSecond() * 1_000_000 + time.getNano() / 1000;
+    }
+
+    private static String number(Object value) {
+        return value == null ? "0" : value.toString();
+    }
+
     private static final class Scope {
         private String where;
         private final List<Object> params;
-        private Scope(String where, List<Object> params) { this.where = where; this.params = params; }
+
+        private Scope(String where, List<Object> params) {
+            this.where = where;
+            this.params = params;
+        }
     }
 }

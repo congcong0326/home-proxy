@@ -21,6 +21,12 @@ public class TlsClientContextManager {
               throw new IllegalStateException("init client SslContext failed", e);
           }
       }
-      public static TlsClientContextManager getInstance() { return INSTANCE; }
-      public SslContext getClientContext() { return clientCtx; }
+
+    public static TlsClientContextManager getInstance() {
+        return INSTANCE;
+    }
+
+    public SslContext getClientContext() {
+        return clientCtx;
+    }
   }

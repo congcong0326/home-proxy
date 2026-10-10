@@ -60,10 +60,19 @@ public class WorkerManagementConnectionService {
     private final LogService logService;
     private final org.congcong.controlmanager.telemetry.TelemetryStore telemetryStore;
     private final org.congcong.controlmanager.telemetry.TelemetryProperties telemetryProperties;
-    private final java.util.concurrent.ThreadPoolExecutor telemetryExecutor = new java.util.concurrent.ThreadPoolExecutor(
-            1, 1, 0, TimeUnit.MILLISECONDS, new java.util.concurrent.ArrayBlockingQueue<>(128),
-            r -> { Thread t = new Thread(r, "telemetry-ingest"); t.setDaemon(true); return t; },
-            new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+    private final java.util.concurrent.ThreadPoolExecutor telemetryExecutor =
+            new java.util.concurrent.ThreadPoolExecutor(
+                    1,
+                    1,
+                    0,
+                    TimeUnit.MILLISECONDS,
+                    new java.util.concurrent.ArrayBlockingQueue<>(128),
+                    r -> {
+                        Thread t = new Thread(r, "telemetry-ingest");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
     private final ConcurrentHashMap<String, Connection> connections = new ConcurrentHashMap<>();
     private final Set<String> connecting = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -188,7 +197,9 @@ public class WorkerManagementConnectionService {
             message.setWorkerId(workerId);
             message.setTaskPayload(objectMapper.convertValue(payload, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>>() {}));
             connection.webSocket().sendText(objectMapper.writeValueAsString(message), true);
-        } catch (Exception e) { throw new IllegalStateException("发送 WOL 到 worker 失败", e); }
+        } catch (Exception e) {
+            throw new IllegalStateException("发送 WOL 到 worker 失败", e);
+        }
     }
 
     private void handleMessage(WorkerWebSocketListener listener, WebSocket socket, String json) {
@@ -212,23 +223,37 @@ public class WorkerManagementConnectionService {
                         || json.length() > telemetryProperties.getMaxBatchBytes() + 8192) return;
                 telemetryStore.observeWorker(expectedWorkerId, request.getTelemetryStatus());
                 try {
-                    telemetryExecutor.execute(() -> {
-                        org.congcong.common.telemetry.TelemetryAckV1 ack;
-                        try { ack = telemetryStore.ingest(expectedWorkerId, request.getTelemetryBatch()); }
-                        catch (Exception error) {
-                            log.warn("独立 telemetry ingest 失败, workerId={}, error={}", expectedWorkerId, error.toString());
-                            ack = new org.congcong.common.telemetry.TelemetryAckV1();
-                            ack.setBatchId(request.getTelemetryBatch().getBatchId());
-                            ack.setReasonCode(error instanceof IllegalArgumentException ? "INVALID_FACT" : "MANAGER_QUEUE_UNAVAILABLE");
-                        }
-                        try {
-                            WorkerManagementMessage response = new WorkerManagementMessage();
-                            response.setType(WorkerManagementMessageType.TELEMETRY_ACK);
-                            response.setWorkerId(expectedWorkerId);
-                            response.setTelemetryAck(ack);
-                            listener.send(socket, objectMapper.writeValueAsString(response));
-                        } catch (Exception error) { log.debug("Telemetry ACK unavailable; worker will replay"); }
-                    });
+                    telemetryExecutor.execute(
+                            () -> {
+                                org.congcong.common.telemetry.TelemetryAckV1 ack;
+                                try {
+                                    ack =
+                                            telemetryStore.ingest(
+                                                    expectedWorkerId, request.getTelemetryBatch());
+                                } catch (Exception error) {
+                                    log.warn(
+                                            "独立 telemetry ingest 失败, workerId={}, error={}",
+                                            expectedWorkerId,
+                                            error.toString());
+                                    ack = new org.congcong.common.telemetry.TelemetryAckV1();
+                                    ack.setBatchId(request.getTelemetryBatch().getBatchId());
+                                    ack.setReasonCode(
+                                            error instanceof IllegalArgumentException
+                                                    ? "INVALID_FACT"
+                                                    : "MANAGER_QUEUE_UNAVAILABLE");
+                                }
+                                try {
+                                    WorkerManagementMessage response =
+                                            new WorkerManagementMessage();
+                                    response.setType(WorkerManagementMessageType.TELEMETRY_ACK);
+                                    response.setWorkerId(expectedWorkerId);
+                                    response.setTelemetryAck(ack);
+                                    listener.send(
+                                            socket, objectMapper.writeValueAsString(response));
+                                } catch (Exception error) {
+                                    log.debug("Telemetry ACK unavailable; worker will replay");
+                                }
+                            });
                 } catch (java.util.concurrent.RejectedExecutionException full) {
                     log.warn("Telemetry ingest queue full; no ACK, worker will retry, workerId={}", expectedWorkerId);
                 }
@@ -301,15 +326,35 @@ public class WorkerManagementConnectionService {
             // present" even when endpoint identification is disabled. Using an
             // X509ExtendedTrustManager keeps all socket/engine trust decisions in
             // this deliberately trusted private management channel.
-            X509ExtendedTrustManager trustManager = new X509ExtendedTrustManager() {
-                @Override public void checkClientTrusted(X509Certificate[] chain, String authType) { }
-                @Override public void checkServerTrusted(X509Certificate[] chain, String authType) { }
-                @Override public void checkClientTrusted(X509Certificate[] chain, String authType, Socket socket) { }
-                @Override public void checkServerTrusted(X509Certificate[] chain, String authType, Socket socket) { }
-                @Override public void checkClientTrusted(X509Certificate[] chain, String authType, SSLEngine engine) { }
-                @Override public void checkServerTrusted(X509Certificate[] chain, String authType, SSLEngine engine) { }
-                @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-            };
+            X509ExtendedTrustManager trustManager =
+                    new X509ExtendedTrustManager() {
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+
+                        @Override
+                        public void checkClientTrusted(
+                                X509Certificate[] chain, String authType, Socket socket) {}
+
+                        @Override
+                        public void checkServerTrusted(
+                                X509Certificate[] chain, String authType, Socket socket) {}
+
+                        @Override
+                        public void checkClientTrusted(
+                                X509Certificate[] chain, String authType, SSLEngine engine) {}
+
+                        @Override
+                        public void checkServerTrusted(
+                                X509Certificate[] chain, String authType, SSLEngine engine) {}
+
+                        @Override
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return new X509Certificate[0];
+                        }
+                    };
             SSLContext sslContext = SSLContext.getInstance("TLS");
             sslContext.init(null, new javax.net.ssl.TrustManager[]{trustManager}, new SecureRandom());
             SSLParameters sslParameters = new SSLParameters();

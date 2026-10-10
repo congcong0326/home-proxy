@@ -20,7 +20,10 @@ class DiskInspectionServiceTest {
     private final Instant from = Instant.parse("2026-10-09T01:00:00Z"), to = Instant.parse("2026-10-10T01:00:00Z");
 
     private DiskMonitorSampleEntity sample(Instant at, String serial, long write, int temperature, int errors) {
-        var row = new DiskMonitorSampleEntity(); row.setHostId("nas"); row.setDevice("nvme0n1"); row.setSampledAt(at);
+        var row = new DiskMonitorSampleEntity();
+        row.setHostId("nas");
+        row.setDevice("nvme0n1");
+        row.setSampledAt(at);
         row.setDetailJson("{\"diskType\":\"NVME_SSD\",\"model\":\"Test SSD\"}");
         row.setRawSmartOutput("Serial Number: " + serial + "\nSMART overall-health self-assessment test result: PASSED\n"
                 + "Temperature: " + temperature + " Celsius\nPercentage Used: 0%\nCritical Warning: 0x00\n"
@@ -92,7 +95,9 @@ class DiskInspectionServiceTest {
         var history = new ArrayList<DiskMonitorSampleEntity>();
         for (int i = 0; i < 144; i++) {
             var row = new DiskMonitorSampleEntity();
-            row.setHostId("nas"); row.setDevice("sda"); row.setSampledAt(from.plusSeconds(i * 600L));
+            row.setHostId("nas");
+            row.setDevice("sda");
+            row.setSampledAt(from.plusSeconds(i * 600L));
             row.setDetailJson("{\"diskType\":\"HDD\",\"model\":\"Test HDD\"}");
             row.setRawSmartOutput("Serial Number: HDD-SN\nSMART overall-health self-assessment test result: PASSED\n"
                     + "194 Temperature_Celsius 0x0002 171 171 000 Old_age Always - " + (i == 50 ? 56 : 35)

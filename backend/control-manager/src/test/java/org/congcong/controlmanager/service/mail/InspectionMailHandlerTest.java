@@ -26,11 +26,14 @@ class InspectionMailHandlerTest {
         var factory = new MailBizHandlerFactory(List.of(handler));
         assertSame(handler, factory.getHandler("ops.inspection"));
         var sender = mock(MailSendService.class);
-        var task = new ScheduledTask(); task.setTaskKey("daily-inspection"); task.setBizKey("ops.inspection");
+        var task = new ScheduledTask();
+        task.setTaskKey("daily-inspection");
+        task.setBizKey("ops.inspection");
         task.setConfigJson("{\"bizKey\":\"ops.inspection\"}");
         var runnable = new MailScheduledTaskHandler(factory, sender, new ObjectMapper()).buildTask(task);
         verifyNoInteractions(reports);
-        runnable.run(); runnable.run();
+        runnable.run();
+        runnable.run();
         verify(reports, times(2)).build();
         verify(sender, times(2)).send(argThat(mail -> mail.getBizKey().equals("ops.inspection")
                 && mail.getSubject().contains("2026-10-10 09:00 +08:00")

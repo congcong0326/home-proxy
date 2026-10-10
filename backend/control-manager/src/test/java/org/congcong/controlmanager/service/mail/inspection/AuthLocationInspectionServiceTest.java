@@ -31,9 +31,14 @@ class AuthLocationInspectionServiceTest {
     }
 
     private CredentialAuthAnalysisV1 location(String country, String region, String city, String status) {
-        var value = new CredentialAuthAnalysisV1(); value.setSourceCountry(country); value.setSourceCountryCode("CN");
-        value.setSourceRegion(region); value.setSourceCity(city); value.setGeoLookupStatus(status);
-        value.setGeoDatabaseVersion("2026-10-01"); return value;
+        var value = new CredentialAuthAnalysisV1();
+        value.setSourceCountry(country);
+        value.setSourceCountryCode("CN");
+        value.setSourceRegion(region);
+        value.setSourceCity(city);
+        value.setGeoLookupStatus(status);
+        value.setGeoDatabaseVersion("2026-10-01");
+        return value;
     }
 
     @Test

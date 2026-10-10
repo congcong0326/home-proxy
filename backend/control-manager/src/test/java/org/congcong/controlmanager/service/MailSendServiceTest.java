@@ -14,14 +14,26 @@ import static org.mockito.Mockito.*;
 class MailSendServiceTest {
     @Test
     void sendsPlainAndHtmlAlternativesInTheSameInspectionMessage() throws Exception {
-        var targets = mock(MailTargetRepository.class); var gateways = mock(MailGatewayRepository.class);
+        var targets = mock(MailTargetRepository.class);
+        var gateways = mock(MailGatewayRepository.class);
         var logs = mock(MailSendLogRepository.class);
-        var target = new MailTarget(); target.setBizKey("ops.inspection"); target.setToList("reader@example.test");
-        var gateway = new MailGateway(); gateway.setId(1L); gateway.setHost("smtp.example.test"); gateway.setPort(587);
-        gateway.setUsername("sender@example.test"); gateway.setPassword("test-only"); gateway.setProtocol("smtp");
+        var target = new MailTarget();
+        target.setBizKey("ops.inspection");
+        target.setToList("reader@example.test");
+        var gateway = new MailGateway();
+        gateway.setId(1L);
+        gateway.setHost("smtp.example.test");
+        gateway.setPort(587);
+        gateway.setUsername("sender@example.test");
+        gateway.setPassword("test-only");
+        gateway.setProtocol("smtp");
         var service = new MailSendService(targets, gateways, logs);
-        var request = new MailSendRequest(); request.setBizKey("ops.inspection"); request.setSubject("巡检");
-        request.setContentType("text/html"); request.setContent("<p>完整巡检</p>"); request.setPlainTextContent("完整巡检");
+        var request = new MailSendRequest();
+        request.setBizKey("ops.inspection");
+        request.setSubject("巡检");
+        request.setContentType("text/html");
+        request.setContent("<p>完整巡检</p>");
+        request.setPlainTextContent("完整巡检");
         var message = service.buildMessage(new JavaMailSenderImpl(), gateway, target, request, "text/html");
         message.saveChanges();
         assertTrue(hasPart(message.getContent(), "text/plain", "完整巡检"));

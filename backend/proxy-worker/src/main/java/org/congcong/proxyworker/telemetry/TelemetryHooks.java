@@ -43,12 +43,23 @@ public final class TelemetryHooks {
         }
         channel.closeFuture().addListener(ignored -> channel.eventLoop().execute(state::close));
     }
-    public static SessionObservation state(Channel channel) { return channel == null ? null : channel.attr(CONTEXT).get(); }
+
+    public static SessionObservation state(Channel channel) {
+        return channel == null ? null : channel.attr(CONTEXT).get();
+    }
+
     private static void run(Channel channel, java.util.function.Consumer<SessionObservation> action) {
         SessionObservation state = state(channel);
         if (state == null) return;
-        Runnable safe = () -> { try { if (!state.isFinished()) action.accept(state); } catch (Exception ignored) { } };
-        if (channel.eventLoop().inEventLoop()) safe.run(); else channel.eventLoop().execute(safe);
+        Runnable safe =
+                () -> {
+                    try {
+                        if (!state.isFinished()) action.accept(state);
+                    } catch (Exception ignored) {
+                    }
+                };
+        if (channel.eventLoop().inEventLoop()) safe.run();
+        else channel.eventLoop().execute(safe);
     }
     public static void beginStage(Channel channel, SessionObservation.Stage stage) {
         long now = System.nanoTime();
@@ -62,10 +73,15 @@ public final class TelemetryHooks {
         endStage(channel, CLIENT_HANDSHAKE);
         endStage(channel, TARGET_RECOVERY);
     }
-    public static void relayStarted(Channel channel) { run(channel, SessionObservation::relayStarted); }
+
+    public static void relayStarted(Channel channel) {
+        run(channel, SessionObservation::relayStarted);
+    }
+
     public static void backpressure(Channel channel, boolean upload, boolean blocked) {
         var stage = upload ? UPLOAD_BACKPRESSURE : DOWNLOAD_BACKPRESSURE;
-        if (blocked) beginStage(channel, stage); else endStage(channel, stage);
+        if (blocked) beginStage(channel, stage);
+        else endStage(channel, stage);
     }
     /** Resolver observation excludes DNS from the socket connect timer and preserves address validation. */
     public static ChannelFuture connectTcp(Bootstrap bootstrap, Channel inbound, java.net.InetSocketAddress address) {
@@ -86,43 +102,80 @@ public final class TelemetryHooks {
         outbound.pipeline().addFirst(new OutboundTimingHandler(inbound, proxy, tls, readyOutcome));
     }
     public static void routing(Channel channel, ProxyTunnelRequest request, boolean fallback) {
-        run(channel, state -> {
-            SessionLogV1 record = state.summary();
-            var route = request.getRouteConfig();
-            var old = ChannelAttributes.getProxyContext(channel);
-            record.setOriginalDstIp(request.getOriginalTargetIp());
-            record.setOriginalDstPort(request.getOriginalTargetIp() == null ? null : request.getTargetPort());
-            record.setLogicalTargetHost(request.getTargetHost());
-            record.setLogicalTargetPort(request.getTargetPort());
-            record.setTargetSource(request.getLogicalTargetSource() == org.congcong.proxyworker.server.tunnel.LogicalTargetSource.FAKE_IP
-                    ? "FAKE_IP_MAPPING" : request.getLogicalTargetSource().name());
-            boolean override = route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE
-                    && (route.getOutboundProxyHost() != null || route.getOutboundProxyPort() != null);
-            record.setDestinationOverrideApplied(override);
-            record.setEffectiveTargetHost(override && route.getOutboundProxyHost() != null ? route.getOutboundProxyHost() : request.getTargetHost());
-            record.setEffectiveTargetPort(override && route.getOutboundProxyPort() != null ? route.getOutboundProxyPort() : request.getTargetPort());
-            record.setRouteId(route.getId()); record.setRouteName(route.getName());
-            record.setMatchedRuleId(request.getTelemetryMatchedRuleId());
-            record.setMatchedRuleSet(request.getTelemetryMatchedRuleSet());
-            record.setOutboundNodeId(route.getId() == null ? null : "route:" + route.getId());
-            record.setRouteAction(route.getPolicy().name());
-            record.setRouteSelection(fallback ? "DEFAULT" : "RULE_MATCH");
-            record.setOutboundMode(route.getPolicy().name());
-            record.setOutboundProtocol(route.getPolicy() == RoutePolicy.OUTBOUND_PROXY && route.getOutboundProxyType() != null
-                    ? route.getOutboundProxyType().name() : "TCP");
-            if (old != null) { record.setUserId(old.getUserId()); record.setUsername(old.getUserName()); }
-            if (record.getIdentitySource() != IdentitySource.ACCOUNT_AUTH) {
-                record.setIdentitySource(request.getUser() == null ? IdentitySource.UNKNOWN
-                        : request.getInboundConfig().getAnonymousUser() != null
-                        && request.getUser().getId().equals(request.getInboundConfig().getAnonymousUser().getId())
-                        ? IdentitySource.ANONYMOUS : IdentitySource.DEVICE_IP);
-            }
-            if (request.getLogicalTargetSource() != org.congcong.proxyworker.server.tunnel.LogicalTargetSource.INBOUND_REQUEST) {
-                state.event("TARGET_RECOVERY_RESULT", "TARGET_RECOVERY", "RECOVERED", null);
-            }
-        });
+        run(
+                channel,
+                state -> {
+                    SessionLogV1 record = state.summary();
+                    var route = request.getRouteConfig();
+                    var old = ChannelAttributes.getProxyContext(channel);
+                    record.setOriginalDstIp(request.getOriginalTargetIp());
+                    record.setOriginalDstPort(
+                            request.getOriginalTargetIp() == null ? null : request.getTargetPort());
+                    record.setLogicalTargetHost(request.getTargetHost());
+                    record.setLogicalTargetPort(request.getTargetPort());
+                    record.setTargetSource(
+                            request.getLogicalTargetSource()
+                                            == org.congcong.proxyworker.server.tunnel
+                                                    .LogicalTargetSource.FAKE_IP
+                                    ? "FAKE_IP_MAPPING"
+                                    : request.getLogicalTargetSource().name());
+                    boolean override =
+                            route.getPolicy() == RoutePolicy.DESTINATION_OVERRIDE
+                                    && (route.getOutboundProxyHost() != null
+                                            || route.getOutboundProxyPort() != null);
+                    record.setDestinationOverrideApplied(override);
+                    record.setEffectiveTargetHost(
+                            override && route.getOutboundProxyHost() != null
+                                    ? route.getOutboundProxyHost()
+                                    : request.getTargetHost());
+                    record.setEffectiveTargetPort(
+                            override && route.getOutboundProxyPort() != null
+                                    ? route.getOutboundProxyPort()
+                                    : request.getTargetPort());
+                    record.setRouteId(route.getId());
+                    record.setRouteName(route.getName());
+                    record.setMatchedRuleId(request.getTelemetryMatchedRuleId());
+                    record.setMatchedRuleSet(request.getTelemetryMatchedRuleSet());
+                    record.setOutboundNodeId(
+                            route.getId() == null ? null : "route:" + route.getId());
+                    record.setRouteAction(route.getPolicy().name());
+                    record.setRouteSelection(fallback ? "DEFAULT" : "RULE_MATCH");
+                    record.setOutboundMode(route.getPolicy().name());
+                    record.setOutboundProtocol(
+                            route.getPolicy() == RoutePolicy.OUTBOUND_PROXY
+                                            && route.getOutboundProxyType() != null
+                                    ? route.getOutboundProxyType().name()
+                                    : "TCP");
+                    if (old != null) {
+                        record.setUserId(old.getUserId());
+                        record.setUsername(old.getUserName());
+                    }
+                    if (record.getIdentitySource() != IdentitySource.ACCOUNT_AUTH) {
+                        record.setIdentitySource(
+                                request.getUser() == null
+                                        ? IdentitySource.UNKNOWN
+                                        : request.getInboundConfig().getAnonymousUser() != null
+                                                        && request.getUser()
+                                                                .getId()
+                                                                .equals(
+                                                                        request.getInboundConfig()
+                                                                                .getAnonymousUser()
+                                                                                .getId())
+                                                ? IdentitySource.ANONYMOUS
+                                                : IdentitySource.DEVICE_IP);
+                    }
+                    if (request.getLogicalTargetSource()
+                            != org.congcong.proxyworker.server.tunnel.LogicalTargetSource
+                                    .INBOUND_REQUEST) {
+                        state.event("TARGET_RECOVERY_RESULT", "TARGET_RECOVERY", "RECOVERED", null);
+                    }
+                });
     }
-    public static void beginConnect(Channel channel) { run(channel, SessionObservation::beginConnect); }
+
+    public static void beginConnect(Channel channel) {
+        run(channel, SessionObservation::beginConnect);
+    }
+
     public static void connected(Channel inbound, Channel outbound, ProxyTunnelRequest request) {
         run(inbound, state -> {
             var record = state.summary();
@@ -147,8 +200,15 @@ public final class TelemetryHooks {
             state.connectFailed("OUTBOUND_CONNECT", blocked ? "POLICY_BLOCKED" : "CONNECT_FAILED", blocked);
         });
     }
-    public static void error(Channel channel, String stage, String code) { run(channel, state -> state.error(stage, code)); }
-    public static void writeStarted(Channel channel) { run(channel, SessionObservation::writeStarted); }
+
+    public static void error(Channel channel, String stage, String code) {
+        run(channel, state -> state.error(stage, code));
+    }
+
+    public static void writeStarted(Channel channel) {
+        run(channel, SessionObservation::writeStarted);
+    }
+
     public static void writeCompleted(Channel channel, boolean upload, int bytes, boolean success) {
         run(channel, state -> state.writeCompleted(upload, bytes, success));
     }
