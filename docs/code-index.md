@@ -64,6 +64,7 @@
 - `server/factory/ProxyServerFactory`：按 `ProtocolType` 创建 SOCKS5、HTTP CONNECT、Shadowsocks、透明代理、DNS 服务器。
 - `server/ProxyServer`：Netty 服务启动/关闭模板，优先使用 epoll，透明代理依赖 `IP_TRANSPARENT`。
 - `protocol/*`：各协议解析器把入站请求归一成 `ProxyTunnelRequest`。
+- `protocol/http/HttpForwardHandler`：`HTTPS_CONNECT` 入站同时接收普通 HTTP；共用 `HttpServerHandler` 认证，解析绝对 URL 或 Host，流式重编码并移除代理凭据，按请求关闭连接；CONNECT 保留原有隧道路径。
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。

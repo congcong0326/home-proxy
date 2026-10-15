@@ -31,6 +31,7 @@
 | 领域 | 覆盖内容 | 测试类 |
 | --- | --- | --- |
 | 入站协议 | SOCKS5 入站、HTTP CONNECT 入站经 `DESTINATION_OVERRIDE` 转发到本地 HTTP echo；客户端环回 IP 被拒绝 | `WorkerDirectAndDnsIT` |
+| HTTP 正向代理 | 绝对 URL／Host 解析、代理认证、移除代理凭据与逐跳头、2 MiB 请求体／100-continue、chunked 请求体、流水线隔离、直连地址安全及阻断 | `WorkerHttpForwardIT` |
 | DNS 入站/出站 | DNS_SERVER 入站经 DNS_SERVER 出站转发到 fake UDP DNS upstream | `WorkerDirectAndDnsIT` |
 | 出站代理 | SOCKS5、HTTP CONNECT、Shadowsocks 出站连接到 xray 入站桩 | `WorkerOutboundProxyIT` |
 | VLESS REALITY 出站 | SOCKS5 入站经 VLESS + REALITY + `xtls-rprx-vision` 出站连接到本地 xray REALITY 服务端，并访问本地 HTTPS echo | `WorkerVlessRealityVisionIT` |
@@ -46,6 +47,7 @@
 | SOCKS5 over TLS 管线 | TLS handler 被意外跳过，或被插入到协议 handler 之后 | `SocksServerInitializerTest` | 已覆盖 |
 | SOCKS5 认证协商 | 客户端绕过认证，或收到错误的协商响应 | `SocksServerHandlerTest` | 已覆盖 |
 | SOCKS5 CONNECT 规范化 | 路由前丢失目标 host/port 或用户上下文 | `SocksServerHandlerTest` | 已覆盖 |
+| HTTP 正向代理与 CONNECT 共存 | 非 CONNECT 被错误拒绝、认证绕过、代理凭据泄露、路径／请求体改写错误、跨目标流水线误转发、CONNECT 首包丢失 | `HttpProxyHandlerTest`、`WorkerHttpForwardIT`、`WorkerDirectAndDnsIT` | 已覆盖 |
 | DIRECT 目标地址安全 | 非透明入站的私网/环回/特殊 IP 字面量可绕过路由直连 | `DestinationAddressPolicyTest`、`RouterServiceTest`、`WorkerDirectAndDnsIT` | 已覆盖 |
 | DIRECT 域名解析安全 | DNS 重绑定、混合公网/私网回答，或解析后再次按域名连接 | `PublicAddressResolverGroupTest` | 已覆盖 |
 | DIRECT 启动级安全链路 | 控制面发布后各受保护入站未执行阻断、协议响应错误、目标重写误拦截或审计误记为网络失败 | `make e2e-direct-outbound-safety` | 已覆盖（隔离 Docker） |
@@ -75,6 +77,25 @@
 - 保持单元测试确定性：不依赖真实上游 DNS、真实代理端口或 iptables/TProxy。
 - 修改 VLESS REALITY / Vision 出站时，保留 `WorkerVlessRealityVisionIT`，确保默认 TLS 1.3 HTTPS 目标能经过本地 xray REALITY Vision 服务端完成请求。
 - 修改 `DIRECT` 出站时，保留地址策略与校验 resolver 的单元测试；本地 echo 链路必须使用 `DESTINATION_OVERRIDE`，不能依赖 `DIRECT 127.0.0.1`。
+
+## HTTP 正向代理行为
+
+`HTTPS_CONNECT` 入站同时支持普通 HTTP 请求与 CONNECT，共用 Basic 代理认证、用户路由和出站地址策略。普通 HTTP 优先使用绝对 URL 的目标；origin-form 请求使用唯一的 Host 头，默认端口为 80。转发前将请求行改为路径与查询串，移除 `Proxy-Authorization`、`Proxy-Connection` 和逐跳头，保留源站的 `Authorization`。
+
+普通 HTTP 每条 TCP 连接只处理一个请求，向源站发送 `Connection: close`；浏览器后续请求重新连接。请求体采用流式转发，支持 Content-Length、chunked 和由源站处理的 `Expect: 100-continue`，不受 CONNECT 聚合器的 1 MiB 限制；出站连接完成前仍沿用既有有界首包缓存。后续流水线请求不会转给第一个目标。CONNECT 隧道不受此单请求策略影响。
+
+定向回归：`mvn -f backend/pom.xml -pl proxy-worker -am verify -Pworker-it -DskipTests=false -Dit.test=WorkerHttpForwardIT,WorkerDirectAndDnsIT -Dfailsafe.failIfNoSpecifiedTests=false`。
+
+2026-10-15 验证：common 15 项和 worker 175 项单测、10 项集成测试全部通过。网关现有版本与仓库有其他差异，因此现场补丁基于原 JAR，仅替换 HTTP 包的 8 个变更／新增 class，其他业务代码和依赖不变；该补丁直接通过 23 项 handler 用例和 10 项集成测试后部署。
+
+现场实测 `192.168.10.1:8080`：普通代理访问 `http://my-home-page.com/` 返回 200 和完整的 54141 字节页面；无认证／错误认证返回 407；HTTP CONNECT 隧道和页面均返回 200；`https://s-s-admin.cn/` CONNECT 返回 200，跳过现有自签名证书校验后源站仍按原行为返回 401。未修改入站、用户和路由配置。
+
+网关镜像为 `home-proxy-worker:http-forward-20261015-123105`，补丁构建上下文保留在 `/root/docker/patches/http-forward-20261015-123105`；原镜像保留为 `home-proxy-worker:before-http-forward-20261015-123105`。回滚时在网关 root 下执行：
+
+```bash
+docker tag home-proxy-worker:before-http-forward-20261015-123105 home-proxy-worker:latest
+docker compose -f /root/docker/docker-compose.yml up -d --no-deps --no-build --force-recreate proxy-worker
+```
 
 ## 集成测试待办
 

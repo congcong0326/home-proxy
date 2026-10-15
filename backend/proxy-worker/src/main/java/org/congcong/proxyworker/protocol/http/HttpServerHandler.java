@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpRequestDecoder;
+import io.netty.handler.codec.http.HttpRequest;
 import io.netty.buffer.Unpooled;
 import io.netty.util.CharsetUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +18,6 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.proxyworker.config.FindUser;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.UserConfig;
-import org.congcong.proxyworker.config.UserQueryService;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 
@@ -53,64 +53,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         }
 
         InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(channelHandlerContext.channel());
-        // 解析 Proxy-Authorization: Basic base64(username:password)
-        String authHeader = fullHttpRequest.headers().get("Proxy-Authorization");
-
-        if (authHeader == null || !authHeader.toLowerCase().startsWith("basic ")) {
-            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CHALLENGE", null, null,
-                    org.congcong.common.telemetry.AuthOutcome.CHALLENGE, authHeader == null ? "MISSING_CREDENTIALS" : "UNSUPPORTED_AUTH_SCHEME", null);
-            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-                    "Proxy-Authenticate: Basic realm=\"NAS Proxy\"\r\n" +
-                    "Connection: close\r\n" +
-                    "Content-Length: 0\r\n\r\n";
-            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
-            channelHandlerContext.close();
-            return;
-        }
-
-        String base64Part = authHeader.substring(6).trim();
-        String decoded;
-        try {
-            decoded = new String(Base64.getDecoder().decode(base64Part), CharsetUtil.UTF_8);
-        } catch (IllegalArgumentException e) {
-            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", null, null,
-                    org.congcong.common.telemetry.AuthOutcome.MALFORMED, "INVALID_BASIC_ENCODING", null);
-            String resp = "HTTP/1.1 400 Bad Request\r\n" +
-                    "Connection: close\r\n" +
-                    "Content-Length: 0\r\n\r\n";
-            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
-            channelHandlerContext.close();
-            return;
-        }
-
-        int colonIdx = decoded.indexOf(':');
-        if (colonIdx <= 0) {
-            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", null, null,
-                    org.congcong.common.telemetry.AuthOutcome.MALFORMED, "INVALID_BASIC_FORMAT", null);
-            String resp = "HTTP/1.1 400 Bad Request\r\n" +
-                    "Connection: close\r\n" +
-                    "Content-Length: 0\r\n\r\n";
-            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
-            channelHandlerContext.close();
-            return;
-        }
-        long telemetryAuthStart = System.nanoTime();
-        String username = decoded.substring(0, colonIdx);
-        UserConfig user = FindUser.find(username, inboundConfig);
-        String password = decoded.substring(colonIdx + 1);
-
-        boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
-        TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", username, ok ? user : null,
-                ok ? org.congcong.common.telemetry.AuthOutcome.SUCCESS : org.congcong.common.telemetry.AuthOutcome.FAILURE,
-                ok ? "VERIFIED" : "INVALID_CREDENTIALS", (System.nanoTime() - telemetryAuthStart) / 1000);
-        if (!ok) {
-            log.warn("failed to authenticate HTTP proxy user: {}", username);
-            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
-                    "Proxy-Authenticate: Basic realm=\"NAS Proxy\"\r\n" +
-                    "Connection: close\r\n" +
-                    "Content-Length: 0\r\n\r\n";
-            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
-            channelHandlerContext.close();
+        UserConfig user = authenticate(channelHandlerContext, fullHttpRequest);
+        if (user == null) {
             return;
         }
 
@@ -139,7 +83,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
 
         // 清理 HTTP 解析处理器，进入纯 TCP 隧道阶段
         channelHandlerContext.pipeline().remove(HttpObjectAggregator.class);
-        channelHandlerContext.pipeline().remove(HttpRequestDecoder.class);
+        channelHandlerContext.pipeline().remove(HttpForwardHandler.class);
         channelHandlerContext.pipeline().remove(this);
         // 记录已认证用户到 Channel 属性
         ChannelAttributes.setAuthenticatedUser(channelHandlerContext.channel(), user);
@@ -160,5 +104,74 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<FullHttpReque
         ProxyTimeContext proxyTimeContext = ChannelAttributes.getProxyTimeContext(channelHandlerContext.channel());
         proxyTimeContext.setConnectEndTime(System.currentTimeMillis());
         channelHandlerContext.fireChannelRead(tunnelRequest);
+        // 最后移除 decoder，确保同一数据包携带的隧道载荷在请求建立后进入有界缓存／中继。
+        channelHandlerContext.pipeline().remove(HttpRequestDecoder.class);
+    }
+
+    // 普通 HTTP 和 CONNECT 使用相同的代理认证。
+    static UserConfig authenticate(ChannelHandlerContext channelHandlerContext, HttpRequest request) {
+        InboundConfig inboundConfig = ChannelAttributes.getInboundConfig(channelHandlerContext.channel());
+        // 解析 Proxy-Authorization: Basic base64(username:password)
+        String authHeader = request.headers().get("Proxy-Authorization");
+
+        if (authHeader == null || !authHeader.toLowerCase().startsWith("basic ")) {
+            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CHALLENGE", null, null,
+                    org.congcong.common.telemetry.AuthOutcome.CHALLENGE, authHeader == null ? "MISSING_CREDENTIALS" : "UNSUPPORTED_AUTH_SCHEME", null);
+            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+                    "Proxy-Authenticate: Basic realm=\"NAS Proxy\"\r\n" +
+                    "Connection: close\r\n" +
+                    "Content-Length: 0\r\n\r\n";
+            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
+            channelHandlerContext.close();
+            return null;
+        }
+
+        String base64Part = authHeader.substring(6).trim();
+        String decoded;
+        try {
+            decoded = new String(Base64.getDecoder().decode(base64Part), CharsetUtil.UTF_8);
+        } catch (IllegalArgumentException e) {
+            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", null, null,
+                    org.congcong.common.telemetry.AuthOutcome.MALFORMED, "INVALID_BASIC_ENCODING", null);
+            String resp = "HTTP/1.1 400 Bad Request\r\n" +
+                    "Connection: close\r\n" +
+                    "Content-Length: 0\r\n\r\n";
+            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
+            channelHandlerContext.close();
+            return null;
+        }
+
+        int colonIdx = decoded.indexOf(':');
+        if (colonIdx <= 0) {
+            TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", null, null,
+                    org.congcong.common.telemetry.AuthOutcome.MALFORMED, "INVALID_BASIC_FORMAT", null);
+            String resp = "HTTP/1.1 400 Bad Request\r\n" +
+                    "Connection: close\r\n" +
+                    "Content-Length: 0\r\n\r\n";
+            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
+            channelHandlerContext.close();
+            return null;
+        }
+        long telemetryAuthStart = System.nanoTime();
+        String username = decoded.substring(0, colonIdx);
+        UserConfig user = FindUser.find(username, inboundConfig);
+        String password = decoded.substring(colonIdx + 1);
+
+        boolean ok = user != null && user.getCredential() != null && user.getCredential().equals(password);
+        TelemetryHooks.authentication(channelHandlerContext.channel(), "HTTP_BASIC", "CREDENTIAL_CHECK", username, ok ? user : null,
+                ok ? org.congcong.common.telemetry.AuthOutcome.SUCCESS : org.congcong.common.telemetry.AuthOutcome.FAILURE,
+                ok ? "VERIFIED" : "INVALID_CREDENTIALS", (System.nanoTime() - telemetryAuthStart) / 1000);
+        if (!ok) {
+            log.warn("failed to authenticate HTTP proxy user: {}", username);
+            String resp = "HTTP/1.1 407 Proxy Authentication Required\r\n" +
+                    "Proxy-Authenticate: Basic realm=\"NAS Proxy\"\r\n" +
+                    "Connection: close\r\n" +
+                    "Content-Length: 0\r\n\r\n";
+            channelHandlerContext.writeAndFlush(Unpooled.copiedBuffer(resp, CharsetUtil.US_ASCII));
+            channelHandlerContext.close();
+            return null;
+        }
+
+        return user;
     }
 }
