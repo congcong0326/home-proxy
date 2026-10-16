@@ -92,6 +92,7 @@ const RouteManagement: React.FC = () => {
   const [currentRoute, setCurrentRoute] = useState<RouteDTO | null>(null);
   const [formLoading, setFormLoading] = useState(false);
   const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetSummaryDTO[]>([]);
+  const [deleteConflict, setDeleteConflict] = useState<string | null>(null);
   const screens = Grid.useBreakpoint();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
@@ -280,7 +281,7 @@ const RouteManagement: React.FC = () => {
       loadRoutes();
     } catch (error) {
       if (isConflictError(error)) {
-        message.error(error.message || '路由仍被入站配置引用，无法删除');
+        setDeleteConflict(error.message || '路由仍被入站配置引用，请编辑相关入站配置解除引用后重试。');
         return;
       }
       console.error('Failed to delete route:', error);
@@ -328,7 +329,8 @@ const RouteManagement: React.FC = () => {
       loadRoutes();
     } catch (error) {
       if (isConflictError(error)) {
-        message.error(error.message || '存在仍被入站配置引用的路由，无法删除');
+        setDeleteConflict(error.message || '存在仍被入站配置引用的路由，请编辑相关入站配置解除引用后重试。');
+        loadRoutes();
         return;
       }
       console.error('Failed to batch delete routes:', error);
@@ -953,6 +955,21 @@ const RouteManagement: React.FC = () => {
           scroll={isMobile ? undefined : { x: 1200 }}
         />
       </Card>
+
+      <Modal
+        title="路由被引用，无法删除"
+        open={deleteConflict !== null}
+        onCancel={() => setDeleteConflict(null)}
+        footer={<Button type="primary" onClick={() => setDeleteConflict(null)}>知道了</Button>}
+        width={720}
+      >
+        <div style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: '50vh', overflowY: 'auto' }}>
+          {deleteConflict}
+        </div>
+        <Typography.Paragraph style={{ marginTop: 16, marginBottom: 0 }}>
+          <a href="/config/inbound">前往入站配置</a>
+        </Typography.Paragraph>
+      </Modal>
 
       {/* 创建路由模态框 */}
       <Modal

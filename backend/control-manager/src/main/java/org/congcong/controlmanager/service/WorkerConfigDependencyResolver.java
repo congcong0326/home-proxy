@@ -89,7 +89,13 @@ public class WorkerConfigDependencyResolver {
     }
 
     public boolean isRouteReferenced(Long routeId) {
-        return !resolveAffectedWorkerIds("route", routeId).isEmpty();
+        return !findInboundsReferencingRoute(routeId).isEmpty();
+    }
+
+    public List<InboundConfig> findInboundsReferencingRoute(Long routeId) {
+        return inboundConfigRepository.findAll().stream()
+                .filter(inbound -> resolveRouteIds(List.of(inbound)).contains(routeId))
+                .toList();
     }
 
     public boolean isRuleSetReferenced(String key) {

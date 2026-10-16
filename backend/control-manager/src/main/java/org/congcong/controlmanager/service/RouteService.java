@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.service;
 
 import lombok.RequiredArgsConstructor;
+import org.congcong.common.dto.InboundRouteBinding;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
@@ -11,6 +12,7 @@ import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
+import org.congcong.controlmanager.entity.InboundConfig;
 import org.congcong.controlmanager.entity.Route;
 import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
@@ -22,11 +24,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 路由服务层
@@ -191,11 +195,43 @@ public class RouteService {
         Route route = routeRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
 
-        if (workerConfigDependencyResolver.isRouteReferenced(id)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "路由正在被入站配置引用，无法删除");
+        List<InboundConfig> references = workerConfigDependencyResolver.findInboundsReferencingRoute(id);
+        if (!references.isEmpty()) {
+            String details = references.stream()
+                    .map(inbound -> describeRouteReference(inbound, id))
+                    .collect(Collectors.joining("\n"));
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "路由“" + route.getName() + "”（ID：" + id + "）被以下入站配置引用，无法删除：\n"
+                            + details
+                            + "\n请前往「入站配置」编辑以上配置，在对应的「路由顺序」中移除此路由，"
+                            + "或更换／清空「兜底路由」，保存后重试。禁用的入站配置也需要解除引用。");
         }
 
         routeRepository.delete(route);
+    }
+
+    private String describeRouteReference(InboundConfig inbound, Long routeId) {
+        List<String> locations = new ArrayList<>();
+        if (routeId.equals(inbound.getFallbackRouteId())) {
+            locations.add("兜底路由");
+        }
+        List<InboundRouteBinding> bindings = inbound.getInboundRouteBindings();
+        if (bindings != null) {
+            for (int index = 0; index < bindings.size(); index++) {
+                InboundRouteBinding binding = bindings.get(index);
+                if (binding != null && binding.getRouteIds() != null && binding.getRouteIds().contains(routeId)) {
+                    locations.add(inbound.getProtocol() == ProtocolType.SHADOW_SOCKS
+                            ? "绑定关系 → 路由顺序"
+                            : "绑定组 #" + (index + 1) + " → 路由顺序");
+                }
+            }
+        }
+        String listenIp = inbound.getListenIp();
+        String address = listenIp != null && listenIp.contains(":") ? "[" + listenIp + "]" : listenIp;
+        return "• " + inbound.getName() + "（ID：" + inbound.getId() + "，节点：" + inbound.getWorkerId()
+                + "，监听：" + address + ":" + inbound.getPort()
+                + (Integer.valueOf(0).equals(inbound.getStatus()) ? "，已禁用" : "")
+                + "）：" + String.join("、", locations);
     }
 
     /**

@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import RouteManagement from './RouteManagement';
 import { apiService } from '../services/api';
 import {
@@ -13,6 +14,7 @@ jest.mock('../services/api', () => ({
   apiService: {
     getRoutes: jest.fn(),
     getPublishedRuleSets: jest.fn(),
+    deleteRoute: jest.fn(),
   },
 }));
 
@@ -86,3 +88,40 @@ test('uses a compact column set on mobile', async () => {
   expect(screen.getByRole('columnheader', { name: '状态' })).toBeInTheDocument();
   expect(screen.getByRole('columnheader', { name: '操作' })).toBeInTheDocument();
 });
+
+test.each(['single', 'batch'])('%s delete shows referencing inbounds and where to remove the route', async (mode) => {
+  const details = '路由“家庭直连”（ID：7）被以下入站配置引用，无法删除：\n'
+    + '• 家庭代理（ID：12，节点：home-01，监听：0.0.0.0:1080）：兜底路由、绑定组 #2 → 路由顺序\n'
+    + '请前往「入站配置」编辑以上配置，保存后重试。';
+  (apiService.getRoutes as jest.Mock).mockResolvedValue({
+    items: [{
+      id: 7,
+      name: '家庭直连',
+      rules: [],
+      policy: RoutePolicy.DIRECT,
+      status: RouteStatus.ENABLED,
+    }],
+    total: 1,
+    page: 1,
+    pageSize: 10,
+  });
+  (apiService.getPublishedRuleSets as jest.Mock).mockResolvedValue([]);
+  (apiService.deleteRoute as jest.Mock).mockRejectedValue(Object.assign(new Error(details), { status: 409 }));
+
+  render(<RouteManagement />);
+  await screen.findByText('家庭直连');
+  if (mode === 'batch') {
+    userEvent.click(screen.getAllByRole('checkbox')[1]);
+    userEvent.click(screen.getByRole('button', { name: /批量删除/ }));
+  } else {
+    userEvent.click(screen.getByRole('button', { name: /删除/ }));
+  }
+  userEvent.click(await screen.findByRole('button', { name: '确 定' }));
+
+  expect(await screen.findByText('路由被引用，无法删除')).toBeInTheDocument();
+  expect(screen.getByText(/家庭代理（ID：12，节点：home-01/)).toHaveTextContent('兜底路由、绑定组 #2 → 路由顺序');
+  expect(screen.getByText(/请前往「入站配置」/)).toHaveTextContent('保存后重试');
+  expect(screen.getByRole('link', { name: '前往入站配置' })).toHaveAttribute('href', '/config/inbound');
+  expect(screen.getByText('家庭直连')).toBeInTheDocument();
+  expect(apiService.deleteRoute).toHaveBeenCalledWith(7);
+}, 20000);

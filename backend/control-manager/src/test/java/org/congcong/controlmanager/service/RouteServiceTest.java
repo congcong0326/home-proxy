@@ -2,6 +2,7 @@ package org.congcong.controlmanager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -9,10 +10,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.congcong.common.dto.RouteDTO;
+import org.congcong.common.dto.InboundRouteBinding;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
@@ -20,6 +23,7 @@ import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.dto.route.CreateRouteRequest;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.entity.InboundConfig;
 import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.junit.jupiter.api.Test;
@@ -91,16 +95,53 @@ class RouteServiceTest {
     void refusesDeletingRouteReferencedByInboundConfig() {
         Route route = new Route();
         route.setId(7L);
+        route.setName("直连规则");
+        InboundConfig inbound = new InboundConfig();
+        inbound.setId(12L);
+        inbound.setName("家庭代理");
+        inbound.setWorkerId("home-01");
+        inbound.setListenIp("0.0.0.0");
+        inbound.setPort(1080);
+        inbound.setFallbackRouteId(7L);
+        InboundRouteBinding binding = new InboundRouteBinding();
+        binding.setRouteIds(List.of(7L));
+        inbound.setInboundRouteBindings(Arrays.asList(null, binding, binding));
+        InboundConfig disabled = new InboundConfig();
+        disabled.setId(13L);
+        disabled.setName("备用代理");
+        disabled.setWorkerId("home-02");
+        disabled.setListenIp("::");
+        disabled.setPort(8388);
+        disabled.setProtocol(ProtocolType.SHADOW_SOCKS);
+        disabled.setStatus(0);
+        disabled.setInboundRouteBindings(List.of(binding));
         when(routeRepository.findById(7L)).thenReturn(Optional.of(route));
-        when(dependencyResolver.isRouteReferenced(7L)).thenReturn(true);
+        when(dependencyResolver.findInboundsReferencingRoute(7L)).thenReturn(List.of(inbound, disabled));
 
         ResponseStatusException error = assertThrows(
                 ResponseStatusException.class,
                 () -> routeService.deleteRoute(7L));
 
         assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
-        assertEquals("路由正在被入站配置引用，无法删除", error.getReason());
+        String reason = error.getReason();
+        assertTrue(reason.contains("路由“直连规则”（ID：7）"));
+        assertTrue(reason.contains("家庭代理（ID：12，节点：home-01，监听：0.0.0.0:1080）：兜底路由、绑定组 #2 → 路由顺序、绑定组 #3 → 路由顺序"));
+        assertTrue(reason.contains("备用代理（ID：13，节点：home-02，监听：[::]:8388，已禁用）：绑定关系 → 路由顺序"));
+        assertTrue(reason.contains("请前往「入站配置」编辑以上配置"));
+        assertTrue(reason.contains("保存后重试"));
         verify(routeRepository, never()).delete(eq(route));
+    }
+
+    @Test
+    void deletesRouteAfterAllInboundReferencesAreRemoved() {
+        Route route = new Route();
+        route.setId(7L);
+        when(routeRepository.findById(7L)).thenReturn(Optional.of(route));
+        when(dependencyResolver.findInboundsReferencingRoute(7L)).thenReturn(List.of());
+
+        routeService.deleteRoute(7L);
+
+        verify(routeRepository).delete(route);
     }
 
     private CreateRouteRequest vlessRealityRequest(Map<String, Object> config) {

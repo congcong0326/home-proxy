@@ -1,7 +1,10 @@
 package org.congcong.controlmanager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.List;
@@ -20,8 +23,9 @@ import org.junit.jupiter.api.Test;
 
 class WorkerConfigDependencyResolverTest {
 
+    private final InboundConfigRepository inboundConfigRepository = mock(InboundConfigRepository.class);
     private final WorkerConfigDependencyResolver resolver = new WorkerConfigDependencyResolver(
-            mock(InboundConfigRepository.class),
+            inboundConfigRepository,
             mock(ProxyWorkerRepository.class),
             mock(UserRepository.class),
             mock(RouteRepository.class),
@@ -50,5 +54,24 @@ class WorkerConfigDependencyResolverTest {
         route.setRules(Arrays.asList(null, rule));
 
         assertEquals(Set.of("ai-common"), resolver.resolveRuleSetKeys(Arrays.asList(null, route)));
+    }
+
+    @Test
+    void findsEveryReferencingInboundIncludingDisabledAndDuplicateBindings() {
+        InboundConfig fallback = new InboundConfig();
+        fallback.setFallbackRouteId(21L);
+        InboundConfig disabled = new InboundConfig();
+        disabled.setStatus(0);
+        InboundRouteBinding binding = new InboundRouteBinding();
+        binding.setRouteIds(Arrays.asList(null, 21L, 22L));
+        disabled.setInboundRouteBindings(Arrays.asList(null, binding, binding));
+        InboundConfig unrelated = new InboundConfig();
+        unrelated.setFallbackRouteId(22L);
+        when(inboundConfigRepository.findAll()).thenReturn(List.of(fallback, disabled, unrelated));
+
+        assertEquals(List.of(fallback, disabled), resolver.findInboundsReferencingRoute(21L));
+        assertTrue(resolver.isRouteReferenced(21L));
+        assertEquals(List.of(), resolver.findInboundsReferencingRoute(99L));
+        assertFalse(resolver.isRouteReferenced(99L));
     }
 }
