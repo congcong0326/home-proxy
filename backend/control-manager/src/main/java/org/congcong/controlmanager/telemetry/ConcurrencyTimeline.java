@@ -1,53 +1,63 @@
 package org.congcong.controlmanager.telemetry;
 
+import org.springframework.core.io.ClassPathResource;
+
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Sweep half-open intervals: simultaneous starts/ends are combined before counting. */
+/** ClickHouse computes the exact sweep; Java only maps the bounded bucket results. */
 public final class ConcurrencyTimeline {
+    private static final String QUERY = readQuery();
+
     private ConcurrencyTimeline() { }
     public record Point(String ts, String average, String peak) { }
-    public record Result(List<Point> series, String average, String peak) { }
-
-    public static Result calculate(Instant from, Instant to, int bucketSeconds, List<Map<String, Object>> deltas) {
-        long start = micros(from), end = micros(to), step = bucketSeconds * 1_000_000L;
-        int index = 0;
-        long active = 0, globalPeak = 0;
-        double globalArea = 0;
-        var points = new ArrayList<Point>();
-        for (long bucket = start; bucket < end; bucket += step) {
-            long right = Math.min(end, bucket + step), cursor = bucket, peak = active;
-            double area = 0;
-            while (index < deltas.size()) {
-                Map<String, Object> delta = deltas.get(index);
-                long time = ((Number) delta.get("event_us")).longValue();
-                if (time >= right) break;
-                area += active * (double) (time - cursor);
-                active += ((Number) delta.get("delta")).longValue();
-                if (active < 0) throw new IllegalStateException("INVALID_CONCURRENCY_INTERVALS");
-                cursor = time;
-                // At the left boundary, connections ending there do not belong to this bucket.
-                if (time == bucket) peak = active;
-                else peak = Math.max(peak, active);
-                index++;
-            }
-            area += active * (double) (right - cursor);
-            points.add(new Point(Instant.ofEpochSecond(bucket / 1_000_000, bucket % 1_000_000 * 1000).toString(),
-                    decimal(area / (right - bucket)), Long.toString(peak)));
-            globalArea += area;
-            globalPeak = Math.max(globalPeak, peak);
+    public record Result(boolean available, List<Point> series, String average, String peak) {
+        public static Result unavailable() {
+            return new Result(false, List.of(), null, null);
         }
-        return new Result(points, decimal(globalArea / (end - start)), Long.toString(globalPeak));
+    }
+
+    public static String query(String scope) {
+        return QUERY.formatted(scope);
+    }
+
+    public static Result fromBuckets(Instant from, Instant to, int bucketSeconds, List<Map<String, Object>> rows) {
+        long durationUs = micros(to) - micros(from);
+        long stepUs = bucketSeconds * 1_000_000L;
+        long expected = (durationUs + stepUs - 1) / stepUs;
+        if (rows.size() != expected) throw new IllegalStateException("INCOMPLETE_CONCURRENCY_BUCKETS");
+        var points = new ArrayList<Point>(rows.size());
+        for (int index = 0; index < rows.size(); index++) {
+            var row = rows.get(index);
+            if (((Number) row.get("bucket_index")).longValue() != index) {
+                throw new IllegalStateException("INCOMPLETE_CONCURRENCY_BUCKETS");
+            }
+            points.add(new Point(from.plusSeconds((long) index * bucketSeconds).toString(),
+                    decimal(row.get("average")), row.get("peak").toString()));
+        }
+        var totals = rows.get(0);
+        return new Result(true, points, decimal(totals.get("overall_average")), totals.get("overall_peak").toString());
+    }
+
+    private static String readQuery() {
+        try {
+            return new ClassPathResource("clickhouse/overview-concurrency.sql").getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
     private static long micros(Instant time) {
         return time.getEpochSecond() * 1_000_000 + time.getNano() / 1000;
     }
 
-    private static String decimal(double value) {
-        return String.format(Locale.ROOT, "%.2f", value);
+    private static String decimal(Object value) {
+        return String.format(Locale.ROOT, "%.2f", ((Number) value).doubleValue());
     }
 }

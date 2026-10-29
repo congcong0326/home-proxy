@@ -2,6 +2,7 @@ package org.congcong.controlmanager.telemetry;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.common.telemetry.TrafficCategory;
 import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
@@ -16,6 +17,7 @@ import java.util.*;
 
 /** Independent, deduplicated V1 aggregates. No legacy fallback or audit-page sampling. */
 @Service
+@Slf4j
 public class OverviewService {
     private static final String SESSIONS = "telemetry.proxy_session_log_v1";
     private static final String DNS = "telemetry.dns_query_log_v1";
@@ -48,7 +50,13 @@ public class OverviewService {
         var traffic = traffic(request, bucket);
         var connections = counts(request, bucket, SESSIONS, CONNECTION_STATUS, request.getConnectionResult(), true);
         // Connection-result filters select attempts, never pretend failed attempts are concurrent tunnels.
-        var concurrency = concurrency(request, bucket);
+        ConcurrencyTimeline.Result concurrency;
+        try {
+            concurrency = concurrency(request, bucket);
+        } catch (RuntimeException e) {
+            log.warn("Historical concurrency unavailable for worker {}: {}", request.getWorkerId(), e.toString());
+            concurrency = ConcurrencyTimeline.Result.unavailable();
+        }
         var dns = counts(request, bucket, DNS, DNS_STATUS, request.getDnsResult(), false);
         var auth = counts(request, bucket, AUTH, AUTH_STATUS, request.getAuthResult(), false);
         var result = new LinkedHashMap<String, Object>();
@@ -159,21 +167,16 @@ public class OverviewService {
 
     private ConcurrencyTimeline.Result concurrency(OverviewQuery request, int bucket) {
         Scope range = sourceScope(request);
-        range.where += " AND connect_outcome = 'CONNECTED' AND connected_at < ? AND ended_at > ? AND ended_at > connected_at";
-        range.params.add(Timestamp.from(request.getTo()));
-        range.params.add(Timestamp.from(request.getFrom()));
+        range.where += " AND connect_outcome = 'CONNECTED' AND connected_at < fromUnixTimestamp64Micro(toInt64(?), 'UTC')"
+                + " AND ended_at > fromUnixTimestamp64Micro(toInt64(?), 'UTC') AND ended_at > connected_at";
+        range.params.add(micros(request.getTo()));
+        range.params.add(micros(request.getFrom()));
         range.where += categoryFilter(request) + trafficResult(request);
         if (!request.getTrafficCategory().equals("ALL")) range.params.add(request.getTrafficCategory());
-        var params = new ArrayList<Object>(range.params);
-        params.add(Timestamp.from(request.getFrom()));
-        params.add(Timestamp.from(request.getTo()));
-        var deltas = client.query("WITH intervals AS (SELECT connected_at, ended_at FROM " + SESSIONS
-                + " FINAL WHERE " + range.where + ") SELECT event_us, sum(delta) AS delta FROM ("
-                + "SELECT toUnixTimestamp64Micro(greatest(connected_at, toDateTime64(?,6,'UTC'))) AS event_us, toInt64(1) AS delta FROM intervals "
-                + "UNION ALL SELECT toUnixTimestamp64Micro(least(ended_at, toDateTime64(?,6,'UTC'))) AS event_us, toInt64(-1) AS delta FROM intervals) "
-                + "GROUP BY event_us ORDER BY event_us LIMIT 100001", params.toArray());
-        if (deltas.size() > 100000) throw new IllegalStateException("CONCURRENCY_RANGE_TOO_DENSE");
-        return ConcurrencyTimeline.calculate(request.getFrom(), request.getTo(), bucket, deltas);
+        var params = new ArrayList<Object>(List.of(micros(request.getFrom()), micros(request.getTo()), bucket * 1_000_000L));
+        params.addAll(range.params);
+        var rows = client.query(ConcurrencyTimeline.query(range.where), params.toArray());
+        return ConcurrencyTimeline.fromBuckets(request.getFrom(), request.getTo(), bucket, rows);
     }
 
     public Map<String, Object> live(OverviewQuery request) {

@@ -30,6 +30,17 @@ export interface LiveConnections {
   sampledAt?: string;
   reason?: 'UNSUPPORTED' | 'STALE' | 'GROUPS_TRUNCATED';
 }
+export type HistoricalConcurrency = {
+  available: true;
+  series: { ts: string; average: string; peak: string }[];
+  average: string;
+  peak: string;
+} | {
+  available: false;
+  series: [];
+  average: null;
+  peak: null;
+};
 export interface OverviewData {
   from: string;
   to: string;
@@ -48,7 +59,7 @@ export interface OverviewData {
     categories: { category: TrafficCategory; bytes: string }[];
   };
   connections: CountOverview;
-  concurrency: { series: { ts: string; average: string; peak: string }[]; average: string; peak: string };
+  concurrency: HistoricalConcurrency;
   live: LiveConnections;
   dns: CountOverview;
   auth: CountOverview;

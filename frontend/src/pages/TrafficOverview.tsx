@@ -85,11 +85,12 @@ function chartOption(points: OverviewPoint[], series: { key: string; label: stri
     })),
   };
 }
-function Chart({ option, empty, loading }: { option: any; empty: boolean; loading: boolean }) {
+function Chart({ option, empty, loading, unavailable }: { option: any; empty: boolean; loading: boolean; unavailable?: boolean }) {
   return <div className="ov-chart">
     <ReactECharts option={option} notMerge lazyUpdate opts={{ renderer: 'svg' }} style={{ height: 230 }}
       onChartReady={chart => { chart.group = GROUP; echarts.connect(GROUP); }} />
     {empty && !loading && <div className="ov-chart-empty">所选范围暂无记录</div>}
+    {unavailable && !loading && <div className="ov-chart-empty" role="status">历史并发暂不可用，请稍后重试或缩短时间范围</div>}
     {loading && <div className="ov-chart-loading">正在更新…</div>}
   </div>;
 }
@@ -169,14 +170,15 @@ export function TrafficOverview() {
   const refresh = useCallback(() => { setSource({ username: username.trim(), clientIp: clientIp.trim() }); setRevision(v => v + 1); }, [username, clientIp]);
   const selectedLabel = categories.find(c => c.value === category)?.label || '外网';
   const empty = !data;
+  const concurrency = data?.concurrency.available ? data.concurrency : undefined;
   const trafficOption = useMemo(() => chartOption(data?.traffic.series || [], [
     { key: 'download', label: '下载', color: chartColors.success, type: 'line', area: true },
     { key: 'upload', label: '上传', color: chartColors.info, type: 'line', area: true },
   ], true), [data?.traffic.series]);
-  const concurrencyOption = useMemo(() => chartOption(data?.concurrency.series || [], [
+  const concurrencyOption = useMemo(() => chartOption(concurrency?.series || [], [
     { key: 'peak', label: '桶内峰值', color: chartColors.info, type: 'line', step: true, area: true },
     { key: 'average', label: '桶内平均', color: chartColors.warning, type: 'line', step: true },
-  ]), [data?.concurrency.series]);
+  ]), [concurrency?.series]);
   const connectionsOption = useMemo(() => countChart(data?.connections), [data?.connections]);
   const dnsOption = useMemo(() => countChart(data?.dns), [data?.dns]);
   const authOption = useMemo(() => countChart(data?.auth), [data?.auth]);
@@ -219,8 +221,9 @@ export function TrafficOverview() {
         <Chart option={trafficOption} empty={!!data && data.traffic.total === '0'} loading={loading} />
       </section>
       <section className="ov-panel"><div className="ov-panel-header"><div><h3><ApiOutlined />连接趋势</h3><p>{selectedLabel} · {connectionView === 'concurrency' ? '已落库连接区间重建' : '连接结束时归属'}</p></div><div className="ov-panel-controls"><select aria-label="连接指标" value={connectionView} onChange={e => setConnectionView(e.target.value)}><option value="concurrency">历史并发</option><option value="attempts">建连次数</option></select>{connectionView === 'attempts' && <ResultSelect label="建连结果" value={connectionResult} onChange={setConnectionResult} />}</div></div>
-        {connectionView === 'concurrency' ? <div className="ov-panel-metrics"><span>区间峰值 <b>{empty ? '—' : count(data?.concurrency.peak)}</b></span><span>区间平均 <b>{empty ? '—' : data?.concurrency.average}</b></span></div> : <div className="ov-panel-metrics"><span>建连记录 <b>{empty ? '—' : count(data?.connections.total)}</b></span>{totals('connections')}</div>}
-        <Chart option={connectionView === 'concurrency' ? concurrencyOption : connectionsOption} empty={!!data && (connectionView === 'concurrency' ? data.concurrency.peak === '0' : data.connections.total === '0')} loading={loading} />
+        {connectionView === 'concurrency' ? <div className="ov-panel-metrics"><span>区间峰值 <b>{concurrency ? count(concurrency.peak) : '—'}</b></span><span>区间平均 <b>{concurrency?.average || '—'}</b></span></div> : <div className="ov-panel-metrics"><span>建连记录 <b>{empty ? '—' : count(data?.connections.total)}</b></span>{totals('connections')}</div>}
+        <Chart option={connectionView === 'concurrency' ? concurrencyOption : connectionsOption} empty={!!data && (connectionView === 'concurrency' ? concurrency?.peak === '0' : data.connections.total === '0')} loading={loading}
+          unavailable={connectionView === 'concurrency' && data?.concurrency.available === false} />
       </section>
       <section className="ov-panel"><div className="ov-panel-header"><div><h3><CloudOutlined />DNS 查询趋势</h3><p>每次逻辑查询计一次</p></div><div className="ov-panel-controls"><select aria-label="DNS 查询来源" value={dnsOrigin} onChange={e => setDnsOrigin(e.target.value as typeof dnsOrigin)}><option value="CLIENT">客户端查询</option><option value="PROXY_RESOLVE">内部解析</option><option value="ALL">全部查询</option></select><ResultSelect label="DNS 结果" value={dnsResult} onChange={setDnsResult} /></div></div>
         <div className="ov-panel-metrics">{totals('dns')}</div><Chart option={dnsOption} empty={!!data && data.dns.total === '0'} loading={loading} />

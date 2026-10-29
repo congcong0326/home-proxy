@@ -49,9 +49,67 @@ class OverviewServiceTest {
         String dns = queries.stream().filter(sql -> sql.contains("dns_query_log_v1")).findFirst().orElseThrow();
         assertFalse(dns.contains("traffic_category"));
         assertTrue(dns.contains("response_sent = false"));
-        String concurrency = queries.stream().filter(sql -> sql.startsWith("WITH intervals")).findFirst().orElseThrow();
-        assertTrue(concurrency.contains("connected_at < ? AND ended_at > ?"));
+        String concurrency = queries.stream().filter(sql -> sql.contains("leadInFrame")).findFirst().orElseThrow();
+        assertTrue(concurrency.contains("connected_at < fromUnixTimestamp64Micro(toInt64(?), 'UTC')"));
+        assertTrue(concurrency.contains("ended_at > fromUnixTimestamp64Micro(toInt64(?), 'UTC')"));
         assertFalse(concurrency.contains("occurred_at >="));
+    }
+    @Test
+    void concurrencyFailureDoesNotDiscardOtherAggregatesOrCurrentConnections() throws Exception {
+        var metrics = new WorkerMetricsDTO();
+        metrics.setEstablishedConnectionsV1(new EstablishedConnectionsV1("instance", Instant.now(),
+                Map.of(TrafficCategory.EXTERNAL, 42L), List.of(), false));
+        install(metrics);
+        when(client.query(anyString(), any(Object[].class))).thenAnswer(call -> {
+            String sql = call.getArgument(0);
+            if (sql.contains("leadInFrame")) throw new IllegalStateException("MEMORY_LIMIT_EXCEEDED");
+            if (sql.contains("AS upload") && sql.contains("bucket_index")) {
+                return List.of(Map.of("bucket_index", 0, "upload", "1234", "download", "7"));
+            }
+            if (sql.contains("dns_query_log_v1")) {
+                return List.of(Map.of("bucket_index", 0, "result", "SUCCESS", "count", "8"));
+            }
+            if (sql.contains("credential_auth_log_v1")) {
+                return List.of(Map.of("bucket_index", 0, "result", "FAILURE", "count", "3"));
+            }
+            return List.of();
+        });
+        var result = service.overview(query());
+        assertFalse(((ConcurrencyTimeline.Result) result.get("concurrency")).available());
+        assertEquals("1241", ((Map<?, ?>) result.get("traffic")).get("total"));
+        assertEquals("8", ((Map<?, ?>) result.get("dns")).get("total"));
+        assertEquals("3", ((Map<?, ?>) result.get("auth")).get("total"));
+        assertEquals("42", ((Map<?, ?>) result.get("live")).get("count"));
+    }
+
+    @Test
+    void mapsCompleteConcurrencyBucketsAndBindsScopeAfterMicrosecondBounds() {
+        var q = query();
+        q.setUsername("alice");
+        q.setClientIp("192.168.1.2");
+        q.setTrafficCategory("INTERNAL_REWRITE");
+        q.setTrafficResult("FAILURE");
+        q.setConnectionResult("FAILURE"); // Attempt result must not filter established intervals.
+        when(client.query(anyString(), any(Object[].class))).thenAnswer(call -> {
+            String sql = call.getArgument(0);
+            if (!sql.contains("leadInFrame")) return List.of();
+            assertArrayEquals(new Object[] {
+                    q.getFrom().getEpochSecond() * 1_000_000, q.getTo().getEpochSecond() * 1_000_000,
+                    60_000_000L, "edge", "192.168.1.2", "alice", q.getTo().getEpochSecond() * 1_000_000,
+                    q.getFrom().getEpochSecond() * 1_000_000, "INTERNAL_REWRITE"
+            }, Arrays.copyOfRange(call.getArguments(), 1, call.getArguments().length));
+            assertTrue(sql.contains("session_outcome = 'ERROR_END'"));
+            assertTrue(sql.contains("connect_outcome = 'CONNECTED'"));
+            var rows = new ArrayList<Map<String, Object>>();
+            for (int index = 0; index < 10; index++) rows.add(Map.of("bucket_index", index,
+                    "average", 1.3, "peak", "3", "overall_average", 1.3, "overall_peak", "3"));
+            return rows;
+        });
+        var concurrency = (ConcurrencyTimeline.Result) service.overview(q).get("concurrency");
+        assertTrue(concurrency.available());
+        assertEquals(10, concurrency.series().size());
+        assertEquals("1.30", concurrency.average());
+        assertEquals("3", concurrency.peak());
     }
     @Test
     void rejectsInvalidScopeBeforeQueryAndDoesNotSilentlyFallbackWhenDisabled() {

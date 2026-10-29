@@ -7,32 +7,41 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConcurrencyTimelineTest {
-    private final Instant from = Instant.parse("2026-10-09T00:00:00Z");
-    private Map<String, Object> delta(long seconds, long count) {
-        return Map.of("event_us", (from.getEpochSecond() + seconds) * 1_000_000, "delta", count);
+    private final Instant from = Instant.parse("2026-10-09T00:00:00.123456Z");
+
+    private Map<String, Object> bucket(int index, double average, String peak) {
+        return Map.of("bucket_index", index, "average", average, "peak", peak,
+                "overall_average", 4.0 / 3, "overall_peak", "2");
     }
+
     @Test
-    void includesCarryInAndCalculatesDurationWeightedAverageAndPeak() {
-        var result = ConcurrencyTimeline.calculate(from, from.plusSeconds(600), 60,
-                List.of(delta(0, 1), delta(120, 1), delta(240, 1), delta(300, -1), delta(360, -1), delta(480, -1)));
-        assertEquals("3", result.peak());
-        assertEquals("1.30", result.average());
-        assertEquals(List.of("1", "1", "2", "2", "3", "2", "1", "1", "0", "0"),
-                result.series().stream().map(ConcurrencyTimeline.Point::peak).toList());
-        assertEquals("0.00", result.series().get(9).average());
-    }
-    @Test
-    void simultaneousEndsAndStartsDoNotCreateAnArtificialPeak() {
-        var result = ConcurrencyTimeline.calculate(from, from.plusSeconds(120), 60,
-                List.of(delta(0, 1), delta(60, 0), delta(120, -1)));
-        assertEquals("1", result.peak());
-        assertEquals("1.00", result.average());
-    }
-    @Test
-    void endingAtBucketBoundaryDoesNotCountInNextBucketAndPartialBucketHasCorrectDenominator() {
-        var result = ConcurrencyTimeline.calculate(from, from.plusSeconds(90), 60,
-                List.of(delta(0, 2), delta(60, -2), delta(90, 0)));
-        assertEquals("0", result.series().get(1).peak());
+    void mapsDatabaseAggregatesWithoutReaveragingPartialBuckets() {
+        var result = ConcurrencyTimeline.fromBuckets(from, from.plusSeconds(90), 60,
+                List.of(bucket(0, 2, "2"), bucket(1, 0, "0")));
+        assertTrue(result.available());
+        assertEquals("2", result.peak());
         assertEquals("1.33", result.average());
+        assertEquals("2.00", result.series().get(0).average());
+        assertEquals("0.00", result.series().get(1).average());
+        assertEquals(from.plusSeconds(60).toString(), result.series().get(1).ts());
+    }
+
+    @Test
+    void rejectsTruncatedOrOutOfOrderResultsRatherThanDisplayingPartialStatistics() {
+        assertThrows(IllegalStateException.class, () -> ConcurrencyTimeline.fromBuckets(
+                from, from.plusSeconds(90), 60, List.of(bucket(0, 2, "2"))));
+        assertThrows(IllegalStateException.class, () -> ConcurrencyTimeline.fromBuckets(
+                from, from.plusSeconds(90), 60, List.of(bucket(1, 0, "0"), bucket(0, 2, "2"))));
+        assertThrows(IllegalStateException.class, () -> ConcurrencyTimeline.fromBuckets(
+                from, from.plusSeconds(90), 60, List.of()));
+    }
+
+    @Test
+    void unavailableStatisticsAreUnknownRatherThanZero() {
+        var result = ConcurrencyTimeline.Result.unavailable();
+        assertFalse(result.available());
+        assertTrue(result.series().isEmpty());
+        assertNull(result.average());
+        assertNull(result.peak());
     }
 }

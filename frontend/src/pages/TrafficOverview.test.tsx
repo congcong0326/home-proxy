@@ -15,7 +15,7 @@ const data = (total = '1024'): OverviewData => ({
   from: '2026-10-09T00:00:00Z', to: '2026-10-09T01:00:00Z', timeZone: 'Asia/Shanghai', bucketSeconds: 60,
   firstSessionAt: '2026-10-08 01:00:00', historyBasis: 'ENDED_SESSIONS_ONLY',
   traffic: { upload: '512', download: '512', total, daily: '2048', monthly: '8192', series: [], sources: [], categories: [] },
-  concurrency: { series: [], average: '1.30', peak: '3' }, live: { available: false, reason: 'UNSUPPORTED' },
+  concurrency: { available: true, series: [], average: '1.30', peak: '3' }, live: { available: false, reason: 'UNSUPPORTED' },
   connections: { series: [], totals: { SUCCESS: '4', FAILURE: '2' }, total: '6' },
   dns: { series: [], totals: { SUCCESS: '10', FAILURE: '2', BLOCKED: '1' }, total: '13' },
   auth: { series: [], totals: { SUCCESS: '3', FAILURE: '1', CHALLENGE: '1' }, total: '5' },
@@ -81,4 +81,23 @@ it('reports unavailable queries without showing fabricated zero totals', async (
   expect(await screen.findByRole('alert')).toHaveTextContent('新版查询未启用');
   expect(screen.queryByText('0 B')).not.toBeInTheDocument();
   expect(apiService.getDailyUserTrafficStats).not.toHaveBeenCalled();
+});
+it('keeps other statistics and connection attempts visible when historical concurrency is unavailable', async () => {
+  const result = data();
+  result.concurrency = { available: false, series: [], average: null, peak: null };
+  result.live = { available: true, count: '42', sampledAt: '2026-10-09T01:00:00Z' };
+  (apiService.getObservabilityOverview as jest.Mock).mockResolvedValue(result);
+  render(<TrafficOverview />);
+  expect(await screen.findByRole('status')).toHaveTextContent('历史并发暂不可用');
+  expect(screen.getByText('1 KB')).toBeInTheDocument();
+  expect(screen.getByText('42')).toBeInTheDocument();
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  const panel = screen.getByText('连接趋势').closest('section')!;
+  expect(panel).toHaveTextContent('区间峰值 —');
+  expect(panel).toHaveTextContent('区间平均 —');
+  fireEvent.change(screen.getByLabelText('连接指标'), { target: { value: 'attempts' } });
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  expect(panel).toHaveTextContent('建连记录 6');
+  expect(screen.getByText('DNS 查询趋势').closest('section')).toHaveTextContent('成功 10');
+  expect(screen.getByText('认证尝试趋势').closest('section')).toHaveTextContent('成功 3');
 });

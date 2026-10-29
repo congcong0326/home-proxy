@@ -19,8 +19,7 @@ public class OverviewController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (RuntimeException e) {
             org.slf4j.LoggerFactory.getLogger(getClass()).warn("Overview query unavailable: {}", e.toString());
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "CONCURRENCY_RANGE_TOO_DENSE".equals(e.getMessage()) ? "并发数据过密，请缩短时间范围" : "新版统计暂不可用，请检查新日志查询服务");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "新版统计暂不可用，请检查新日志查询服务");
         }
     }
     @GetMapping("/live")
