@@ -74,3 +74,5 @@ mvnw.cmd
 # Spring Boot static build artifacts
 /backend/control-manager/src/main/resources/static/
 /backend/proxy-worker/target/it-xray/
+# Archify architecture analysis artifacts
+/.archify/
