@@ -40,7 +40,7 @@
 
 服务与数据层：
 
-- `AggregateConfigService`：聚合所有启用的入站、路由、限流、用户配置，并计算配置 hash。
+- `AggregateConfigService`：聚合所有启用的入站、路由、限流、用户配置，并计算配置 hash；下发副本过滤禁用路由及入站引用，保留数据库绑定供重新启用时恢复，见 [禁用路由下发与验证](testing/disabled-route-delivery.md)。
 - `AggregateConfigCacheService`：缓存聚合配置，供配置分发接口复用。
 - `DataInitializer`：启动时确保默认管理员、匿名用户和兜底路由存在。
 - `security`：`SecurityConfig`、`JwtAuthenticationFilter`、`JwtService` 负责 JWT 鉴权；聚合配置、日志上报、内部邮件等接口有显式放行规则。
