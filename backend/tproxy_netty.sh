@@ -22,6 +22,9 @@ ENABLE_PROXY_443=1           # 0 = 443 不代理（直连），1 = 443 走代理
 ENABLE_LOCAL_FAKE_IP=1       # 1 = 本机访问 Fake IP 的 TCP 也走透明代理
 FAKE_IP_CIDR="198.18.0.0/15" # 必须与 worker 的 Fake IP 地址池一致
 
+REJECT_UDP_443=1             # 1 = 拒绝 LAN 的 UDP/443（QUIC），客户端立即回落 TCP 走透明代理
+REJECT_FAKE_IP_UDP=1         # 1 = 拒绝 LAN 和本机发往 Fake IP 的 UDP，避免静默黑洞
+
 ENABLE_DNS_UDP53=0           # 0 = 不劫持 UDP/53，1 = 劫持到本机 DNS
 DNS_LOCAL_PORT=53            # 本机上运行的 DNS 端口，一般就是 53
 
@@ -116,6 +119,17 @@ iptables -t nat -D POSTROUTING -s ${LAN_CIDR} -o ${WAN_IF} -j MASQUERADE 2>/dev/
 iptables -D FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
 iptables -D FORWARD -i ${LAN_IF} -s ${LAN_CIDR} -j ACCEPT 2>/dev/null || true
 
+# 即使关闭 UDP 拒绝开关，也要删除上次创建的规则。
+while iptables -D FORWARD -i ${LAN_IF} -s ${LAN_CIDR} -p udp --dport 443 \
+  -m comment --comment "${CHAIN_LAN}_reject_quic" \
+  -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; do :; done
+while iptables -D FORWARD -i ${LAN_IF} -s ${LAN_CIDR} -p udp -d "${FAKE_IP_CIDR}" \
+  -m comment --comment "${CHAIN_LAN}_reject_fake_ip_udp" \
+  -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; do :; done
+while iptables -D OUTPUT -p udp -d "${FAKE_IP_CIDR}" \
+  -m comment --comment "${CHAIN_LAN}_reject_fake_ip_udp" \
+  -j REJECT --reject-with icmp-port-unreachable 2>/dev/null; do :; done
+
 ############################
 # 4. 策略路由表
 ############################
@@ -198,6 +212,27 @@ fi
 iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A FORWARD -i ${LAN_IF} -s ${LAN_CIDR} -j ACCEPT
 
+# 透明代理只接管 TCP，UDP 拒绝规则必须插在 LAN ACCEPT 之前；
+# 用 REJECT 回 ICMP 端口不可达，客户端无需等待 QUIC 超时即可回落 TCP。
+if [ "${REJECT_UDP_443}" -eq 1 ]; then
+  echo "[*] 拒绝 LAN 的 UDP/443（QUIC）"
+  iptables -I FORWARD 1 -i ${LAN_IF} -s ${LAN_CIDR} -p udp --dport 443 \
+    -m comment --comment "${CHAIN_LAN}_reject_quic" \
+    -j REJECT --reject-with icmp-port-unreachable
+else
+  echo "[*] 不拒绝 UDP/443，QUIC 将绕过透明代理直接转发"
+fi
+
+if [ "${REJECT_FAKE_IP_UDP}" -eq 1 ]; then
+  echo "[*] 拒绝 LAN 和本机发往 ${FAKE_IP_CIDR} 的 UDP"
+  iptables -I FORWARD 1 -i ${LAN_IF} -s ${LAN_CIDR} -p udp -d "${FAKE_IP_CIDR}" \
+    -m comment --comment "${CHAIN_LAN}_reject_fake_ip_udp" \
+    -j REJECT --reject-with icmp-port-unreachable
+  iptables -I OUTPUT 1 -p udp -d "${FAKE_IP_CIDR}" \
+    -m comment --comment "${CHAIN_LAN}_reject_fake_ip_udp" \
+    -j REJECT --reject-with icmp-port-unreachable
+fi
+
 ############################
 # 7. 调试信息
 ############################
@@ -223,6 +258,10 @@ echo "==== FORWARD 规则 ===="
 iptables -L FORWARD -n -v
 
 echo
+echo "==== OUTPUT 规则 ===="
+iptables -L OUTPUT -n -v
+
+echo
 echo "==== 配置完成 ===="
 echo " LAN_CIDR         = ${LAN_CIDR}"
 echo " LAN_IF           = ${LAN_IF}"
@@ -234,5 +273,7 @@ echo " ENABLE_PROXY_443 = ${ENABLE_PROXY_443}"
 echo " ENABLE_LOCAL_FAKE_IP = ${ENABLE_LOCAL_FAKE_IP}"
 echo " FAKE_IP_CIDR     = ${FAKE_IP_CIDR}"
 echo " ENABLE_DNS_UDP53 = ${ENABLE_DNS_UDP53}"
+echo " REJECT_UDP_443   = ${REJECT_UDP_443}"
+echo " REJECT_FAKE_IP_UDP = ${REJECT_FAKE_IP_UDP}"
 echo " BYPASS_TCP_PORTS = ${BYPASS_TCP_PORTS}"
 echo " CHAIN_LAN        = ${CHAIN_LAN}"

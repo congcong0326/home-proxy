@@ -2,7 +2,7 @@
 
 Fake IP 首期只支持同一 worker 上的 UDP DNS A 查询和 TCP 透明代理。先在同一 worker 创建并启用一个 `TP_PROXY` 入站和一个 `DNS_SERVER` 入站，再打开 DNS 入站的 `fakeIpEnabled`。DNS 入站的兜底路由必须指向真实 UDP DNS 或 DoT 上游；所有 DNS 上游地址必须是 IP 字面量。启用后，普通域名的 A 查询返回 `198.18.0.0/15` 地址，TTL 为 1 秒；适用域名的 AAAA 查询返回空答案。因此 IPv6 专用站点可能无法访问。
 
-将客户端的 UDP/53 请求送到该 worker 的 DNS 入站，并将整个 `198.18.0.0/15` 地址池的 TCP 流量送到该 worker 的透明代理。`backend/tproxy_netty.sh` 中 `ENABLE_DNS_UDP53=0` 是默认值；可根据部署将其设为 `1`，或通过 DHCP 指定 worker DNS。确认透明代理监听已启动、策略路由能接收整个地址池，再允许客户端使用 Fake IP DNS。DNS over TCP、DoH、DoT 和 QUIC 不在首期范围。
+将客户端的 UDP/53 请求送到该 worker 的 DNS 入站，并将整个 `198.18.0.0/15` 地址池的 TCP 流量送到该 worker 的透明代理。`backend/tproxy_netty.sh` 中 `ENABLE_DNS_UDP53=0` 是默认值；可根据部署将其设为 `1`，或通过 DHCP 指定 worker DNS。确认透明代理监听已启动、策略路由能接收整个地址池，再允许客户端使用 Fake IP DNS。DNS over TCP、DoH、DoT 和 QUIC 不在首期范围。`backend/tproxy_netty.sh` 默认 `REJECT_UDP_443=1`、`REJECT_FAKE_IP_UDP=1`：拒绝 LAN 的 UDP/443 以及 LAN 和本机发往地址池的 UDP，客户端收到 ICMP 端口不可达后立即回落 TCP；关闭后发往 Fake IP 的 UDP 会经默认路由发往公网并静默超时。
 
 主路由本机的 DNS 如果也指向 Fake IP DNS，本机 curl、host 网络的 DDNS Go 等程序同样需要引流。`backend/tproxy_netty.sh` 默认启用 `ENABLE_LOCAL_FAKE_IP=1`：只对本机目标为 `198.18.0.0/15` 的 TCP 在 mangle OUTPUT 打标，经现有策略路由回送 `lo`，再在 PREROUTING 交给透明代理。源地址为 Fake IP 的回包不会再次打标，worker 连接真实上游的流量不受影响。该路径覆盖所有 TCP 端口，不使用 LAN 的端口白名单或 `ENABLE_PROXY_443` 开关。需要关闭时设为 `0` 并重新执行脚本；重复执行会清理旧规则。Docker bridge 网络的流量不会经过宿主机 OUTPUT，需要另行配置容器入口引流。
 

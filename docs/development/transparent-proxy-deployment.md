@@ -80,6 +80,8 @@ ss -lntp | grep 10808
 | `ENABLE_TPROXY` | `1` | `1` 表示 TCP 走透明代理，`0` 表示只做普通 NAT 转发 |
 | `ENABLE_PROXY_443` | `1` | `1` 表示 HTTPS 也走透明代理，`0` 表示 443 直连 |
 | `ENABLE_DNS_UDP53` | `0` | 是否把 LAN 的 UDP/53 劫持到本机 DNS |
+| `REJECT_UDP_443` | `1` | `1` 表示拒绝 LAN 的 UDP/443（QUIC），客户端立即回落 TCP 并经透明代理；`0` 表示 QUIC 绕过代理直接转发 |
+| `REJECT_FAKE_IP_UDP` | `1` | `1` 表示拒绝 LAN 和本机发往 `FAKE_IP_CIDR` 的 UDP，避免假地址 UDP 被发往公网后静默超时 |
 | `DNS_LOCAL_PORT` | `53` | DNS 劫持开启时转发到的本机端口 |
 | `BYPASS_TCP_PORTS` | `18081` | 不走透明代理的 TCP 端口，用空格分隔 |
 
@@ -148,6 +150,7 @@ ss -lntp | grep 10808
 - 其余 TCP 用 `TPROXY --on-port ${TPORT}` 交给 NasProxy worker。
 - 为 LAN 到 WAN 增加 `MASQUERADE`，并放行基础 FORWARD。
 - 可选把 LAN 的 UDP/53 重定向到本机 DNS。
+- 透明代理只接管 TCP。默认在 FORWARD 的 LAN 放行规则之前拒绝 LAN 的 UDP/443，并拒绝 LAN 和本机发往 Fake IP 地址池的 UDP；使用 `REJECT --reject-with icmp-port-unreachable`，客户端无需等待 QUIC 超时即可回落 TCP。其余 UDP（如游戏、语音）仍直接 NAT 转发，不经过代理。
 
 脚本只清理自己使用的路由表和链，不要为了排查随手执行 `ip rule flush`，那会把系统默认策略路由也删掉。
 
