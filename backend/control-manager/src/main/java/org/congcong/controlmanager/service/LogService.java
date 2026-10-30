@@ -1,9 +1,6 @@
 package org.congcong.controlmanager.service;
 
 import lombok.RequiredArgsConstructor;
-import org.congcong.common.dto.AccessLog;
-import org.congcong.common.dto.AuthLog;
-import org.congcong.controlmanager.clickhouse.ClickHouseAuthLogWriter;
 import org.congcong.controlmanager.dto.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,27 +16,6 @@ import java.util.Optional;
 public class LogService {
 
     private final AccessLogStoreFactory accessLogStoreFactory;
-    private final ClickHouseAuthLogWriter authLogWriter;
-
-    @Transactional
-    public int saveAccessLogs(List<AccessLog> logs) {
-        if (logs == null || logs.isEmpty()) return 0;
-        return accessLogStoreFactory.current().ingest(logs);
-    }
-
-    @Transactional
-    public int saveAccessLogs(String workerId, List<AccessLog> logs) {
-        validateBatch(logs);
-        logs.forEach(log -> log.setWorkerId(workerId));
-        return accessLogStoreFactory.current().ingest(logs);
-    }
-
-    @Transactional
-    public int saveAuthLogs(String workerId, List<AuthLog> logs) {
-        validateBatch(logs);
-        logs.forEach(log -> log.setWorkerId(workerId));
-        return authLogWriter.ingest(logs);
-    }
 
     /**
      * 分页检索访问日志
@@ -113,11 +89,6 @@ public class LogService {
         if (dto.getBytesOut() == null) dto.setBytesOut(0L);
         dto.setTotalBytes(dto.getBytesIn() + dto.getBytesOut());
         return dto;
-    }
-
-    private void validateBatch(List<?> logs) {
-        if (logs == null || logs.isEmpty()) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "日志批次不能为空");
-        if (logs.size() > 1000) throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.PAYLOAD_TOO_LARGE, "日志批次过大");
     }
 
     private String normalizeWorkerId(String workerId) {

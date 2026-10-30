@@ -214,7 +214,6 @@ create_runtime_config() {
         -v "$TEMP_DIR/worker-token:/run/secrets/worker-token:ro" \
         -e CONTROL_MANAGER_URL="$CONTROL_BASE" \
         -e WORKER_ID="$WORKER_ID" \
-        -e WORKER_MANAGEMENT_ENABLED=true \
         -e WORKER_MANAGEMENT_PORT="$MANAGEMENT_PORT" \
         -e WORKER_MANAGEMENT_TOKEN_FILE=/run/secrets/worker-token \
         -e LAST_KNOWN_GOOD_CONFIG=/tmp/last-known-good-config.json \

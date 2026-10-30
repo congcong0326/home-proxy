@@ -11,7 +11,6 @@ import io.netty.handler.codec.dns.DnsRecordType;
 import io.netty.handler.codec.dns.DnsResponseCode;
 import io.netty.handler.codec.dns.DnsSection;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.dns.DnsQueryContext;
 import org.congcong.proxyworker.dns.DnsQueryService;
 import org.congcong.proxyworker.dns.DnsResult;
@@ -89,11 +88,5 @@ final class FakeIpDnsAnswerHandler extends SimpleChannelInboundHandler<ProxyTunn
                         answerIps, sent.isSuccess(), telemetryResponseBytes);
             }
         });
-        try {
-            AccessLogUtil.logDns(request.getProxyContext(), request.getProxyTimeContext(), dns,
-                    response.code(), answerIps);
-        } catch (RuntimeException | LinkageError auditFailure) {
-            log.warn("DNS response audit failed for qname={}: {}", dns.getQName(), auditFailure.toString());
-        }
     }
 }

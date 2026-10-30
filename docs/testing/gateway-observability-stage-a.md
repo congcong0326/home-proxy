@@ -49,7 +49,7 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 
 2026-10-09 按用户要求屏蔽旧“访问概览”：隐藏菜单和访问分布中的旧版聚合分析链接，原 `/config/overview/log-audit`、`/config/overview/aggregate` 分别跳转新版日志审计、访问分布。旧源码、API、表和历史数据保留；页面变更不会自动修改节点配置。
 
-旧版日志在 Worker 中固定停用，不需要用户逐节点关闭旧开关：`AccessLogUtil` 不再采集成功／失败／DNS 日志，`CONFIG_POLL` 心跳帧的 `accessLogs`／`authLogs` 固定为空，即使旧队列中存在记录也不会发送。旧页面源码、日志 DTO、后端 API、表和历史数据继续保留。
+旧版日志采集与 HTTP/WSS 上报代码已从 Worker 中移除（`AccessLogUtil` 已删除），`CONFIG_POLL` 心跳帧不再携带 `accessLogs`／`authLogs`（控制端对旧 Worker 发来的这两个字段直接忽略）。旧页面源码、日志 DTO、查询 API、表和历史数据继续保留。
 
 新版日志沿用原“系统运维 → 代理节点 → 编辑 → 代理网关日志上报”，对应数据库和聚合配置中的 `logReportingEnabled`，字段名、默认值与配置 hash 均不变。开启后采集／上报新版连接、DNS、诊断事件、认证日志，关闭后停止新事实入队与 telemetry 发送。保存后由已有配置通道动态下发，无需重启，也不会因仅修改此开关重启代理监听；各节点独立设置，缺失或 null 按开启处理。以前将该开关设为 false 的节点升级后新版日志也会停止，需在页面打开才能恢复。
 

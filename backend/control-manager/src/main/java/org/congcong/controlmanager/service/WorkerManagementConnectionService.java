@@ -1,5 +1,6 @@
 package org.congcong.controlmanager.service;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -82,7 +83,9 @@ public class WorkerManagementConnectionService {
     });
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            // Older workers may still send removed fields such as accessLogs/authLogs.
+            .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     private final HttpClient webSocketClient = createWebSocketClient();
 
     @PostConstruct
@@ -270,12 +273,6 @@ public class WorkerManagementConnectionService {
                 workerControlService.recordManagementPoll(expectedWorkerId, toPollRequest(heartbeat));
             } else {
                 workerControlService.recordManagementPoll(expectedWorkerId, request.getConfigHash());
-            }
-            if (request.getAccessLogs() != null && !request.getAccessLogs().isEmpty()) {
-                logService.saveAccessLogs(expectedWorkerId, request.getAccessLogs());
-            }
-            if (request.getAuthLogs() != null && !request.getAuthLogs().isEmpty()) {
-                logService.saveAuthLogs(expectedWorkerId, request.getAuthLogs());
             }
             AggregateConfigResponse config = aggregateConfigCacheService.getAggregateConfig(expectedWorkerId);
             WorkerManagementMessage response;

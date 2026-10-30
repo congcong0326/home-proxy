@@ -9,7 +9,6 @@ import io.netty.handler.codec.dns.*;
 import io.netty.util.AttributeKey;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
 import org.congcong.proxyworker.context.ProxyContextResolver;
@@ -19,8 +18,6 @@ import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.protocol.dns.util.DnsMessageUtil;
 
 import java.net.InetSocketAddress;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -111,7 +108,6 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
                 proxyContext.setBytesOut(DnsMessageUtil.estimateMessageSize(resp));
             }
             inbound.writeAndFlush(resp);
-            AccessLogUtil.logDns(proxyContext, request.getProxyTimeContext(), dnsCtx, resp.code(), Collections.emptyList());
         }
         log.warn("{} upstream connect failed: {}", getClass().getSimpleName(), cause.getMessage(), cause);
     }
@@ -171,26 +167,11 @@ public abstract class AbstractDnsProxyProtocolStrategy implements ProtocolStrate
         copySection(resp, clientResp, DnsSection.ADDITIONAL);
         clientResp.setCode(resp.code());
 
-        List<String> answerIps = DnsMessageUtil.extractAnswerIps(resp);
         ProxyContext proxyContext = entry.proxyContext();
         if (proxyContext != null) {
             proxyContext.setBytesOut(DnsMessageUtil.estimateMessageSize(clientResp));
         }
         inbound.writeAndFlush(clientResp);
-        logDnsResponse(proxyContext, entry.timeContext(), dnsCtx, clientResp.code(), answerIps);
-    }
-
-    private void logDnsResponse(ProxyContext proxyContext,
-                                ProxyTimeContext timeContext,
-                                DnsProxyContext dnsCtx,
-                                DnsResponseCode responseCode,
-                                List<String> answerIps) {
-        try {
-            AccessLogUtil.logDns(proxyContext, timeContext, dnsCtx, responseCode, answerIps);
-        } catch (RuntimeException | LinkageError e) {
-            // Auditing must not prevent a valid upstream DNS response from reaching the client.
-            log.warn("DNS response audit failed for qname={}: {}", dnsCtx.getQName(), e.toString());
-        }
     }
 
     protected void copySection(DnsMessage from, DatagramDnsResponse to, DnsSection section) {

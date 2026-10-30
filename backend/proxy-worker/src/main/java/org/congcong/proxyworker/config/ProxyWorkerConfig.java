@@ -5,36 +5,29 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
 
 /**
  * 代理工作节点配置类
- * 负责读取配置文件中的管理端地址信息
+ * 负责读取 Worker 标识、TLS 证书与 WSS 管理通道配置。
+ * 旧版 HTTP 链路的属性（control.*、worker.tokenFile、worker.control.pollIntervalMs、
+ * worker.management.enabled 等）不再读取，配置里残留这些条目会被直接忽略。
  */
 public class ProxyWorkerConfig {
     private static final Logger log = LoggerFactory.getLogger(ProxyWorkerConfig.class);
     
     private static final String CONFIG_FILE = "proxy-worker.properties";
-    private static final String DEFAULT_CONTROL_HOST = "localhost";
-    private static final int DEFAULT_CONTROL_PORT = 8081;
     
-    private final String controlHost;
-    private final int controlPort;
-    private final String controlBaseUrl;
     private final String workerId;
-    private final long workerControlPollIntervalMs;
     // TLS certificate configuration (optional)
     private final String tlsCertFile;
     private final String tlsKeyFile;
     private final String tlsKeyPassword;
     private final String tlsKeyPasswordFile;
     private final boolean tlsAllowSelfSigned;
-    private final String workerTokenFile;
     private final String lastKnownGoodConfig;
-    private final boolean managementEnabled;
     private final int managementPort;
     private final String managementTokenFile;
     private final long managementPollIntervalMs;
@@ -44,36 +37,19 @@ public class ProxyWorkerConfig {
     private ProxyWorkerConfig() {
         Properties props = loadProperties();
 
-        String configuredBaseUrl = trimToNull(props.getProperty("control.manager.url"));
-        boolean explicitLegacyAddress = firstNonBlank(
-                System.getProperty("CONTROL_HOST"), System.getProperty("control.host"), System.getenv("CONTROL_HOST"),
-                System.getProperty("CONTROL_PORT"), System.getProperty("control.port"), System.getenv("CONTROL_PORT")) != null;
-        if (configuredBaseUrl != null && !explicitLegacyAddress) {
-            URI controlUri = URI.create(trimTrailingSlash(configuredBaseUrl));
-            this.controlHost = controlUri.getHost();
-            this.controlPort = resolvePort(controlUri);
-            this.controlBaseUrl = trimTrailingSlash(configuredBaseUrl);
-        } else {
-            this.controlHost = props.getProperty("control.host", DEFAULT_CONTROL_HOST);
-            this.controlPort = Integer.parseInt(props.getProperty("control.port", String.valueOf(DEFAULT_CONTROL_PORT)));
-            this.controlBaseUrl = String.format("http://%s:%d", controlHost, controlPort);
-        }
         // TLS certificate paths (optional)
         this.tlsCertFile = props.getProperty("tls.certFile", null);
         this.tlsKeyFile = props.getProperty("tls.keyFile", null);
         this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
         this.tlsKeyPasswordFile = trimToNull(props.getProperty("tls.keyPasswordFile"));
         this.tlsAllowSelfSigned = Boolean.parseBoolean(props.getProperty("tls.allowSelfSigned", "false"));
-        this.workerTokenFile = trimToNull(props.getProperty("worker.tokenFile"));
         this.lastKnownGoodConfig = props.getProperty("worker.lastKnownGoodConfig", "/data/proxy-worker/last-known-good-config.json");
         this.workerId = props.getProperty("worker.id", "default");
-        this.workerControlPollIntervalMs = Long.parseLong(props.getProperty("worker.control.pollIntervalMs", "2000"));
-        this.managementEnabled = Boolean.parseBoolean(props.getProperty("worker.management.enabled", "false"));
         this.managementPort = Integer.parseInt(props.getProperty("worker.management.port", "18444"));
         this.managementTokenFile = props.getProperty("worker.management.tokenFile", "/data/proxy-worker/management.token");
         this.managementPollIntervalMs = Long.parseLong(props.getProperty("worker.management.pollIntervalMs", "2000"));
         
-        log.info("代理工作节点配置加载完成 - 控制端地址: {}", controlBaseUrl);
+        log.info("代理工作节点配置加载完成 - workerId: {}, 管理端口: {}", workerId, managementPort);
     }
     
     public static synchronized ProxyWorkerConfig getInstance() {
@@ -125,19 +101,13 @@ public class ProxyWorkerConfig {
     }
 
     private void applyRuntimeOverrides(Properties props) {
-        overrideProperty(props, "control.manager.url", "CONTROL_MANAGER_URL");
-        overrideProperty(props, "control.host", "CONTROL_HOST");
-        overrideProperty(props, "control.port", "CONTROL_PORT");
         overrideProperty(props, "tls.certFile", "TLS_CERT_FILE");
         overrideProperty(props, "tls.keyFile", "TLS_KEY_FILE");
         overrideProperty(props, "tls.keyPassword", "TLS_KEY_PASSWORD");
         overrideProperty(props, "tls.keyPasswordFile", "TLS_KEY_PASSWORD_FILE");
         overrideProperty(props, "tls.allowSelfSigned", "TLS_ALLOW_SELF_SIGNED");
         overrideProperty(props, "worker.id", "WORKER_ID");
-        overrideProperty(props, "worker.tokenFile", "WORKER_TOKEN_FILE");
         overrideProperty(props, "worker.lastKnownGoodConfig", "LAST_KNOWN_GOOD_CONFIG");
-        overrideProperty(props, "worker.control.pollIntervalMs", "WORKER_CONTROL_POLL_INTERVAL_MS");
-        overrideProperty(props, "worker.management.enabled", "WORKER_MANAGEMENT_ENABLED");
         overrideProperty(props, "worker.management.port", "WORKER_MANAGEMENT_PORT");
         overrideProperty(props, "worker.management.tokenFile", "WORKER_MANAGEMENT_TOKEN_FILE");
         overrideProperty(props, "worker.management.pollIntervalMs", "WORKER_MANAGEMENT_POLL_INTERVAL_MS");
@@ -172,61 +142,8 @@ public class ProxyWorkerConfig {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private static String trimTrailingSlash(String value) {
-        String result = value.trim();
-        while (result.endsWith("/")) {
-            result = result.substring(0, result.length() - 1);
-        }
-        return result;
-    }
-
-    private static int resolvePort(URI uri) {
-        if (uri.getPort() > 0) {
-            return uri.getPort();
-        }
-        if ("https".equalsIgnoreCase(uri.getScheme())) {
-            return 443;
-        }
-        return 80;
-    }
-    
-    public String getControlHost() {
-        return controlHost;
-    }
-    
-    public int getControlPort() {
-        return controlPort;
-    }
-    
-    public String getControlBaseUrl() {
-        return controlBaseUrl;
-    }
-
-    public String getAggregateConfigUrl() {
-        return controlBaseUrl + "/api/config/aggregate";
-    }
-
-    /**
-     * 日志发送端点（管理端提供）
-     */
-    public String getAccessLogUrl() {
-        return controlBaseUrl + "/api/logs/access";
-    }
-
-    public String getAuthLogUrl() {
-        return controlBaseUrl + "/api/logs/auth";
-    }
-
-    public String getWorkerPollUrl() {
-        return controlBaseUrl + "/api/worker/poll";
-    }
-
     public String getWorkerId() {
         return workerId;
-    }
-
-    public long getWorkerControlPollIntervalMs() {
-        return workerControlPollIntervalMs;
     }
 
     /**
@@ -253,16 +170,8 @@ public class ProxyWorkerConfig {
         return tlsAllowSelfSigned;
     }
 
-    public String getWorkerTokenFile() {
-        return workerTokenFile;
-    }
-
     public String getLastKnownGoodConfig() {
         return lastKnownGoodConfig;
-    }
-
-    public boolean isManagementEnabled() {
-        return managementEnabled;
     }
 
     public int getManagementPort() {

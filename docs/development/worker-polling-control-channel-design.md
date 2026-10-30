@@ -1,5 +1,7 @@
 # Worker Polling Control Channel Design
 
+> **状态更新**：HTTP 轮询已被 WSS 管理通道取代，并已从代码中移除（见《[Worker 遗留 HTTP 调用与旧日志链路清理设计](worker-legacy-http-removal-design.md)》）。下文仅作历史设计参考。
+
 ## Summary
 
 本设计为 `proxy-worker` 增加一条由 worker 主动轮询 `control-manager` 的控制通道，用于下发轻量任务和回传 worker 运行指标。第一阶段只面向单 worker 部署，不引入 worker 入站 HTTP 服务，不做 worker 地址上报与服务发现。

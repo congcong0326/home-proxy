@@ -168,7 +168,7 @@ public final class WorkerManagementWebSocketServer {
         heartbeat.setHostname(metricsCollector.getHostname());
         heartbeat.setStartedAt(metricsCollector.getStartedAt().toString());
         heartbeat.setFetchedConfigHash(configService.getFetchedConfigHash());
-        WorkerControlService.ConfigApplicationStatus applicationStatus = configService.getApplicationStatus();
+        ConfigApplicationStatus applicationStatus = configService.getApplicationStatus();
         if (applicationStatus != null) {
             heartbeat.setAppliedConfigHash(applicationStatus.appliedConfigHash());
             heartbeat.setApplySuccess(applicationStatus.success());

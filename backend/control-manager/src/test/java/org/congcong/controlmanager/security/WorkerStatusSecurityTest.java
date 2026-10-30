@@ -19,6 +19,7 @@ import java.util.Optional;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(WorkerController.class)
@@ -39,9 +40,6 @@ class WorkerStatusSecurityTest {
 
     @MockitoBean
     private AdminTokenBlacklistRepository blacklistRepository;
-
-    @MockitoBean
-    private WorkerTokenAuthenticationService workerTokenAuthenticationService;
 
     @Test
     void superAdminCanReadWorkerStatus() throws Exception {
@@ -68,5 +66,21 @@ class WorkerStatusSecurityTest {
         mockMvc.perform(get("/api/worker/status")
                         .header("Authorization", "Bearer super-admin-token"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void removedWorkerHttpEndpointsNoLongerAcceptUnauthenticatedRequests() throws Exception {
+        mockMvc.perform(post("/api/logs/access").contentType("application/json").content("[]"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertTrue(
+                        result.getResponse().getStatus() == 401 || result.getResponse().getStatus() == 403));
+        mockMvc.perform(post("/api/logs/auth").contentType("application/json").content("[]"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertTrue(
+                        result.getResponse().getStatus() == 401 || result.getResponse().getStatus() == 403));
+        mockMvc.perform(post("/api/worker/poll").contentType("application/json").content("{}"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertTrue(
+                        result.getResponse().getStatus() == 401 || result.getResponse().getStatus() == 403));
+        mockMvc.perform(get("/api/config/aggregate"))
+                .andExpect(result -> org.junit.jupiter.api.Assertions.assertTrue(
+                        result.getResponse().getStatus() == 401 || result.getResponse().getStatus() == 403));
     }
 }

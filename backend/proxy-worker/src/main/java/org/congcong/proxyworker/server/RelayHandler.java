@@ -11,7 +11,6 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.util.ReferenceCountUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
 
 
@@ -64,10 +63,6 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
                 Throwable cause = future.cause();
                 String errorMsg = cause != null ? cause.getMessage() : "unknown (maybe channel closed)";
                 log.info("Relaying write failed: {}", errorMsg);
-                Channel contextChannel = isClient ? ctx.channel() : relayChannel;
-                if (contextChannel != null) {
-                    AccessLogUtil.logFailure(contextChannel, 500, "WRITE_ERROR", errorMsg);
-                }
                 closeOnFlush(ctx.channel());
                 closeOnFlush(relayChannel);
             } else if (bytes > 0) {
@@ -115,7 +110,6 @@ public class RelayHandler extends ChannelInboundHandlerAdapter {
         Channel contextChannel = isClient ? ctx.channel() : relayChannel;
         if (contextChannel != null) {
             TelemetryHooks.error(contextChannel, "RELAY", "RELAY_ERROR");
-            AccessLogUtil.logFailure(contextChannel, 500, "RELAY_ERROR", cause.getMessage());
         }
         closeOnFlush(ctx.channel());
         closeOnFlush(relayChannel);

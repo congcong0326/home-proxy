@@ -19,9 +19,11 @@ public class WorkerManagementMessage {
     private AggregateConfigResponse config;
     /** Optional status/control payload carried by CONFIG_POLL frames. */
     private WorkerManagementHeartbeat heartbeat;
-    /** Access logs buffered by the worker and delivered over the management socket. */
+    /** @deprecated Legacy log path; only tolerated so frames from older workers still parse. Ignored by the controller. */
+    @Deprecated
     private List<AccessLog> accessLogs;
-    /** Authentication logs buffered by the worker and delivered over the management socket. */
+    /** @deprecated Legacy log path; only tolerated so frames from older workers still parse. Ignored by the controller. */
+    @Deprecated
     private List<AuthLog> authLogs;
     private java.util.Map<String, Object> taskPayload;
     @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)

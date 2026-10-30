@@ -43,7 +43,6 @@ services:
       LOGS_PERSISTENCE: clickhouse
       SPRING_APPLICATION_JSON: '{"logs":{"clickhouse":{"maxDelayMs":1000}},"observability":{"flushMaxDelayMs":1000}}'
       ADMIN_AUTH_JWT_SECRET: ${E2E_JWT_SECRET}
-      WORKER_AUTH_LEGACY_ENABLED: "false"
     ports:
       - "127.0.0.1:${E2E_CONTROL_PORT}:8443"
     extra_hosts:

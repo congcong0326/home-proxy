@@ -8,7 +8,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.*;
 import org.congcong.common.enums.LogLevel;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.config.UserConfig;
@@ -38,11 +37,6 @@ public class ProxyWorkerApplication {
         AggregateConfigService configService = new AggregateConfigService();
         configService.setConfigChangeListener(new ConfigChangeListener());
 
-        ProxyWorkerConfig workerConfig = ProxyWorkerConfig.getInstance();
-        AccessLogUtil.start();
-        if (!workerConfig.isManagementEnabled()) {
-            log.warn("WORKER_MANAGEMENT_ENABLED=false 已不再支持，仍将启动 controller 推送管理通道");
-        }
         configService.startManaged();
         WorkerManagementWebSocketServer managementServer = new WorkerManagementWebSocketServer(configService);
         managementServer.start();
@@ -54,7 +48,6 @@ public class ProxyWorkerApplication {
             configService.stop();
             activeManagementServer.stop();
             PROXY_CONTEXT.closeAll();
-            AccessLogUtil.stop();
             org.congcong.proxyworker.telemetry.TelemetryPublisher.getInstance().shutdown();
         }));
         

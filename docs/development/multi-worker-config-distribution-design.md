@@ -1,5 +1,7 @@
 # 多 Proxy Worker 配置分发与认证设计
 
+> **状态更新**：文中的 HTTP 拉取配置（`/api/config/aggregate`）、HTTP 轮询（`/api/worker/poll`）、HTTP 日志上报（`/api/logs/access`、`/api/logs/auth`）、Worker Token 鉴权与 `worker.auth.legacy-enabled` 已从代码中移除，配置与日志均走 WSS 管理通道，见《[Worker 遗留 HTTP 调用与旧日志链路清理设计](worker-legacy-http-removal-design.md)》。下文仅作历史设计参考。
+
 ## 1. 文档状态
 
 - 状态：可实施

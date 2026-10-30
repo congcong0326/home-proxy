@@ -5,9 +5,6 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.dto.WorkerManagementMessage;
 import org.congcong.common.dto.WorkerManagementMessageType;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
-import org.congcong.common.dto.AccessLog;
-import org.congcong.common.dto.AuthLog;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -27,7 +24,6 @@ import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
-import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
@@ -60,14 +56,10 @@ class WorkerManagementWebSocketServerTest {
         int port = availablePort();
         Path tokenFile = tempDir.resolve("management.token");
         System.setProperty("WORKER_ID", "wss-test");
-        System.setProperty("WORKER_MANAGEMENT_ENABLED", "true");
         System.setProperty("WORKER_MANAGEMENT_PORT", String.valueOf(port));
         System.setProperty("WORKER_MANAGEMENT_TOKEN_FILE", tokenFile.toString());
 
         WorkerManagementWebSocketServer server = new WorkerManagementWebSocketServer(new AggregateConfigService());
-        // Even a preexisting/requeued legacy batch must never leave this worker.
-        AccessLogUtil.requeueAccessLogs(List.of(new AccessLog()));
-        AccessLogUtil.requeueAuthLogs(List.of(new AuthLog()));
         server.start();
         try {
             String token = Files.readString(tokenFile).trim();
@@ -111,7 +103,6 @@ class WorkerManagementWebSocketServerTest {
             socket.sendClose(WebSocket.NORMAL_CLOSURE, "done").join();
         } finally {
             server.stop();
-            AccessLogUtil.stop();
         }
     }
 

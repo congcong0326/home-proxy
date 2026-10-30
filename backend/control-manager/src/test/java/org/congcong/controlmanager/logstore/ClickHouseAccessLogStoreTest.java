@@ -1,6 +1,5 @@
 package org.congcong.controlmanager.logstore;
 
-import org.congcong.controlmanager.clickhouse.ClickHouseAccessLogWriter;
 import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -20,8 +19,7 @@ class ClickHouseAccessLogStoreTest {
     @Test
     void globalTrafficTrendFiltersByWorker() {
         ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
-        ClickHouseAccessLogWriter writer = mock(ClickHouseAccessLogWriter.class);
-        ClickHouseAccessLogStore store = new ClickHouseAccessLogStore(writer, client);
+        ClickHouseAccessLogStore store = new ClickHouseAccessLogStore(client);
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
 
         store.getGlobalTrafficTrend(
@@ -40,8 +38,7 @@ class ClickHouseAccessLogStoreTest {
     @Test
     void userTrafficTrendFiltersByWorkerAndUser() {
         ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
-        ClickHouseAccessLogWriter writer = mock(ClickHouseAccessLogWriter.class);
-        ClickHouseAccessLogStore store = new ClickHouseAccessLogStore(writer, client);
+        ClickHouseAccessLogStore store = new ClickHouseAccessLogStore(client);
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
 
         store.getUserTrafficTrend(

@@ -31,7 +31,6 @@
 主要控制器：
 
 - `AdminController`：`/admin` 登录、当前用户、改密、登出、管理员维护。
-- `AggregateConfigController`：`/api/config/aggregate`，向 worker 发布聚合配置，支持 ETag/304。
 - `UserController`、`RouteController`、`InboundConfigController`、`RateLimitController`：代理核心配置 CRUD。
 - `DnsRuleController`：DNS 规则接口占位，目前只注册 `/api/dns/rule` 根路径。
 - `LogController`、`UserTrafficStatsController`：访问日志查询、明细、TopN、时间序列、用户流量统计。
@@ -53,7 +52,7 @@
 
 - `ProxyWorkerApplication`：初始化 `DomainRuleEngine`、启动日志上报、启动配置拉取服务，并在关闭钩子中释放代理服务。
 - `config/ProxyWorkerConfig`：读取 `proxy-worker.properties`，拼出控制端地址、聚合配置 URL、日志上报 URL 和可选 TLS 证书路径。
-- `service/AggregateConfigService`：每 30 秒拉取 `/api/config/aggregate`；配置变化后通知 listener。
+- `service/AggregateConfigService`：缓存并应用经 WSS 管理通道下发的配置，配置变化后通知 listener；不再通过 HTTP 轮询拉取。
 - `http/HttpClientManager`：执行 HTTP 请求和 ETag 缓存。
 - `ProxyWorkerApplication.ConfigChangeListener`：把 `common` DTO 转换为 worker 运行时配置，构建用户、IP、路由映射，然后调用 `server/ProxyContext.refresh`。
 - `docs/testing/proxy-worker-testing.md`：proxy-worker 单测、集成测试与核心场景回归矩阵。
@@ -68,7 +67,7 @@
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。
-- `telemetry/TelemetryPublisher`：新版四类日志缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集已固定停用。
+- `telemetry/TelemetryPublisher`：新版四类日志缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集与 HTTP 日志上报已移除。
 
 ## 前端 frontend
 
@@ -100,7 +99,7 @@
 1. 前端配置页调用 `frontend/src/services/api.ts`。
 2. `control-manager` 的 controller 调用 service 和 repository 写入数据库。
 3. `AggregateConfigService` 聚合启用配置并计算 hash。
-4. `AggregateConfigController` 通过 `/api/config/aggregate` 返回配置和 ETag。
+4. 控制端经 worker 管理 WSS 通道（`WorkerManagementConnectionService`）把配置推送给 worker，不再提供 `/api/config/aggregate`。
 5. `proxy-worker` 定时拉取配置，变化时刷新 `ProxyContext` 并重启受影响的入站服务。
 
 代理请求链路：
@@ -110,12 +109,12 @@
 3. `RouterService` 按用户绑定的路由和域名/Geo/广告规则选择路由。
 4. `OutboundConnectorFactory` 创建出站连接器。
 5. `ProxyTunnelConnectorHandler` 建立出站连接、写回协议响应、设置双向 relay。
-6. 连接结束后 `telemetry/SessionObservation` 生成唯一汇总并交给 `TelemetryPublisher`；旧 `AccessLogUtil` 调用保留但不再采集。
+6. 连接结束后 `telemetry/SessionObservation` 生成唯一汇总并交给 `TelemetryPublisher`。
 
 日志与看板链路：
 
 1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
-2. `control-manager` 的 telemetry ingest/writer 将新版四类日志写入 ClickHouse 的独立表；旧 `WorkerManagementConnectionService` → `LogService` 路径及 `/api/logs/access`、`/api/logs/auth` 端点保留给兼容 worker。
+2. `control-manager` 的 telemetry ingest/writer 将新版四类日志写入 ClickHouse 的独立表；配置与日志均走 WSS，旧 `/api/logs/access`、`/api/logs/auth` 写入端点及 `LogService` 写入路径已移除，`GET /api/logs/**` 仍可查询历史数据。
 3. 新版看板／审计页面查询 `/api/observability/v1`；保留的旧源消费者通过 `LogController`、`UserTrafficStatsController` 读取历史数据；网关监控读取 WSS 心跳落库的 `worker_status`。
 
 认证链路：
@@ -189,7 +188,7 @@
 
 - `frontend/src/App.tsx`、`pages/ProxyConfig.tsx`：隐藏“访问概览”，旧审计／聚合地址跳转新版；保留旧页面源码、后端 API 与数据。
 - `frontend/src/pages/WorkerManagement.tsx`：原“代理网关日志上报”沿用 `logReportingEnabled`，通过聚合配置动态控制 `TelemetryPublisher` 的 V1 四类日志采集／发送；与 `OBSERVABILITY_ENABLED` 部署总开关共同生效。
-- `AccessLogUtil` 的旧采集固定关闭，`WorkerManagementWebSocketServer` 心跳帧不携带旧日志；旧代码／API／历史数据保留。
+- 旧 `AccessLogUtil` 采集与 HTTP 日志上报已删除；`CONFIG_POLL` 帧中的 `accessLogs`/`authLogs` 字段仅为兼容旧 worker 保留（`@Deprecated`），控制端忽略；旧表与历史数据保留。
 - [配置与生效边界](testing/gateway-observability-stage-a.md#仅上报新版日志)：关闭暂停新版待确认批次，重新开启继续发送；恢复旧采集需回退 Worker 版本。
 
 ## 管理端日志攒批与认证 GeoIP

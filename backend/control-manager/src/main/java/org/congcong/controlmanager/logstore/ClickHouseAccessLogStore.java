@@ -1,8 +1,6 @@
 package org.congcong.controlmanager.logstore;
 
 import lombok.RequiredArgsConstructor;
-import org.congcong.common.dto.AccessLog;
-import org.congcong.controlmanager.clickhouse.ClickHouseAccessLogWriter;
 import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.congcong.controlmanager.dto.*;
 import org.springframework.stereotype.Component;
@@ -18,13 +16,7 @@ import java.util.*;
 @Component
 @RequiredArgsConstructor
 public class ClickHouseAccessLogStore implements AccessLogStore {
-    private final ClickHouseAccessLogWriter writer;
     private final ClickHouseJdbcClient client;
-
-    @Override
-    public int ingest(List<AccessLog> logs) {
-        return writer.ingest(logs);
-    }
 
     @Override
     public List<TimeSeriesPoint> getGlobalTrafficTrend(String workerId, LocalDateTime from, LocalDateTime to) {

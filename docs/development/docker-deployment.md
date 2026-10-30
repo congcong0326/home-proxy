@@ -74,7 +74,6 @@ worker 使用 `network_mode: host`，因此控制面下发的入站端口会直�
 
 ```bash
 WORKER_ID=shanghai-01
-WORKER_MANAGEMENT_ENABLED=true
 WORKER_MANAGEMENT_PORT=18444
 ```
 

@@ -8,6 +8,7 @@ import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 
@@ -30,7 +31,7 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void workerPollEndpointBypassesAdminJwtAuthentication() throws Exception {
+    void removedWorkerPollEndpointRequiresAdminJwtAuthentication() throws Exception {
         JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
                 mock(JwtService.class),
                 mock(AdminUserRepository.class),
@@ -41,7 +42,7 @@ class JwtAuthenticationFilterTest {
 
         filter.doFilter(request, response, chain);
 
-        assertEquals(200, response.getStatus());
-        assertNotNull(chain.getRequest());
+        assertEquals(401, response.getStatus());
+        assertNull(chain.getRequest());
     }
 }

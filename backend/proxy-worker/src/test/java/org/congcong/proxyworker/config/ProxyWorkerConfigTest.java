@@ -10,7 +10,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProxyWorkerConfigTest {
 
@@ -48,63 +47,49 @@ class ProxyWorkerConfigTest {
     }
 
     @Test
-    void controlManagerUrlSystemPropertyOverridesClasspathDefaults() throws Exception {
-        System.setProperty("CONTROL_MANAGER_URL", "http://10.0.0.5:18081/");
-
-        ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
-
-        assertEquals("10.0.0.5", config.getControlHost());
-        assertEquals(18081, config.getControlPort());
-        assertEquals("http://10.0.0.5:18081", config.getControlBaseUrl());
-        assertEquals("http://10.0.0.5:18081/api/config/aggregate", config.getAggregateConfigUrl());
-        assertEquals("http://10.0.0.5:18081/api/logs/access", config.getAccessLogUrl());
-    }
-
-    @Test
-    void controlHostAndPortSystemPropertiesOverrideClasspathDefaults() throws Exception {
-        System.setProperty("CONTROL_HOST", "control.local");
-        System.setProperty("CONTROL_PORT", "18082");
-
-        ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
-
-        assertEquals("control.local", config.getControlHost());
-        assertEquals(18082, config.getControlPort());
-        assertEquals("http://control.local:18082", config.getControlBaseUrl());
-    }
-
-    @Test
     void externalConfigOverridesClasspathDefaultsAndSystemPropertiesTakePriority() throws Exception {
         Path externalConfig = tempDir.resolve("proxy-worker.properties");
         Files.writeString(externalConfig, """
                 control.host=file-control
                 control.port=18083
+                worker.id=file-worker
                 tls.certFile=/mounted/cert.pem
                 tls.keyFile=/mounted/key.pem
                 tls.keyPassword=file-secret
                 """);
         System.setProperty("PROXY_WORKER_CONFIG", externalConfig.toString());
-        System.setProperty("CONTROL_PORT", "18084");
+        System.setProperty("WORKER_ID", "env-worker");
 
         ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
 
-        assertEquals("file-control", config.getControlHost());
-        assertEquals(18084, config.getControlPort());
-        assertEquals("http://file-control:18084", config.getControlBaseUrl());
+        assertEquals("env-worker", config.getWorkerId());
         assertEquals("/mounted/cert.pem", config.getTlsCertFile());
         assertEquals("/mounted/key.pem", config.getTlsKeyFile());
         assertEquals("file-secret", config.getTlsKeyPassword());
     }
 
     @Test
+    void legacyHttpSettingsAreIgnored() {
+        System.setProperty("CONTROL_MANAGER_URL", "http://10.0.0.5:18081/");
+        System.setProperty("CONTROL_HOST", "control.local");
+        System.setProperty("CONTROL_PORT", "not-a-number");
+        System.setProperty("WORKER_TOKEN_FILE", "/missing/worker.token");
+        System.setProperty("WORKER_CONTROL_POLL_INTERVAL_MS", "bad");
+        System.setProperty("WORKER_MANAGEMENT_ENABLED", "false");
+
+        ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
+
+        assertEquals("default", config.getWorkerId());
+    }
+
+    @Test
     void managementChannelSettingsCanBeOverriddenAtRuntime() {
-        System.setProperty("WORKER_MANAGEMENT_ENABLED", "true");
         System.setProperty("WORKER_MANAGEMENT_PORT", "19444");
         System.setProperty("WORKER_MANAGEMENT_TOKEN_FILE", "/state/management.token");
         System.setProperty("WORKER_MANAGEMENT_POLL_INTERVAL_MS", "2500");
 
         ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
 
-        assertTrue(config.isManagementEnabled());
         assertEquals(19444, config.getManagementPort());
         assertEquals("/state/management.token", config.getManagementTokenFile());
         assertEquals(2500L, config.getManagementPollIntervalMs());

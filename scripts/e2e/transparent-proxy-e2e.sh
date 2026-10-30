@@ -392,7 +392,6 @@ create_runtime_config() {
         -e JAVA_OPTS="-Dproxyworker.udp.idleTimeoutSeconds=3" \
         -e CONTROL_MANAGER_URL="$CONTROL_BASE" \
         -e WORKER_ID="$WORKER_ID" \
-        -e WORKER_MANAGEMENT_ENABLED=true \
         -e WORKER_MANAGEMENT_PORT="$MANAGEMENT_PORT" \
         -e WORKER_MANAGEMENT_TOKEN_FILE=/run/secrets/worker-token \
         -e LAST_KNOWN_GOOD_CONFIG=/tmp/last-known-good-config.json \

@@ -2,21 +2,16 @@ package org.congcong.controlmanager.controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.common.dto.AccessLog;
-import org.congcong.common.dto.AuthLog;
 import org.congcong.controlmanager.dto.*;
 import org.congcong.controlmanager.service.LogService;
 import org.congcong.controlmanager.service.WorkerControlService;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.time.YearMonth;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @RestController
@@ -26,34 +21,6 @@ import java.util.Map;
 public class LogController {
 
     private final LogService logService;
-
-    /**
-     * 接收访问日志批量
-     */
-    @PostMapping("/access")
-    public ResponseEntity<Map<String, Object>> ingestAccessLogs(@RequestBody List<AccessLog> logs) {
-        int saved = logService.saveAccessLogs(resolveWorkerId(logs), logs);
-        Map<String, Object> resp = new HashMap<>();
-        resp.put("saved", saved);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(resp);
-    }
-
-    @PostMapping("/auth")
-    public ResponseEntity<Map<String, Object>> ingestAuthLogs(@RequestBody List<AuthLog> logs) {
-        int saved = logService.saveAuthLogs(resolveWorkerId(logs), logs);
-        return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("saved", saved));
-    }
-
-    private String resolveWorkerId(List<?> logs) {
-        if (logs != null) {
-            for (Object item : logs) {
-                String workerId = item instanceof AccessLog accessLog ? accessLog.getWorkerId()
-                        : item instanceof AuthLog authLog ? authLog.getWorkerId() : null;
-                if (workerId != null && !workerId.isBlank()) return workerId.trim();
-            }
-        }
-        return org.congcong.controlmanager.service.WorkerControlService.DEFAULT_WORKER_ID;
-    }
 
     /**
      * 分页检索访问日志

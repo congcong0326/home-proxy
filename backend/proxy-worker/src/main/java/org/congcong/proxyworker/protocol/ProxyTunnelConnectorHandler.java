@@ -7,7 +7,6 @@ import io.netty.util.concurrent.Promise;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
 import org.congcong.common.dto.ProxyTimeContext;
-import org.congcong.proxyworker.audit.AccessLogUtil;
 import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.outbound.OutboundConnector;
 import org.congcong.proxyworker.outbound.OutboundConnectorFactory;
@@ -85,8 +84,6 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 // 连接目标服务器失败
                 boolean privateDestinationBlocked = future.cause() instanceof PrivateDestinationBlockedException;
                 String errorCode = privateDestinationBlocked ? "PRIVATE_ADDRESS_BLOCKED" : "NETWORK_ERROR";
-                AccessLogUtil.logFailure(channelHandlerContext.channel(), privateDestinationBlocked ? 403 : 500,
-                        errorCode, future.cause().getMessage());
                 if (privateDestinationBlocked) {
                     log.warn("Blocked non-public destination: protocol={}, user={}, route={}, target={}:{}, reason={}",
                             proxyTunnelRequest.getProtocolType(),
@@ -103,12 +100,6 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
                 if (ch != null && ch.isOpen()) {
                     ch.close();
                 }
-            }
-        });
-        //
-        channelHandlerContext.channel().closeFuture().addListener(f -> {
-            if (f.isSuccess() && proxyTunnelRequest.isConnectSucceeded()) {
-                AccessLogUtil.logSuccess(channelHandlerContext.channel());
             }
         });
     }
