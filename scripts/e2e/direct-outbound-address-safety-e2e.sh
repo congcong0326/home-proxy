@@ -145,7 +145,6 @@ build_images() {
 setup_control_plane() {
     export E2E_CONTROL_IMAGE="$CONTROL_IMAGE"
     export E2E_CONTROL_PORT="$CONTROL_PORT"
-    export E2E_MYSQL_PASSWORD="e2e_mysql_${RUN_ID}"
     E2E_CLICKHOUSE_PASSWORD="e2e_clickhouse_${RUN_ID}"
     export E2E_CLICKHOUSE_PASSWORD
     export E2E_JWT_SECRET="e2e_jwt_$(openssl rand -hex 24)"
@@ -253,7 +252,7 @@ audit_private_blocks_visible() {
     local counts blocked network_errors
     counts="$(docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" exec -T clickhouse \
         clickhouse-client --user default --password "$E2E_CLICKHOUSE_PASSWORD" --format TSVRaw --query \
-        "SELECT countIf(error_code = 'PRIVATE_ADDRESS_BLOCKED' AND status = 403), countIf(error_code = 'NETWORK_ERROR' AND original_target_host IN ('127.0.0.1', 'localhost')) FROM default.access_log WHERE worker_id = '${WORKER_ID}'")" || return 1
+        "SELECT countIf(error_code = 'POLICY_BLOCKED'), countIf(error_code = 'CONNECT_FAILED' AND logical_target_host IN ('127.0.0.1', 'localhost')) FROM telemetry.proxy_session_log_v1 FINAL WHERE worker_id = '${WORKER_ID}'")" || return 1
     blocked="${counts%%$'\t'*}"
     network_errors="${counts#*$'\t'}"
     [[ "$blocked" -ge 4 && "$network_errors" == 0 ]]
@@ -273,7 +272,7 @@ run_assertions() {
         --password "$E2E_PASSWORD" || fail "Shadowsocks private literal was not closed"
     echo "PASS: Shadowsocks private literal is blocked"
     assert_tls_sni_closed
-    wait_until "PRIVATE_ADDRESS_BLOCKED audit records" audit_private_blocks_visible
+    wait_until "private-address block audit records" audit_private_blocks_visible
     echo "PASS: audit records private-address blocks without network-error classification"
 }
 

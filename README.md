@@ -46,7 +46,7 @@ NasProxy 现在更像一个给家庭网络用的代理网关和控制台：管�
 - **多种出站**：支持上游 SOCKS5、HTTP CONNECT、Shadowsocks、DNS/DoT，以及 VLESS + REALITY Vision，适合接已有的 Xray/REALITY 节点。
 - **规则集同步**：可以维护 AI、流媒体、SaaS、开发、广告、Geo 等分类规则，从 Git Raw 或 HTTP 文件同步后发布给 worker。
 - **日志和看板**：worker 上报访问日志，控制面用 ClickHouse 做日志审计、流量趋势、用户流量、目标 TopN 和聚合分析。
-- **家庭运维功能**：WOL、磁盘 SMART 上报、邮件网关、计划任务、MySQL 备份和恢复。
+- **家庭运维功能**：WOL、磁盘 SMART 上报、邮件网关、计划任务、SQLite 数据库备份和恢复。
 - **每日巡检邮件**：新增 `ops.inspection`，按定时任务汇总过去 24 小时磁盘、网络质量、主网关外网流量和成功认证位置变化；支持邮件预览。配置与统计边界见 [每日巡检邮件](docs/development/mail-inspection.md)。
 - **Docker 部署**：镜像已经推到 Docker Hub，可以直接用 Docker Compose 拉起来。
 
@@ -73,8 +73,7 @@ docker pull congcong0326/home-proxy-worker:latest
 
 运行时会启动这些服务：
 
-- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源
-- `mysql`：控制面配置库，仅 Docker 内部网络可访问
+- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源。配置元数据保存在内嵌 SQLite（容器内 `/data/home-proxy.db`，对应数据卷 `control-data`），无需独立数据库容器
 - `clickhouse`：访问日志和统计库，仅 Docker 内部网络可访问
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
 
@@ -96,24 +95,6 @@ cat > docker-compose.yml <<'YAML'
 name: home-proxy-control
 
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: home-proxy-mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-tpproxy}
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-    networks:
-      - home-proxy-db
-
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: home-proxy-clickhouse
@@ -140,15 +121,11 @@ services:
     container_name: home-proxy-control-manager
     restart: unless-stopped
     depends_on:
-      mysql:
-        condition: service_healthy
       clickhouse:
         condition: service_healthy
     environment:
       SERVER_PORT: 8081
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-tpproxy}?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-congcong}
+      HOME_PROXY_DATA_DIR: /data
       CLICKHOUSE_URL: jdbc:ch://clickhouse:8123/${CLICKHOUSE_DB:-default}
       CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:-default}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
@@ -157,13 +134,15 @@ services:
       DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
       GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
+    volumes:
+      - control-data:/data
     ports:
       - "${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HOST_PORT:-18081}:8081"
     networks:
       - home-proxy-db
 
 volumes:
-  mysql-data:
+  control-data:
   clickhouse-data:
   clickhouse-logs:
 
@@ -276,7 +255,6 @@ docker compose -f docker-compose.worker.yml ps
 ```bash
 docker logs -f home-proxy-control-manager
 docker logs -f home-proxy-worker
-docker logs -f home-proxy-mysql
 docker logs -f home-proxy-clickhouse
 ```
 
@@ -304,7 +282,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-这会删除 MySQL 和 ClickHouse 数据卷，配置、管理员账号和日志都会被清空。
+这会删除 SQLite 配置库（`control-data`）和 ClickHouse 数据卷，配置、管理员账号和日志都会被清空。
 
 ### 5. 可选配置
 
@@ -314,7 +292,6 @@ docker compose up -d
 cat > .env <<'EOF'
 CONTROL_BIND_ADDRESS=192.168.1.10
 CONTROL_HOST_PORT=18081
-MYSQL_ROOT_PASSWORD=congcong
 CLICKHOUSE_PASSWORD=congcong
 ADMIN_AUTH_JWT_SECRET=dev_only_change_me_home_proxy_jwt_secret
 EOF
@@ -325,7 +302,8 @@ EOF
 ```text
 CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 0.0.0.0；请通过宿主机防火墙或云安全组限制访问来源
 CONTROL_HOST_PORT              控制面宿主机端口，默认 18081
-MYSQL_ROOT_PASSWORD            MySQL root 密码，默认 congcong
+HOME_PROXY_BACKUP_RETENTION    控制端定时备份保留份数，默认 7
+HOME_PROXY_BACKUP_CRON         控制端定时备份 cron（Spring 6 段格式），默认每天 03:30
 CLICKHOUSE_PASSWORD            ClickHouse 密码，默认 congcong
 ADMIN_AUTH_JWT_SECRET          控制面 JWT 签名密钥
 CONTROL_MANAGER_URL            worker 连接控制面的地址
@@ -355,6 +333,15 @@ environment:
   TLS_KEY_FILE: /etc/nas-proxy/certs/s-proxy-ca.key
 ```
 
+### 数据库备份与恢复
+
+配置元数据保存在 SQLite（`/data/home-proxy.db`，WAL 模式）。**不要直接复制正在运行的 `.db`/`-wal` 文件**，请使用以下方式：
+
+- 管理页面“系统运维 → 数据备份”：导出当前数据库的一致性快照（`.db`）。
+- 自动备份：控制端按 `HOME_PROXY_BACKUP_CRON`（默认每天 03:30）用 `VACUUM INTO` 写入 `/data/backups/home-proxy-<时间>.db`，保留最近 `HOME_PROXY_BACKUP_RETENTION`（默认 7）份。将该目录同步到数据卷之外才算异地备份。
+- 恢复（页面）：上传 `.db` 并输入确认短语，控制端校验（SQLite 头、`integrity_check`、必需表）后暂存，**重启控制端时**替换当前数据库；被替换的库保存为 `/data/backups/pre-restore-<时间>.db`。
+- 恢复（手动）：停止 `control-manager` → 用备份文件替换 `/data/home-proxy.db`，并删除 `/data/home-proxy.db-wal`、`-shm` → 启动。
+
 ### 6. 从源码构建镜像
 
 如果需要自己修改代码并构建镜像，请使用仓库根目录的 `Makefile`：
@@ -372,7 +359,7 @@ make docker-build          # 打包并构建 control-manager 和 worker 镜像
 make docker-build-control  # 只构建 control-manager 镜像
 make docker-build-worker   # 只构建 worker 镜像
 make docker-save           # 导出应用镜像到 home-proxy-images.tar
-make docker-save-offline   # 导出应用镜像以及 MySQL/ClickHouse 镜像
+make docker-save-offline   # 导出应用镜像以及 ClickHouse 镜像
 ```
 
 更完整的容器化说明见 [docs/development/docker-deployment.md](docs/development/docker-deployment.md)。

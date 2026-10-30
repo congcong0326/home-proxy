@@ -20,9 +20,9 @@
 
 `make worker-it` 使用 Maven Failsafe 执行 `*IT.java`，普通 `make backend-test` 仍只执行 Surefire 单元测试。集成测试会按需下载固定版本 xray 到仓库根目录 `.it-cache/xray`，该目录不提交；如果本机已经有 xray，可用 `XRAY_BIN=/path/to/xray make worker-it` 指定可执行文件，也可用 `-Dxray.cache.dir=/path/to/cache` 改缓存目录。
 
-`make e2e-transparent` 是独立的特权 Linux E2E，不会进入 `make backend-test` 或 `make worker-it`。它要求原生 Linux、Docker、`iproute2`、`iptables`、`curl`、`jq`、`openssl`，以及 root 或免密 `sudo`。测试会构建当前 control-manager/worker 镜像，启动独立 MySQL/ClickHouse/control-manager 栈和 worker；随后创建 network namespace、veth、TPROXY 规则与策略路由。无论成功或失败，脚本都按精确资源名删除容器、Compose 卷、iptables 规则、策略路由、命名空间和 loopback 测试地址。用 `E2E_BUILD=0` 可跳过镜像构建，用 `E2E_KEEP_ARTIFACTS=1` 保留失败现场的临时配置文件。
+`make e2e-transparent` 是独立的特权 Linux E2E，不会进入 `make backend-test` 或 `make worker-it`。它要求原生 Linux、Docker、`iproute2`、`iptables`、`curl`、`jq`、`openssl`，以及 root 或免密 `sudo`。测试会构建当前 control-manager/worker 镜像，启动独立 ClickHouse/control-manager 栈（控制端元数据使用栈内 SQLite）和 worker；随后创建 network namespace、veth、TPROXY 规则与策略路由。无论成功或失败，脚本都按精确资源名删除容器、Compose 卷、iptables 规则、策略路由、命名空间和 loopback 测试地址。用 `E2E_BUILD=0` 可跳过镜像构建，用 `E2E_KEEP_ARTIFACTS=1` 保留失败现场的临时配置文件。
 
-`make e2e-direct-outbound-safety` 是独立的 Linux/Docker E2E，不需要 root、iptables 或现有控制面。它构建当前镜像后启动临时 MySQL、ClickHouse、control-manager 和 host-network worker，再通过控制面发布 SOCKS5、HTTP CONNECT、Shadowsocks、TLS SNI TCP 入站。用例验证私网字面量的 SOCKS5 规则禁止状态、HTTP 403、Shadowsocks/TLS SNI 关闭、可信 `DESTINATION_OVERRIDE` 到本地目标的放行，以及 ClickHouse 中的 `PRIVATE_ADDRESS_BLOCKED` 审计记录；运行结束会清理容器、卷和临时凭据。Shadowsocks 客户端使用 Python `cryptography` 的 AES-GCM 实现；可用 `E2E_BUILD=0` 复用已构建镜像。
+`make e2e-direct-outbound-safety` 是独立的 Linux/Docker E2E，不需要 root、iptables 或现有控制面。它构建当前镜像后启动临时 ClickHouse、control-manager（SQLite） 和 host-network worker，再通过控制面发布 SOCKS5、HTTP CONNECT、Shadowsocks、TLS SNI TCP 入站。用例验证私网字面量的 SOCKS5 规则禁止状态、HTTP 403、Shadowsocks/TLS SNI 关闭、可信 `DESTINATION_OVERRIDE` 到本地目标的放行，以及 ClickHouse 中的 `PRIVATE_ADDRESS_BLOCKED` 审计记录；运行结束会清理容器、卷和临时凭据。Shadowsocks 客户端使用 Python `cryptography` 的 AES-GCM 实现；可用 `E2E_BUILD=0` 复用已构建镜像。
 
 `make e2e-worker-proxy-setup` 只需在研发/测试控制面执行一次。它在固定的 `home-01` 节点上创建两条入站：`TP_PROXY` 和 `SOCKS5`，并绑定直连、阻断、SOCKS5 出站、目标重写四类路由；默认凭据是 `worker-e2e / worker-e2e-pass`，可通过 `E2E_*` 环境变量覆盖。常规发布前回归只执行 `make e2e-worker-proxy`，该命令复用正在运行的 control-manager 和 worker，不修改管理配置，只启动临时 HTTP 目标和 SOCKS5 上游并验证两条入站的请求结果。透明代理测试使用独立 network namespace、veth、TPROXY 和策略路由，结束后清理所有临时网络资源。
 

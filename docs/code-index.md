@@ -24,9 +24,10 @@
 启动入口：
 
 - `ControlManagerApplication`：Spring Boot 主类，启用缓存。
-- `src/main/resources/application.properties`：默认端口、MySQL、Flyway、JWT、ClickHouse、日志落库配置。
+- `src/main/resources/application.properties`：默认端口、SQLite 数据源（`HOME_PROXY_DATA_DIR`）、Flyway、备份、JWT、ClickHouse、日志落库配置。
+- `config/DataSourceConfig`：SQLite 连接池（WAL、`foreign_keys`、`busy_timeout`、`BEGIN IMMEDIATE`）；`persistence/Sqlite*Converter` 把 `LocalDateTime`/`Instant` 存为 UTC 文本；`service/SqliteBackupService` + `controller/DatabaseBackupController` 提供在线备份（`VACUUM INTO`）、定时备份与重启生效的恢复。
 - `config/SelfSignedTlsConfiguration`：启动时生成临时自签名 HTTPS 密钥库；worker 保持 HTTPS 但不校验管理端证书。
-- `src/main/resources/db/migration`：Flyway 脚本，覆盖管理员、核心配置、日志、聚合统计、WOL、DNS、入站路由绑定、邮件网关、计划任务等表。
+- `src/main/resources/db/migration`：Flyway 脚本；SQLite 单一基线 `V1__baseline.sql`，覆盖管理员、用户、路由、规则集、入站、Worker、WOL、磁盘监控、邮件网关、计划任务等表。后续结构变更以 `V2__*.sql` 递增（SQLite 不能 `ALTER` 约束，改表需重建表）。
 
 主要控制器：
 
@@ -40,10 +41,10 @@
 
 - `AggregateConfigService`：聚合所有启用的入站、路由、限流、用户配置，并计算配置 hash；下发副本过滤禁用路由及入站引用，保留数据库绑定供重新启用时恢复，见 [禁用路由下发与验证](testing/disabled-route-delivery.md)。
 - `AggregateConfigCacheService`：缓存聚合配置，供配置分发接口复用。
-- `DataInitializer`：启动时确保默认管理员、匿名用户和兜底路由存在。
+- `DataInitializer`：启动时幂等确保 `default` Worker、匿名用户、兜底路由和默认规则集存在。
 - `security`：`SecurityConfig`、`JwtAuthenticationFilter`、`JwtService` 负责 JWT 鉴权；聚合配置、日志上报、内部邮件等接口有显式放行规则。
-- `entity` + `repository`：JPA 实体和仓储；聚合统计实体在 `entity/agg`，邮件实体在 `entity/mail`，计划任务在 `entity/scheduler`。
-- `logstore` + `clickhouse`：访问日志查询与写入走 `AccessLogStoreFactory`；当前工厂固定返回 `ClickHouseAccessLogStore`，项目中仍保留 `MySqlAccessLogStore` 实现。
+- `entity` + `repository`：JPA 实体和仓储；邮件实体在 `entity/mail`，计划任务在 `entity/scheduler`。
+- `logstore` + `clickhouse`：访问日志查询与写入走 `AccessLogStoreFactory`；当前工厂固定返回 `ClickHouseAccessLogStore`。
 
 ## 后端 proxy-worker
 

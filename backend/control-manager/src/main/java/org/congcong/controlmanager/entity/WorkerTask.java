@@ -20,8 +20,7 @@ public class WorkerTask {
     @Column(name = "task_type", nullable = false, length = 64)
     private String taskType;
 
-    @Lob
-    @Column(name = "payload_json", nullable = false)
+    @Column(name = "payload_json", nullable = false, columnDefinition = "TEXT")
     private String payloadJson;
 
     @Column(name = "created_at", nullable = false)

@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 今日／本月／区间上传下载、来源排行 | `telemetry.proxy_session_log_v1 FINAL` | 一条唯一连接的最终成功转发载荷；按 `occurred_at = ended_at` 入账 |
 | 历史并发、平均、峰值 | 同一连接汇总表 | 已建立连接的 `[connected_at, ended_at)` 与查询窗口相交；扫描同时起止的合并增量，峰值不把相邻连接误计为同时存在 |
-| 当前并发 | Worker 新心跳 `metrics.establishedConnectionsV1`，现有 MySQL `worker_status.metrics_json` | 通道建立后登记，入站关闭即移除；一个代理连接计一次，空闲连接仍在计数；每 5 秒查询最近采样 |
+| 当前并发 | Worker 新心跳 `metrics.establishedConnectionsV1`，现有 SQLite `worker_status.metrics_json` | 通道建立后登记，入站关闭即移除；一个代理连接计一次，空闲连接仍在计数；每 5 秒查询最近采样 |
 | DNS 次数 | `telemetry.dns_query_log_v1 FINAL` | 一次逻辑查询计一次，默认 CLIENT，可选 PROXY_RESOLVE 或全部 |
 | 认证次数 | `telemetry.credential_auth_log_v1 FINAL` | 一次认证尝试计一次，不以连接／用户去重 |
 

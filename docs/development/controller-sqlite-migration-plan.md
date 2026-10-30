@@ -1,6 +1,6 @@
 # 控制端数据库裁剪研发计划
 
-> 状态：阶段 1 代码清扫已完成（见 §2.6），阶段 2 起尚未实施。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
+> 状态：阶段 1 代码清扫已完成（见 §2.6）；阶段 2 代码与文档已完成（见 §3.3），待人工确认其中的差异清单与线上无关的验收项；阶段 3 的导入脚本与本机演练已完成（见 §4.3），线上切换未做。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
 >
 > **范围调整**（相对设计文档）：
 > 1. 先做 MySQL → SQLite（元数据）；ClickHouse 日志与遥测**延后**为独立的第 4 阶段，期间 ClickHouse 容器与代码保持不变。
@@ -105,6 +105,43 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 - 空库启动后：首次初始化管理员 → 创建用户、路由、入站、规则集 → 发布到 Worker → Worker 收到配置，端到端走通（可用 `scripts/e2e/worker-proxy-e2e.sh --provision`）；
 - 数据库备份页面可创建并下载备份，备份文件可用于恢复。
 
+### 3.3 阶段 2 执行结果
+
+**原型结论**（门槛通过）：`sqlite-jdbc 3.50.3.0` + Hibernate 6.6.29 自带社区方言 `hibernate-community-dialects`（版本由 Spring Boot BOM 管理）+ `flyway-core` 11.7.2 内置的 SQLite 支持，控制端可启动并跑通基线。
+
+| 项 | 结论 |
+|---|---|
+| JSON 列（`@JdbcTypeCode(SqlTypes.JSON)`，4 处）与 `columnDefinition="json"` 的 `String` 列 | 开箱可用，存 `TEXT`，无需 `AttributeConverter` |
+| 时间 | 新增 `persistence/SqliteLocalDateTimeConverter`、`SqliteInstantConverter`（`autoApply`），统一存 `yyyy-MM-dd HH:mm:ss.SSSSSS`。`LocalDateTime` 按原样字面存储（与 MySQL 时代语义一致，依赖 JVM 时区，容器内为 UTC）；`Instant` 存 UTC。磁盘监控的 `Instant` 比较、`MAX` 子查询已有测试覆盖 |
+| `BLOB`、布尔、`IDENTITY` | 正常；`AUTOINCREMENT` 防主键复用有测试 |
+| `@Lob String`（`WorkerTask.payloadJson`） | 去掉 `@Lob`（SQLite 驱动不支持 CLOB），改 `columnDefinition="TEXT"` |
+| PRAGMA | `DataSourceConfig` 为每个连接设置 `foreign_keys=ON`、`journal_mode=WAL`、`synchronous=NORMAL`、`busy_timeout`（默认 10s）、`BEGIN IMMEDIATE`；连接池默认 4。测试验证已生效 |
+| 并发 | 6 线程 × 25 次"先读后写"事务并发无 `SQLITE_BUSY`（`SqliteRepositoryTest`） |
+| JPQL / 原生 SQL | 元数据库侧未发现 `limit`/`INTERVAL`/窗口函数（均在 ClickHouse 查询里，留到阶段 4）；`LOWER(CONCAT(...)) LIKE`、子查询 `MAX`、`LIKE %:x%` 在 SQLite 下行为正确。`@Transactional` 方法扫描未发现事务内网络/睡眠调用 |
+| 异常翻译 | **行为差异**：约束冲突在 SQLite 下抛 `JpaSystemException`（`SQLITE_CONSTRAINT_*`），不再是 `DataIntegrityViolationException`。当前没有代码捕获该类型，无影响；将来依赖时需补翻译器 |
+
+**基线 schema**（`V1__baseline.sql`，替换旧 `V1`、`V13`–`V37`）。表、列、索引、外键名与备份保持一致；以备份 DDL 与实体注解交叉核对后，以下差异**需要你确认**：
+
+1. **丢弃列**：`worker_status.http_gateway_client_connection_count`、`http_gateway_upstream_active_connection_count`、`http_gateway_upstream_idle_connection_count`——备份中存在，但 `WorkerStatus` 实体未映射、无任何代码读写（V30 遗留）；基线不含这三列，阶段 3 导入时忽略。
+2. **保留的遗留列**：`proxy_worker.token_hash`（实体注释标明已不使用，但仍映射，且有唯一约束与 `findByTokenHash`），原样保留。
+3. **`COLLATE NOCASE`**（对应 MySQL `*_ci` 排序规则的大小写不敏感行为）：`admin_user.username`、`admin_login_history.username`、`users.username`/`ip_address`、`routes.name`、`rule_set.rule_key`、`mail_target.biz_key`、`mail_send_log.biz_key`、`scheduled_task.task_key`/`biz_key`、`wol_configs.name`/`ip_address`/`mac_address`/`worker_id`、`disk_monitor_host.host_id`、`disk_monitor_sample.host_id`/`device`、`disk_monitor_setting.setting_key`，以及所有 `worker_id` 列（`proxy_worker`、`inbound_configs`、`worker_status`、`worker_tasks`）。其余文本列（如 `inbound_configs.name`、`rule_set.name`）按 `BINARY` 区分大小写；如需与 MySQL 完全一致可逐列追加。
+4. **`ON UPDATE CURRENT_TIMESTAMP`**：`wol_configs.updated_at` 在备份里有，实体已有 `@PreUpdate` 自行维护，基线仅保留 `DEFAULT`（毫秒精度、微秒位补零）。
+5. **长度限制**：`varchar(n)` 全部变 `TEXT`，长度由应用/校验层保持，无数据库级约束。
+6. `flyway.baseline-on-migrate` 已从配置中移除：对"非空但无 `flyway_schema_history`"的库，Flyway 会拒绝启动而不是静默基线到 V1。**阶段 3 的导入脚本必须通过 Flyway（或写入等价的 `flyway_schema_history` 记录）建库**，否则新版本启动会失败。
+7. `default` Worker 种子（原 V21）：线上 `default` 是真实在用的主 Worker（带管理地址和令牌），故保留，改由 `DataInitializer.ensureDefaultWorkerExists()` 在不存在时幂等创建，导入后不会冲突。
+
+**备份功能**：`MysqlBackup*`、`ProcessMysqlCommandRunner`、`MysqlBackupServiceTest` 已删除，新增 `SqliteBackupService`（`VACUUM INTO` 在线快照）、`DatabaseBackupController`（`/api/system-ops/database-backup/export|restore`）与前端页面改造。定时备份默认每天 03:30、保留 7 份、写入 `<数据目录>/backups`（`home-proxy.backup.*`）。**恢复采用"校验后暂存、重启生效"**：不在运行中的进程里替换正在使用的库；暂存文件为 `home-proxy.db.restore-pending`，启动时在连接池打开前换入，原库保存为 `backups/pre-restore-<时间>.db`。确认短语由 `RESTORE MYSQL` 改为 `RESTORE DATABASE`。
+
+**部署与文档**：`docker-compose.control.yml` 去掉 `mysql`，`control-manager` 挂载 `control-data:/data`（`HOME_PROXY_DATA_DIR`）；`Dockerfile.control-manager` 去掉 `default-mysql-client`，声明 `VOLUME /data`；`scripts/e2e` 两个临时栈 compose 及脚本同步去掉 MySQL；`Makefile` 去掉 `MYSQL_IMAGE`；`README.md`（新增"数据库备份与恢复"）、`docs/code-index.md`、`docs/development/docker-deployment.md`、`dockerization-design.md`、`production-multi-worker-upgrade-runbook.md`（加适用范围说明）、`docs/testing/*` 当前描述已更新（历史测试记录里的 MySQL 字样保持原样）。
+
+**测试**：新增 `SqliteRepositoryTest`（真实 SQLite 文件 + Flyway 基线，覆盖用户/管理员/路由/规则集/入站/Worker/任务/WOL/磁盘/邮件仓库、大小写、外键 `RESTRICT`/`CASCADE`/`SET NULL`、JSON/时间/BLOB 往返、并发写）与 `SqliteBackupServiceTest`（导出、保留份数、非法文件、暂存恢复）；`DataInitializerTest` 补 `default` Worker 断言。`src/test/resources/application.properties` 改为临时 SQLite，不再需要外部 MySQL。运行：`make backend-test` 或 `mvn -pl backend/control-manager test -DskipTests=false`（均为 `*Test`，默认随 Surefire 运行）。
+
+**验证**：`mvn test -DskipTests=false`（全部模块）通过，control-manager 179 项（3 项原有跳过）；前端 `npm test` 87 项与 `tsc --noEmit` 通过。另用本机 ClickHouse 容器启动打包后的 jar 做了冒烟：空库启动 → 初始化管理员 → 大小写不同的用户名登录 → 创建用户 → 导出备份（`integrity_check` 为 ok）→ 上传恢复 → 重启后数据回到备份时刻且原库被保留。
+
+**E2E 验证（2026-10-30）**：`make e2e-transparent`（36 个 Fake IP + TPROXY 场景）与 `make e2e-direct-outbound-safety` 两个隔离 compose 栈（SQLite + ClickHouse，无 MySQL）均通过。过程中修复了旧日志链路清理遗留的脚本问题，与 SQLite 无关：`fake-ip-transparent-e2e.py` 去掉对 sessions 不存在的 `configVersion` 的断言；`direct-outbound-address-safety-e2e.sh` 审计查询改为 `telemetry.proxy_session_log_v1`（错误码 `POLICY_BLOCKED` / `CONNECT_FAILED`），其 compose 补上 1 秒遥测刷新配置。
+
+**尚未完成**：`scripts/e2e/worker-proxy-e2e.sh --provision`（依赖常驻 home-01 环境）、`make build` 全量（含前端生产构建）未在本机实跑；管理页面的浏览器人工点检未做；`SessionLogV1` 暂无配置版本字段，原审计"配置快照版本"断言未恢复。
+
 ## 4. 阶段 3：备份数据转换与线上切换
 
 目标：把 `.tmp/home-proxy-mysql-20261030-082738.sql.gz` 这类 MySQL 备份，可重复地转换为阶段 2 基线 schema 对应的 `home-proxy.db`，然后完成线上切换。这个备份文件本身是只读输入，不修改，不提交。
@@ -126,6 +163,14 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 - 导入脚本对备份可重复运行且结果一致，对账报告全部通过；
 - 线上切换后所有 Worker 的 `configHash` 与切换前一致，Worker 在线、配置下发与日志上报正常；
 - 回滚路径已演练（用旧 compose 与旧镜像可恢复到切换前状态）。
+
+### 4.3 阶段 3 执行结果（脚本与本机演练）
+
+- 脚本：`scripts/migration/mysql-to-sqlite.py`（仅依赖 Python 3 标准库与 docker）。用法：`python3 -I scripts/migration/mysql-to-sqlite.py <备份.sql.gz> --out .tmp/home-proxy.db --sql .tmp/home-proxy-sqlite.sql --report .tmp/migration-report.json`。临时 `mysql:8.4` 容器无网络、tmpfs 存储、结束即销毁；读取时每列经 `HEX()` 取回，避免转义与 NULL 歧义；输出文件已存在则拒绝覆盖，校验失败则删除输出库。
+- 导入 19 张保留表，跳过 18 张空表（阶段 1 已删除的表）与 `flyway_schema_history`；跳过的表若有数据则中止。`worker_status` 的 3 个 `http_gateway_*` 列按阶段 2 差异 1 丢弃。脚本直接执行 `V1__baseline.sql` 建库，并写入与 Flyway 一致的 `flyway_schema_history`（含校验和）。
+- 校验（全部通过）：每表行数与内容摘要（SQLite 回读对比源数据）、`foreign_key_check` 无违规、`integrity_check` 为 `ok`、JSON 列 `json_valid`、唯一键 NOCASE 重复、`AUTOINCREMENT` 序列取 `max(MySQL AUTO_INCREMENT-1, max(id))`。
+- 产物（`.tmp/`，已被忽略）：`home-proxy.db`、等价 SQL 脚本 `home-proxy-sqlite.sql`、对账报告 `migration-report.json`。
+- 启动验证：阶段 2 的控制端 jar 打开该库时 Flyway 校验通过（`Successfully validated 1 migration`，无需迁移）；后续因本机无 ClickHouse 启动失败，与迁移无关。**登录/页面浏览、`configHash` 对比（需阶段 1 的 B 值）、runbook、测试环境演练、线上切换均未做。**
 
 ## 5. 阶段 4（延后）：ClickHouse → SQLite
 

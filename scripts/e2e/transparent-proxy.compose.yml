@@ -1,16 +1,4 @@
 services:
-  mysql:
-    image: mysql:8.4
-    environment:
-      MYSQL_ROOT_PASSWORD: ${E2E_MYSQL_PASSWORD}
-      MYSQL_DATABASE: tpproxy
-    healthcheck:
-      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysqladmin ping -h 127.0.0.1 -uroot --silent"]
-      interval: 2s
-      timeout: 2s
-      retries: 45
-    networks: [control]
-
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     environment:
@@ -28,15 +16,11 @@ services:
   control-manager:
     image: ${E2E_CONTROL_IMAGE}
     depends_on:
-      mysql:
-        condition: service_healthy
       clickhouse:
         condition: service_healthy
     environment:
       SERVER_PORT: 8443
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/tpproxy?useSSL=false&serverTimezone=UTC&characterEncoding=utf8&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${E2E_MYSQL_PASSWORD}
+      HOME_PROXY_DATA_DIR: /data
       CLICKHOUSE_URL: jdbc:ch://clickhouse:8123/default
       CLICKHOUSE_USERNAME: default
       CLICKHOUSE_PASSWORD: ${E2E_CLICKHOUSE_PASSWORD}

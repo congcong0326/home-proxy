@@ -74,7 +74,7 @@ import {
   MailSendLogQuery
 } from '../types/mail';
 import { ScheduledTask, ScheduledTaskRequest } from '../types/scheduler';
-import { MysqlRestoreResponse } from '../types/backup';
+import { DatabaseRestoreResponse } from '../types/backup';
 import { ProxyGatewayStatus } from '../types/gateway';
 import { ProxyWorkerDTO, WorkerCreateRequest, WorkerTokenResponse, WorkerUpdateRequest } from '../types/worker';
 
@@ -199,7 +199,7 @@ class ApiService {
     const blob = await response.blob();
     const disposition = response.headers.get('Content-Disposition') || '';
     const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
-    const filename = filenameMatch?.[1] || 'home-proxy-mysql-backup.sql.gz';
+    const filename = filenameMatch?.[1] || 'home-proxy-backup.db';
     const objectUrl = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
@@ -1062,17 +1062,17 @@ class ApiService {
     return this.request<AuditRecordV1>(`/observability/v1/${type}/${encodeURIComponent(recordId)}?${params}`);
   }
 
-  // ========== 系统运维：MySQL备份恢复 ==========
-  async exportMysqlBackup(): Promise<void> {
-    return this.download('/system-ops/mysql-backup/export');
+  // ========== 系统运维：数据库备份恢复 ==========
+  async exportDatabaseBackup(): Promise<void> {
+    return this.download('/system-ops/database-backup/export');
   }
 
-  async restoreMysqlBackup(file: File, confirmationPhrase: string): Promise<MysqlRestoreResponse> {
+  async restoreDatabaseBackup(file: File, confirmationPhrase: string): Promise<DatabaseRestoreResponse> {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('confirmationPhrase', confirmationPhrase);
 
-    return this.request<MysqlRestoreResponse>('/system-ops/mysql-backup/restore', {
+    return this.request<DatabaseRestoreResponse>('/system-ops/database-backup/restore', {
       method: 'POST',
       body: formData
     });

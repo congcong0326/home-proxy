@@ -1,5 +1,5 @@
-export interface MysqlRestoreResponse {
+export interface DatabaseRestoreResponse {
   message: string;
 }
 
-export const MYSQL_RESTORE_CONFIRMATION_PHRASE = 'RESTORE MYSQL';
+export const DATABASE_RESTORE_CONFIRMATION_PHRASE = 'RESTORE DATABASE';

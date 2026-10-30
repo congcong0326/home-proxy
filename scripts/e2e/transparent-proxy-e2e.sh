@@ -316,7 +316,6 @@ start_targets() {
 setup_control_plane() {
     export E2E_CONTROL_IMAGE="$CONTROL_IMAGE"
     export E2E_CONTROL_PORT="$CONTROL_PORT"
-    export E2E_MYSQL_PASSWORD="e2e_mysql_${RUN_ID}"
     export E2E_CLICKHOUSE_PASSWORD="e2e_clickhouse_${RUN_ID}"
     export E2E_JWT_SECRET="e2e_jwt_$(openssl rand -hex 24)"
 

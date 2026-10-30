@@ -17,7 +17,7 @@ make docker-build          # 打包并构建 control-manager 和 worker 镜像
 make docker-build-control  # 只打包并构建 control-manager 镜像
 make docker-build-worker   # 只打包并构建 worker 镜像
 make docker-save           # 打包、构建并导出应用镜像到 home-proxy-images.tar
-make docker-save-offline   # 导出应用镜像以及 MySQL/ClickHouse 镜像
+make docker-save-offline   # 导出应用镜像以及 ClickHouse 镜像
 ```
 
 ## 启动控制面
@@ -37,7 +37,6 @@ docker compose --env-file /opt/home-proxy/control.env \
 默认服务：
 
 - `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HTTPS_HOST_PORT:-18443}` -> 容器 `8443`
-- `mysql`：仅 Docker 网络内可见
 - `clickhouse`：仅 Docker 网络内可见
 
 开发默认密码和 JWT secret 已写在 compose 默认值里，生产部署必须用 `.env` 或宿主机环境变量覆盖：
@@ -45,7 +44,6 @@ docker compose --env-file /opt/home-proxy/control.env \
 ```bash
 CONTROL_BIND_ADDRESS=192.168.1.10
 CONTROL_HTTPS_HOST_PORT=18443
-MYSQL_ROOT_PASSWORD=change_me
 CLICKHOUSE_PASSWORD=change_me
 ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
 ```
@@ -60,7 +58,7 @@ ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
 make CONFIRM=1 docker-reset-control
 ```
 
-该命令会执行 `docker compose down -v`，会删除 MySQL 和 ClickHouse 数据卷。
+该命令会执行 `docker compose down -v`，会删除 `control-data`（SQLite 配置库及其备份）和 ClickHouse 数据卷。
 
 ## 启动 worker
 

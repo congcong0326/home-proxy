@@ -9,6 +9,7 @@ import org.congcong.controlmanager.service.UserService;
 import org.congcong.controlmanager.service.InboundConfigService;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.congcong.controlmanager.repository.UserRepository;
+import org.congcong.controlmanager.repository.ProxyWorkerRepository;
 import org.junit.jupiter.api.Test;
 
 class DataInitializerTest {
@@ -21,11 +22,13 @@ class DataInitializerTest {
         InboundConfigService inboundConfigService = mock(InboundConfigService.class);
         RouteRepository routeRepository = mock(RouteRepository.class);
         UserRepository userRepository = mock(UserRepository.class);
+        ProxyWorkerRepository proxyWorkerRepository = mock(ProxyWorkerRepository.class);
         DataInitializer initializer = new DataInitializer(userService, routeService, ruleSetService,
-                inboundConfigService, routeRepository, userRepository);
+                inboundConfigService, routeRepository, userRepository, proxyWorkerRepository);
 
         initializer.run(null);
 
+        verify(proxyWorkerRepository).save(org.mockito.ArgumentMatchers.argThat(w -> "default".equals(w.getWorkerId())));
         verify(userService).ensureDefaultAnonymousUserExists();
         verify(routeService).ensureDefaultRouteExists();
         verify(ruleSetService).ensureDefaultRuleSetsExist();

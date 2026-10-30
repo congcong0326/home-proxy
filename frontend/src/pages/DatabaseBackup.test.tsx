@@ -5,8 +5,8 @@ import { apiService } from '../services/api';
 
 jest.mock('../services/api', () => ({
   apiService: {
-    exportMysqlBackup: jest.fn(),
-    restoreMysqlBackup: jest.fn(),
+    exportDatabaseBackup: jest.fn(),
+    restoreDatabaseBackup: jest.fn(),
   },
 }));
 
@@ -14,19 +14,19 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('exports mysql backup when export button is clicked', async () => {
-  (apiService.exportMysqlBackup as jest.Mock).mockResolvedValue(undefined);
+test('exports database backup when export button is clicked', async () => {
+  (apiService.exportDatabaseBackup as jest.Mock).mockResolvedValue(undefined);
 
   render(<DatabaseBackup />);
 
   fireEvent.click(screen.getByRole('button', { name: /导出备份/ }));
 
-  await waitFor(() => expect(apiService.exportMysqlBackup).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(apiService.exportDatabaseBackup).toHaveBeenCalledTimes(1));
 });
 
 test('restores uploaded backup only after confirmation phrase is entered', async () => {
-  (apiService.restoreMysqlBackup as jest.Mock).mockResolvedValue({ message: 'restore completed' });
-  const file = new File(['SELECT 1;'], 'backup.sql', { type: 'application/sql' });
+  (apiService.restoreDatabaseBackup as jest.Mock).mockResolvedValue({ message: 'restore staged' });
+  const file = new File(['SQLite format 3'], 'backup.db', { type: 'application/octet-stream' });
 
   render(<DatabaseBackup />);
 
@@ -34,10 +34,10 @@ test('restores uploaded backup only after confirmation phrase is entered', async
   expect(restoreButton).toBeDisabled();
 
   fireEvent.change(screen.getByLabelText('备份文件'), { target: { files: [file] } });
-  fireEvent.change(screen.getByLabelText('确认短语'), { target: { value: 'RESTORE MYSQL' } });
+  fireEvent.change(screen.getByLabelText('确认短语'), { target: { value: 'RESTORE DATABASE' } });
 
   expect(restoreButton).not.toBeDisabled();
   fireEvent.click(restoreButton);
 
-  await waitFor(() => expect(apiService.restoreMysqlBackup).toHaveBeenCalledWith(file, 'RESTORE MYSQL'));
+  await waitFor(() => expect(apiService.restoreDatabaseBackup).toHaveBeenCalledWith(file, 'RESTORE DATABASE'));
 });

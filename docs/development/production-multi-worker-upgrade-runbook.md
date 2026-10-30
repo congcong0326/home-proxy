@@ -1,5 +1,12 @@
 # 生产环境多 Worker 升级运行手册
 
+> **适用范围**：本手册描述的是 `V20`–`V22` 迁移所在的 **MySQL 时代**控制端（控制端数据库迁移到 SQLite 之前的版本）的一次性升级流程，下文的 `mysql` 容器、`mysqldump`、Flyway `V20`–`V22` 检查均针对该版本。
+> 控制端已迁移到 SQLite 的版本不再有 `mysql` 容器和 `V20`–`V22` 脚本（基线已合并为 `V1__baseline.sql`），多 Worker 能力已内置。在 SQLite 版本上做同类升级时：
+>
+> - 第 2 节的数据库备份改为：管理页面“数据备份”导出，或调用 `GET /api/system-ops/database-backup/export`（需要管理员 JWT）保存为 `$BACKUP_DIR/home-proxy.db`；控制端另会每天自动备份到数据卷 `/data/backups`。不要直接复制运行中的 `home-proxy.db`/`-wal`。
+> - 回滚数据库：停止 `control-manager`，用备份文件替换 `/data/home-proxy.db` 并删除 `-wal`/`-shm`，再启动（或在页面上传备份并重启）。
+> - 需要查询表内容时，导出备份后在宿主机用 `sqlite3 home-proxy.db` 查询，而不是 `exec mysql`。
+
 本手册用于将现有的单 Worker 部署升级到支持每个 Worker 独立令牌的控制端/Worker 2.0 版本。本文假设控制端主机和每台 Worker 主机都已将仓库检出到 `$ROOT`。
 
 在新 Worker 上线并成功应用有效配置前，不要将已启用的入站配置分配给它。重新分配后，旧 Worker 在下一次拉取配置时将不再获得该入站配置。

@@ -1,7 +1,7 @@
 package org.congcong.controlmanager.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.congcong.controlmanager.service.MysqlBackupService;
+import org.congcong.controlmanager.service.SqliteBackupService;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -20,28 +20,29 @@ import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/system-ops/mysql-backup")
+@RequestMapping("/api/system-ops/database-backup")
 @RequiredArgsConstructor
-public class MysqlBackupController {
+public class DatabaseBackupController {
     private static final DateTimeFormatter FILENAME_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
-    private final MysqlBackupService mysqlBackupService;
+    private final SqliteBackupService backupService;
 
-    @GetMapping(value = "/export", produces = "application/gzip")
+    @GetMapping(value = "/export", produces = MediaType.APPLICATION_OCTET_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> exportBackup() {
-        String filename = "home-proxy-mysql-" + FILENAME_TIME.format(LocalDateTime.now()) + ".sql.gz";
-        StreamingResponseBody body = mysqlBackupService::exportBackup;
+        String filename = "home-proxy-" + FILENAME_TIME.format(LocalDateTime.now()) + ".db";
+        StreamingResponseBody body = backupService::exportBackup;
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/gzip"))
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         ContentDisposition.attachment().filename(filename).build().toString())
                 .body(body);
     }
 
+    /** Stages the uploaded backup; it replaces the live database when the controller restarts. */
     @PostMapping(value = "/restore", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Map<String, String> restoreBackup(@RequestPart("file") MultipartFile file,
                                              @RequestParam("confirmationPhrase") String confirmationPhrase) {
-        mysqlBackupService.restoreBackup(file, confirmationPhrase);
-        return Map.of("message", "restore completed");
+        backupService.restoreBackup(file, confirmationPhrase);
+        return Map.of("message", "restore staged; restart the controller to apply it");
     }
 }

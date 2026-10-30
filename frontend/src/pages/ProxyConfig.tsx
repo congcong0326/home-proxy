@@ -381,7 +381,7 @@ const getCardDescription = (key: string): string => {
     case '/config/system-ops/disk':
       return '查看宿主机磁盘健康状态、温度与读写曲线';
     case '/config/system-ops/backup':
-      return '导出和恢复控制端 MySQL 数据';
+      return '导出和恢复控制端 SQLite 数据';
     default:
       return '配置项说明';
   }

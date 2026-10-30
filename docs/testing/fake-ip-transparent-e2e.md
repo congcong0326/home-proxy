@@ -1,6 +1,6 @@
 # Fake IP + 透明代理完整 E2E
 
-使用隔离的 controller、worker、MySQL、ClickHouse、DNS 上游、HTTP/TLS 源站与客户端网络命名空间，覆盖配置 API → WSS 配置发布 → UDP DNS → Fake IP → Linux TPROXY → 真实解析/选路 → TCP relay → WSS 指标与日志 → ClickHouse → 日志查询 API。
+使用隔离的 controller、worker、SQLite、ClickHouse、DNS 上游、HTTP/TLS 源站与客户端网络命名空间，覆盖配置 API → WSS 配置发布 → UDP DNS → Fake IP → Linux TPROXY → 真实解析/选路 → TCP relay → WSS 指标与日志 → ClickHouse → 日志查询 API。
 
 ## 运行
 

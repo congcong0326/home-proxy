@@ -76,3 +76,8 @@ mvnw.cmd
 /backend/proxy-worker/target/it-xray/
 # Archify architecture analysis artifacts
 /.archify/
+
+# Local SQLite metadata database, WAL files and backups (HOME_PROXY_DATA_DIR defaults to ./data)
+/data/home-proxy.db*
+/data/backups/
+/backend/control-manager/data/

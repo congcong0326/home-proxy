@@ -1,3 +1,5 @@
+> **更新**：控制面数据库已由 MySQL 改为内嵌 SQLite（数据卷挂载到 `/data`），compose 中不再有 `mysql` 服务；下文涉及 MySQL 的描述为历史设计，现状以 `deploy/docker/docker-compose.control.yml` 与 `README.md` 为准。
+
 # Dockerization Design
 
 ## Summary

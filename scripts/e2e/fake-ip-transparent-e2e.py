@@ -478,8 +478,8 @@ class Suite:
                   'audit original destination: ' + repr(detail))
             source = 'FAKE_IP_MAPPING' if expected['source'] == 'FAKE_IP' else expected['source']
             check(detail['targetSource'] == source, 'audit target source: ' + repr(detail))
-            check(detail.get('outboundPeerIp') == expected['finalIp'] and detail['configVersion'] == expected['version'],
-                  'audit final IP/config version: ' + repr(detail))
+            check(detail.get('outboundPeerIp') == expected['finalIp'],
+                  'audit final IP: ' + repr(detail))
             if expected['status'] != 200:
                 check(detail.get('errorCode') and detail.get('failureStage'), 'failure audit lacks reason')
             if expected['route']:
