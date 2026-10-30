@@ -73,7 +73,7 @@ docker pull congcong0326/home-proxy-worker:latest
 
 运行时会启动这些服务：
 
-- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源。配置元数据与日志都保存在内嵌 SQLite（容器内 `/data/home-proxy.db` 与 `/data/telemetry.db`，对应数据卷 `control-data`），无需任何独立数据库容器
+- `control-manager`：控制面、管理页面和 API，默认通过 HTTPS 绑定 `0.0.0.0:18443`；请通过宿主机防火墙或云安全组限制访问来源。配置元数据与日志都保存在内嵌 SQLite（容器内 `/data/home-proxy.db` 与 `/data/telemetry.db`，对应数据卷 `control-data`），无需任何独立数据库容器
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
 
 新版日志采集、接收和统计查询默认开启。管理端使用 Spring Boot 配置 `observability.ingest-enabled`、`observability.query-enabled`，可分别通过环境变量 `OBSERVABILITY_INGEST_ENABLED=false`、`OBSERVABILITY_QUERY_ENABLED=false` 关闭；Worker 可通过 `OBSERVABILITY_ENABLED=false` 关闭新版采集。修改环境变量后需要重建对应容器。新版统计从采集开启后累计，旧日志不会自动补入。
@@ -98,37 +98,26 @@ services:
     image: congcong0326/home-proxy-control-manager:latest
     container_name: home-proxy-control-manager
     restart: unless-stopped
+    mem_limit: 1536m
     environment:
-      SERVER_PORT: 8081
-      HOME_PROXY_DATA_DIR: /data
-      ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
-      DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
-      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
-      GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
+      JAVA_OPTS: "-Xmx896m -XX:+UseG1GC -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError"
+    ports:
+      - "0.0.0.0:18443:8443"
     volumes:
       - control-data:/data
-    ports:
-      - "${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HOST_PORT:-18081}:8081"
-    networks:
-      - home-proxy-db
 
 volumes:
   control-data:
-
-networks:
-  home-proxy-db:
-    name: home-proxy-db
 YAML
 ```
 
-如果需要让同一局域网或 VPN 内的浏览器、worker 访问控制面，先创建 `.env` 并把 `CONTROL_BIND_ADDRESS` 设置为控制面宿主机的内网 IP：
+控制面只有这几项需要按部署环境修改，直接编辑 `docker-compose.yml` 即可，不需要 `.env`：
 
-```bash
-cat > .env <<'EOF'
-CONTROL_BIND_ADDRESS=192.168.1.10
-CONTROL_HOST_PORT=18081
-EOF
-```
+- `ports`：宿主机有多个网络时，可写成 `"192.168.1.10:18443:8443"`，只监听内网地址。
+- `volumes`：`control-data` 是命名卷；如需把数据放在指定磁盘，改成宿主机目录，例如 `/mnt/ssd/home-proxy:/data`。
+- `mem_limit` 与 `JAVA_OPTS`：调整内存上限时同步调整 `-Xmx`，堆之外的 Metaspace、线程栈、直接内存与 G1 自身约需 400–600MB。
+
+其余配置（容器端口、备份、遥测、GeoIP、JWT 签名密钥等）都已固化为镜像内默认值。控制面每次启动会生成自签名 HTTPS 证书，浏览器会显示证书警告。
 
 启动：
 
@@ -139,13 +128,13 @@ docker compose up -d
 启动完成后访问。只在本机操作时访问：
 
 ```text
-http://127.0.0.1:18081
+https://127.0.0.1:18443
 ```
 
 局域网模式访问：
 
 ```text
-http://<控制面内网IP>:18081
+https://<控制面内网IP>:18443
 ```
 
 第一次进入页面时按提示创建管理员账号。
@@ -254,24 +243,16 @@ docker compose up -d
 
 ### 5. 可选配置
 
-可以在部署目录创建 `.env` 覆盖默认配置：
-
-```bash
-cat > .env <<'EOF'
-CONTROL_BIND_ADDRESS=192.168.1.10
-CONTROL_HOST_PORT=18081
-ADMIN_AUTH_JWT_SECRET=dev_only_change_me_home_proxy_jwt_secret
-EOF
-```
-
-常用变量：
+控制面的固化默认值仍可在 compose 的 `environment` 中临时覆盖（Spring Boot 宽松绑定），一般不需要：
 
 ```text
-CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 0.0.0.0；请通过宿主机防火墙或云安全组限制访问来源
-CONTROL_HOST_PORT              控制面宿主机端口，默认 18081
 HOME_PROXY_BACKUP_RETENTION    控制端定时备份保留份数，默认 7
 HOME_PROXY_BACKUP_CRON         控制端定时备份 cron（Spring 6 段格式），默认每天 03:30
-ADMIN_AUTH_JWT_SECRET          控制面 JWT 签名密钥
+```
+
+worker 常用变量：
+
+```text
 CONTROL_MANAGER_URL            worker 连接控制面的地址
 GEOIP_MMDB_PATH                GeoIP mmdb 文件路径
 GEOIP_DATA_DIR                 GeoIP 数据目录
@@ -280,7 +261,7 @@ TLS_KEY_FILE                   worker TLS 私钥路径
 TLS_KEY_PASSWORD               worker TLS 私钥密码，可为空
 ```
 
-即使绑定了内网 IP，生产环境也建议在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问 `CONTROL_HOST_PORT`。
+即使绑定了内网 IP，生产环境也建议在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问控制面端口。
 
 如需使用或覆盖 GeoIP 数据库，可以挂载本地 `GeoLite2-City.mmdb`：
 

@@ -16,4 +16,6 @@ ENV JAVA_OPTS=""
 VOLUME /data
 EXPOSE 8443
 
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/control-manager.jar"]
+# Worker WSS endpoints use locally generated certificates without IP SANs; the JDK HttpClient
+# only reads this flag at startup, so it is fixed here rather than left to JAVA_OPTS.
+ENTRYPOINT ["sh", "-c", "exec java -Djdk.internal.httpclient.disableHostnameVerification=true $JAVA_OPTS -jar /app/control-manager.jar"]

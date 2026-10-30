@@ -1,6 +1,6 @@
 # 控制端数据库裁剪研发计划
 
-> 状态：阶段 1 代码清扫已完成（见 §2.6）；阶段 2 代码与文档已完成（见 §3.3），待人工确认其中的差异清单与线上无关的验收项；阶段 3 的导入脚本与本机演练已完成（见 §4.3），线上切换未做；阶段 4 代码、测试与 E2E 已完成（见 §5.1），界面查询待人工验证。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
+> 状态：阶段 1 代码清扫已完成（见 §2.6）；阶段 2 代码与文档已完成（见 §3.3），待人工确认其中的差异清单与线上无关的验收项；阶段 3 的导入脚本与本机演练已完成（见 §4.3），2026-10-30 已与阶段 4 一并完成线上切换，处于观察期（见 §4.4）；阶段 4 代码、测试与 E2E 已完成（见 §5.1），线上界面与日志已人工确认。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
 >
 > **范围调整**（相对设计文档）：
 > 1. 先做 MySQL → SQLite（元数据）；ClickHouse 日志与遥测**延后**为独立的第 4 阶段，期间 ClickHouse 容器与代码保持不变。
@@ -170,7 +170,18 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 - 导入 19 张保留表，跳过 18 张空表（阶段 1 已删除的表）与 `flyway_schema_history`；跳过的表若有数据则中止。`worker_status` 的 3 个 `http_gateway_*` 列按阶段 2 差异 1 丢弃。脚本直接执行 `V1__baseline.sql` 建库，并写入与 Flyway 一致的 `flyway_schema_history`（含校验和）。
 - 校验（全部通过）：每表行数与内容摘要（SQLite 回读对比源数据）、`foreign_key_check` 无违规、`integrity_check` 为 `ok`、JSON 列 `json_valid`、唯一键 NOCASE 重复、`AUTOINCREMENT` 序列取 `max(MySQL AUTO_INCREMENT-1, max(id))`。
 - 产物（`.tmp/`，已被忽略）：`home-proxy.db`、等价 SQL 脚本 `home-proxy-sqlite.sql`、对账报告 `migration-report.json`。
-- 启动验证：阶段 2 的控制端 jar 打开该库时 Flyway 校验通过（`Successfully validated 1 migration`，无需迁移）；后续因本机无 ClickHouse 启动失败，与迁移无关。**登录/页面浏览、`configHash` 对比（需阶段 1 的 B 值）、runbook、测试环境演练、线上切换均未做。**
+- 启动验证：阶段 2 的控制端 jar 打开该库时 Flyway 校验通过（`Successfully validated 1 migration`，无需迁移）；后续因本机无 ClickHouse 启动失败，与迁移无关。**登录/页面浏览、`configHash` 对比（需阶段 1 的 B 值）、runbook、测试环境演练、线上切换均未做。**（线上切换已于 2026-10-30 完成，见 §4.4。）
+
+### 4.4 线上切换记录（2026-10-30）
+
+阶段 2、3、4 合并为一次切换：控制端从 MySQL + ClickHouse 三个容器直接换成 SQLite 单容器，Worker 不升级。
+
+- **兼容性判断**：新控制端下发的配置去掉了 `rateLimits`、`dnsRules`，旧 Worker 对这两个字段都有判空；旧 Worker 仍会上报的诊断事件、认证成功记录与旧 `accessLogs`/`authLogs` 字段由新控制端接收后丢弃。连接方向不变（控制端主动连 Worker WSS），Worker 地址与管理 Token 随 `proxy_worker` 表迁移。
+- **部署方式**：新建独立 compose 目录（项目名、容器名与旧版不同，两套可并存），镜像另打日期标签，旧 `latest` 另打回滚标签；SQLite 数据目录用宿主机目录挂载到 `/data`。宿主机端口沿用旧值，浏览器与磁盘监控推送脚本无需修改。不设置 `TZ`，与旧容器一样以 UTC 运行，避免迁移来的时间与新写入的时间口径不一致。旧版的管理面 P12、口令文件、`http-certificate-master-key` 与 `WORKER_AUTH_LEGACY_ENABLED` 新版均不再读取。
+- **步骤**：停旧控制端（保留 MySQL 供导出）→ 容器内 `mysqldump --databases tpproxy --single-transaction` → `mysql-to-sqlite.py` 转换 → 写入数据目录 → 启动新容器。脚本要求 dump 含 `CREATE DATABASE`/`USE`，所以必须带 `--databases`。
+- **转换结果**：19 张表行数与内容摘要全部一致，`foreign_key_check` 0 违规、`integrity_check` ok，跳过 18 张空表。
+- **启动后核对**：约 10 秒启动完成，Flyway 校验通过；两个旧 Worker 在 Tomcat 就绪前即建立 WSS 连接，心跳持续更新；配置哈希按 §2.4 预期变化一次，两个 Worker 收到等价的重新下发且 `apply_success=1`；开启日志上报的 Worker 的会话与 DNS 记录写入 `telemetry.db`；磁盘监控推送正常；内存约 860 MiB / 1.5 GiB。管理页面与日志已人工确认。
+- **观察期**（约一周）：旧 MySQL、ClickHouse 容器与数据目录保持不动，冻结配置变更。回滚：停新容器、`docker start` 旧控制端容器；切换后在新版上的配置改动不会回到 MySQL，需要手工补。观察期结束并确认后，再清理旧容器与数据（§4.1 第 6 项）。
 
 ## 5. 阶段 4（延后）：ClickHouse → SQLite
 
@@ -201,9 +212,9 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 **启动与 E2E（2026-10-30）**：在本机无 ClickHouse 的情况下用打包后的 jar 启动，4.6 秒内启动完成，自动创建 `telemetry.db` 的 3 张表与 9 个索引。`make e2e-transparent` 通过（52 项 PASS），新增的落库断言显示该 Worker 在 `telemetry.db` 中写入 72 条会话、42 条 DNS 记录；`make e2e-direct-outbound-safety` 通过（6 项 PASS），其审计断言改为在容器内用 `sqlite3` 查询 `proxy_session_log_v1`；本机 29290 端口被常驻 home-01 环境的 `fake-ip-persistent-e2e.py serve` 占用，运行时用 `E2E_DIRECT_SAFETY_OVERRIDE_PORT=29390` 换端口。
 
 **未做 / 待确认**：
-- 管理页面（概览、分布、审计、入站流量、首页状态面板）的界面效果由人工验证；
+- 管理页面（概览、分布、审计、入站流量、首页状态面板）的界面效果由人工验证；线上切换后已人工浏览，页面与日志正常（§4.4）；
 - 线上 ClickHouse 的历史日志不迁移（设计文档 §1.3），切换后新日志从零开始累计，旧 ClickHouse 容器与数据卷在确认后再手工清理；
-- `gateway-observability-overview-e2e.py`、`gateway-observability-protocol-probe.py` 已改为读 SQLite，但依赖常驻 home-01 环境，本机未运行；
+- `gateway-observability-overview-e2e.py` 已改为读 SQLite，但依赖常驻 home-01 环境，本机未运行；`make e2e-observability-stage-a`（含协议探针）与 `make e2e-observability-overview-live` 已在 home-01 环境通过，结果见 [阶段 A 测试记录](../testing/gateway-observability-stage-a.md) 文末；
 - 历史设计／测试文档中的 ClickHouse 描述保持原样。
 
 ## 6. 风险与对策

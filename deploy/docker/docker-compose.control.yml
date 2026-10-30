@@ -8,35 +8,16 @@ services:
       dockerfile: deploy/docker/Dockerfile.control-manager
     container_name: home-proxy-control-manager
     restart: unless-stopped
+    # Keep -Xmx in step with mem_limit: heap + metaspace/code cache/threads/direct memory must fit the limit.
+    mem_limit: 1536m
     environment:
-      SERVER_PORT: 8443
-      # Worker WSS endpoints use locally generated certificates without IP SANs.
-      # Set this at JVM startup (runtime System.setProperty is too late for JDK HttpClient).
-      JAVA_TOOL_OPTIONS: "-Djdk.internal.httpclient.disableHostnameVerification=true"
-      HOME_PROXY_DATA_DIR: /data
-      HOME_PROXY_BACKUP_ENABLED: ${HOME_PROXY_BACKUP_ENABLED:-true}
-      HOME_PROXY_BACKUP_CRON: ${HOME_PROXY_BACKUP_CRON:-0 30 3 * * *}
-      HOME_PROXY_BACKUP_RETENTION: ${HOME_PROXY_BACKUP_RETENTION:-7}
-      OBSERVABILITY_INGEST_ENABLED: ${OBSERVABILITY_INGEST_ENABLED:-true}
-      OBSERVABILITY_QUERY_ENABLED: ${OBSERVABILITY_QUERY_ENABLED:-true}
-      OBSERVABILITY_FLUSH_BATCH_SIZE: ${OBSERVABILITY_FLUSH_BATCH_SIZE:-1000}
-      OBSERVABILITY_FLUSH_MAX_DELAY_MS: ${OBSERVABILITY_FLUSH_MAX_DELAY_MS:-120000}
-      OBSERVABILITY_BUFFER_CAPACITY: ${OBSERVABILITY_BUFFER_CAPACITY:-20000}
-      OBSERVABILITY_BUFFER_MAX_BYTES: ${OBSERVABILITY_BUFFER_MAX_BYTES:-67108864}
-      ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
-      DISK_MONITOR_PUSH_TOKEN: ${DISK_MONITOR_PUSH_TOKEN:-}
-      DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
-      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
-      GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
-    volumes:
-      - control-data:/data
+      JAVA_OPTS: "-Xmx896m -XX:+UseG1GC -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError"
     ports:
-      - "${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HTTPS_HOST_PORT:-18443}:8443"
-    networks: [home-proxy-db]
+      # Restrict to a LAN address, e.g. "192.168.1.10:18443:8443", when the host has multiple networks.
+      - "0.0.0.0:18443:8443"
+    volumes:
+      # SQLite metadata database, telemetry database and backups.
+      - control-data:/data
 
 volumes:
   control-data:
-
-networks:
-  home-proxy-db:
-    name: home-proxy-db

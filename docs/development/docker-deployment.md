@@ -26,29 +26,15 @@ make docker-save-offline   # 同 docker-save（控制面已不依赖第三方镜
 make docker-up-control
 ```
 
-生产部署使用管理面 HTTPS 和每节点独立 Token。`control-manager` 每次启动都会自行生成临时自签名证书，
-因此不需要准备、挂载或备份管理面 P12、CRT 和口令文件。以独立环境文件展开 Compose：
+控制面只有一个容器，配置直接写在 `deploy/docker/docker-compose.control.yml` 里，不使用 `.env`。需要按部署环境修改的只有：
 
-```bash
-docker compose --env-file /opt/home-proxy/control.env \
-  -f deploy/docker/docker-compose.control.yml up -d
-```
+- `ports`：默认 `0.0.0.0:18443:8443`；可改成 `<内网IP>:18443:8443` 只监听内网。请在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问该端口。
+- `volumes`：配置库 `/data/home-proxy.db`、日志库 `/data/telemetry.db` 与备份都在 `/data`；默认命名卷 `control-data`，生产可改为宿主机目录。
+- `mem_limit` 与 `JAVA_OPTS`：默认 `1536m` 与 `-Xmx896m -XX:+UseG1GC -XX:MaxDirectMemorySize=64m -XX:+ExitOnOutOfMemoryError`。调整内存上限时同步调整 `-Xmx`，给 Metaspace、Code Cache、线程栈、直接内存与 G1 自身留出约 400–600MB。
 
-默认服务：
+其余配置固化在镜像内：容器端口 `8443`、数据目录 `/data`、JWT 签名密钥、备份与遥测参数、内置 GeoIP 库，以及 worker WSS 所需的 `-Djdk.internal.httpclient.disableHostnameVerification=true`（写在 ENTRYPOINT，覆盖 `JAVA_OPTS` 不会丢失）。`control-manager` 每次启动都会自行生成临时自签名证书，因此不需要准备、挂载或备份管理面 P12、CRT 和口令文件。
 
-- `control-manager`：宿主机 `${CONTROL_BIND_ADDRESS:-0.0.0.0}:${CONTROL_HTTPS_HOST_PORT:-18443}` -> 容器 `8443`；配置库 `/data/home-proxy.db` 与日志库 `/data/telemetry.db` 都在数据卷 `control-data` 中，控制面只有这一个容器
-
-开发默认 JWT secret 已写在 compose 默认值里，生产部署必须用 `.env` 或宿主机环境变量覆盖：
-
-```bash
-CONTROL_BIND_ADDRESS=192.168.1.10
-CONTROL_HTTPS_HOST_PORT=18443
-ADMIN_AUTH_JWT_SECRET=change_me_to_a_long_random_secret
-```
-
-`CONTROL_BIND_ADDRESS` 默认是 `0.0.0.0`。请在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问该端口；如需仅本机访问，可显式设为 `127.0.0.1`。
-
-磁盘监控已改为宿主机主动推送。进入控制面“磁盘监控”页面后，系统会自动生成并明文展示上报 Token；将该值写入宿主机的 `scripts/disk-monitor/disk-monitor.env` 中的 `DISK_PUSH_TOKEN`，再通过 cron 定时调用 `push-smartctl.sh`。`DISK_MONITOR_PUSH_TOKEN` 仅作为兼容旧部署的可选初始 Token；如果没有设置，页面会随机生成并持久化。
+磁盘监控已改为宿主机主动推送。进入控制面“磁盘监控”页面后，系统会自动生成并明文展示上报 Token；将该值写入宿主机的 `scripts/disk-monitor/disk-monitor.env` 中的 `DISK_PUSH_TOKEN`，再通过 cron 定时调用 `push-smartctl.sh`。上报 Token 由页面随机生成并持久化。
 
 如需清空控制面数据库和日志卷，重新进入首次创建管理员流程：
 

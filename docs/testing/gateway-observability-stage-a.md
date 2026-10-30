@@ -2,7 +2,9 @@
 
 > **后续变更（日志类型与字段精简）**：诊断事件日志类型已删除，认证审计只上报失败记录，并删除了一批无价值字段（详见 [日志类型与字段精简设计](../development/telemetry-field-slimming-design.md)）。本文中关于诊断事件、认证成功记录及被删字段的描述仅作为历史设计保留，以实际代码为准。
 
-旧列与旧表的清理脚本见 `scripts/clickhouse/telemetry-slimming-cleanup.sql`：**仅手工执行，不可回滚**，前提是所有 Worker 已升级并稳定运行、控制端已升级；执行后不能再回滚到旧版控制端。
+旧列与旧表的清理脚本 `scripts/clickhouse/telemetry-slimming-cleanup.sql` 已随 ClickHouse 一并移除。
+
+> **后续变更（2026-10-30，遥测改存 SQLite）**：控制端不再依赖 ClickHouse，会话、DNS、认证失败三张表改存独立文件 `<数据目录>/telemetry.db`（详见 [控制端 SQLite 迁移计划](../development/controller-sqlite-migration-plan.md) 阶段 4）。下文的 ReplacingMergeTree／FINAL、CK 持久化与 TTL 描述仅作历史记录：现在由唯一键 `(worker_id, worker_instance_id, record_id)` 加 `INSERT OR IGNORE` 去重，先写入的事实保留，`received_at` 不再变化；同 ID 不同内容的重发也会 ACK（`persisted=true`），写入时被忽略。当前结果见文末“SQLite 版本 E2E 结果”。
 
 更新日期：2026-10-09。对应 [双轨设计](../development/gateway-observability-log-model-design.md) 的阶段 A；后续按第 13 节调整为 B 新版日志审计与数据确认、C 逐项迁移现有查询、D 独立清理旧链路，其中 B1 已实施，见 [B1 审计页面记录](gateway-observability-b1.md)；B2／C／D 尚未实施。完整采集、专题看板与高级异常来源分析按实际功能依赖逐步补齐，不作为开始查询迁移的统一前置条件。
 
@@ -106,6 +108,7 @@ make backend-test
 npm --prefix frontend run build
 make e2e-observability-stage-a-setup
 make e2e-observability-stage-a
+make e2e-observability-overview-live
 python3 scripts/e2e/fake-ip-persistent-e2e.py test
 ```
 
@@ -146,3 +149,20 @@ python3 scripts/e2e/fake-ip-persistent-e2e.py test
 - 状态为 BEST_EFFORT_WITH_ACK / MEMORY / restartRecoverySupported=false，queueDepth=0、bufferBytes=0、dropped=0、serializationFailures=0。
 - 本次真实流量 E2E 前后，旧 telemetry-v1 目录的文件清单与目录修改时间完全一致，目录状态未被新日志上报改变；新日志实现中已无文件读写路径。
 - 旧表及所有新表中的历史/本次已落库测试数据均保留，没有清表或删除 Docker 数据卷。
+
+## SQLite 版本 E2E 结果（2026-10-30）
+
+遥测改存 SQLite 后，在常驻 home-01 环境上重跑。协议探针与实时并发 E2E 已按 SQLite 语义修正（commit `401c830`）：
+
+- 两个脚本改为按 `managerBuffer.flushMaxDelayMs + 60` 秒等待落库，不再假设 ACK 后立刻可查。旧脚本在 ACK 后立即查询（实时并发脚本只等 15 秒），而默认刷新间隔是 120 秒，所以一定查不到。
+- 协议探针在等待期间每 2 秒发送一次 `CONFIG_POLL`，避免 WSS 连接因心跳超时被控制端断开。
+- 物理重复行检查改为在容器内用 `sqlite3` 对 `/data/telemetry.db` 执行 `INSERT OR IGNORE ... SELECT`，断言 `changes()` 为 0；不再写 ClickHouse。
+- 同 ID 冲突的断言从“ACK 失败（`persisted=false`）”改为“ACK 成功，落库后仍是第一条事实，`received_at` 不变”。
+
+结果：
+
+- `make e2e-observability-stage-a` 通过（退出码 0）。真实流量窗口为 `2026-10-30T12:54:01.300282Z` 至 `2026-10-30T12:56:02.817386Z`，查到连接 11、认证 4、DNS 2。认证从 11 降到 4，是因为现在只上报失败记录；诊断事件表已删除，不再统计。受控流量每个方向 48 字节，分类与以前一致：INTERNAL_REWRITE（10.254.94.1）、EXTERNAL（93.184.216.250）、UNKNOWN（127.0.0.1），BLOCK 记录保留。状态仍为 `bufferMode=MEMORY`、`restartRecoverySupported=false`。
+- 协议探针通过：内存 ACK 后落库，相同重发只有 1 行且 `received_at` 不变，唯一键阻止物理重复行（`changes()=0`），同 ID 冲突保留第一条事实，Worker 身份按认证连接绑定，`9007199254740993` 字节字符串无损。探针记录 `recordId=9c82269b-a635-4a90-ad35-89a236fe3a9f`、`batchId=ba15c0db-d0a2-414d-96e5-e6170f85e3c4`，落库 `received_at=2026-10-30T12:56:07.294273Z`。
+- `make e2e-observability-overview-live` 通过（退出码 0）：真实隧道 EXTERNAL 2 条、INTERNAL_REWRITE 1 条，空闲连接计入并发，认证失败不计入，关闭后计数回落，落库日志重建出的历史峰值不小于 3。
+- 机器可读报告：`/tmp/gateway-observability-stage-a-e2e.json`、`/tmp/gateway-observability-protocol-probe.json`、`/tmp/gateway-observability-overview-live-e2e.json`；运行日志在 `.tmp/e2e-stage-a.log`、`.tmp/e2e-live.log`。
+- 全部表和已落库的测试数据都保留，没有清表或删除数据卷；协议探针结束后只禁用了 `telemetry-a-protocol-probe` 这个 Worker。
