@@ -51,7 +51,7 @@ class AggregateConfigServiceTest {
             inboundRepository, workerRepository, mock(UserRepository.class), routeRepository,
             mock(RuleSetRepository.class));
     private final AggregateConfigService service = new AggregateConfigService(
-            inboundService, mock(RateLimitService.class), routeService, userService, ruleSetService,
+            inboundService, routeService, userService, ruleSetService,
             inboundRepository, routeRepository, resolver, new CanonicalConfigHasher(),
             new FakeIpConfigValidator(routeRepository), workerRepository);
     private final List<Route> routes = new ArrayList<>();

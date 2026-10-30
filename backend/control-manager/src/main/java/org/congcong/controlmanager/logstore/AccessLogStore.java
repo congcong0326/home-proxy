@@ -11,8 +11,6 @@ public interface AccessLogStore {
     List<TopItem> aggregateDailyTopRange(String from, String to, String dimension, String metric, int limit, Long userId);
     List<TimeSeriesPoint> getGlobalTrafficTrend(String workerId, java.time.LocalDateTime from, java.time.LocalDateTime to);
     List<TimeSeriesPoint> getUserTrafficTrend(String workerId, Long userId, java.time.LocalDateTime from, java.time.LocalDateTime to);
-    int cleanupExpiredMinuteTrafficStats();
-    long countExpiredMinuteTrafficStats();
     /**
      * 统计区间内总流量（bytes_in + bytes_out）。
      */

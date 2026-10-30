@@ -15,7 +15,7 @@
 
 ## 后端 common
 
-- `backend/common/src/main/java/org/congcong/common/dto`：跨模块传输模型。重点看 `AggregateConfigResponse`、`InboundConfigDTO`、`RouteDTO`、`RateLimitDTO`、`UserDTO`、`UserDtoWithCredential`、`AccessLog`、`AuthLog`。
+- `backend/common/src/main/java/org/congcong/common/dto`：跨模块传输模型。重点看 `AggregateConfigResponse`、`InboundConfigDTO`、`RouteDTO`、`UserDTO`、`UserDtoWithCredential`、`AccessLog`、`AuthLog`。
 - `backend/common/src/main/java/org/congcong/common/enums`：协议、路由、匹配、限流、DNS 等枚举。新增协议或策略时通常先从这里开始。
 - `backend/common/src/main/java/org/congcong/common/util/geo`：域名规则、广告规则、GeoIP 解析和规则加载。`DomainRuleEngine` 是 worker 路由判断的核心入口。
 
@@ -31,8 +31,7 @@
 主要控制器：
 
 - `AdminController`：`/admin` 登录、当前用户、改密、登出、管理员维护。
-- `UserController`、`RouteController`、`InboundConfigController`、`RateLimitController`：代理核心配置 CRUD。
-- `DnsRuleController`：DNS 规则接口占位，目前只注册 `/api/dns/rule` 根路径。
+- `UserController`、`RouteController`、`InboundConfigController`：代理核心配置 CRUD。
 - `LogController`、`UserTrafficStatsController`：访问日志查询、明细、TopN、时间序列、用户流量统计。
 - `WolController`、`DiskMonitorController`：WOL 配置/唤醒/监控和磁盘状态。
 - `MailGatewayAdminController`、`MailTargetAdminController`、`MailSendLogController`、`InternalMailController`、`SchedulerController`：邮件网关、收件目标、发送日志、内部发送和计划任务。
@@ -85,7 +84,6 @@
 - `UserManagement.tsx`：用户管理。
 - `RouteManagement.tsx` + `components/RouteForm.tsx`：路由策略管理。
 - `InboundManagement.tsx`：入站监听配置。
-- `RateLimitManagement.tsx`：限流配置。
 - `LogAudit.tsx`、`AggregatedAnalysis.tsx`：保留的旧访问日志审计和聚合分析源码；“访问概览”入口已屏蔽，原地址跳转对应新版页面。
 - `WolManagement.tsx`、`DiskMonitor.tsx`、`MailGateway.tsx`：WOL、磁盘监控、邮件网关。
 

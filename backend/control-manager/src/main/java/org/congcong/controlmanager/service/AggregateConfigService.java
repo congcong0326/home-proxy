@@ -4,11 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.AggregateConfigResponse;
 import org.congcong.common.dto.InboundConfigDTO;
 import org.congcong.common.dto.InboundRouteBinding;
-import org.congcong.common.dto.RateLimitDTO;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RuleSetDTO;
 import org.congcong.common.dto.UserDtoWithCredential;
-import org.congcong.common.enums.RateLimitScopeType;
 import org.congcong.common.enums.LogLevel;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.controlmanager.entity.InboundConfig;
@@ -31,7 +29,6 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AggregateConfigService {
     private final InboundConfigService inboundConfigService;
-    private final RateLimitService rateLimitService;
     private final RouteService routeService;
     private final UserService userService;
     private final RuleSetService ruleSetService;
@@ -88,12 +85,11 @@ public class AggregateConfigService {
             throw new IllegalStateException("路由引用了不存在或未发布的规则集");
         }
 
-        List<RateLimitDTO> rateLimits = filterRateLimits(rateLimitService.getRateLimitsByEnabled(true), userIds);
         var worker = proxyWorkerRepository.findById(workerId);
         boolean logReportingEnabled = worker.map(w -> w.getLogReportingEnabled() == null || w.getLogReportingEnabled()).orElse(true);
         LogLevel logLevel = worker.map(w -> w.getLogLevel()).orElse(LogLevel.INFO);
-        String configHash = canonicalConfigHasher.hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled, logLevel);
-        AggregateConfigResponse response = AggregateConfigResponse.of(workerId, inbounds, routes, rateLimits, users, ruleSets, configHash);
+        String configHash = canonicalConfigHasher.hash(inbounds, routes, users, ruleSets, logReportingEnabled, logLevel);
+        AggregateConfigResponse response = AggregateConfigResponse.of(workerId, inbounds, routes, users, ruleSets, configHash);
         response.setLogReportingEnabled(logReportingEnabled);
         response.setLogLevel(logLevel);
         return response;
@@ -136,23 +132,5 @@ public class AggregateConfigService {
                     }).toList());
         }
         return copy;
-    }
-
-    private List<RateLimitDTO> filterRateLimits(List<RateLimitDTO> all, Set<Long> userIds) {
-        List<RateLimitDTO> result = new ArrayList<>();
-        for (RateLimitDTO rateLimit : all) {
-            if (rateLimit.getScopeType() == RateLimitScopeType.GLOBAL) {
-                result.add(rateLimit);
-            } else if (rateLimit.getScopeType() == RateLimitScopeType.USERS && rateLimit.getUserIds() != null) {
-                List<Long> included = rateLimit.getUserIds().stream().filter(userIds::contains).toList();
-                if (!included.isEmpty()) {
-                    RateLimitDTO copy = new RateLimitDTO();
-                    BeanUtils.copyProperties(rateLimit, copy);
-                    copy.setUserIds(included);
-                    result.add(copy);
-                }
-            }
-        }
-        return result.stream().sorted(Comparator.comparing(RateLimitDTO::getId)).toList();
     }
 }

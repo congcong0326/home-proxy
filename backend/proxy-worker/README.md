@@ -160,7 +160,6 @@ public class MyConfigHandler implements AggregateConfigService.ConfigChangeListe
     public void onConfigChanged(AggregateConfigResponse newConfig) {
         // 应用新配置
         applyRoutes(newConfig.getRoutes());
-        applyRateLimits(newConfig.getRateLimits());
         // ...
     }
 }

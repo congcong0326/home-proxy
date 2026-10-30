@@ -38,14 +38,6 @@ import {
   UpdateRuleSetRequest,
 } from '../types/ruleset';
 import {
-  RateLimitDTO,
-  RateLimitCreateRequest,
-  RateLimitUpdateRequest,
-  RateLimitQueryParams,
-  RateLimitScopeType,
-  PageResponse as RateLimitPageResponse
-} from '../types/ratelimit';
-import {
   InboundConfigDTO,
   InboundConfigCreateRequest,
   InboundConfigUpdateRequest,
@@ -746,52 +738,6 @@ class ApiService {
     return this.request<DistributionBucket[]>(endpoint);
   }
   
-  // ========== 限流管理接口 ==========
-  
-  async getRateLimits(params: RateLimitQueryParams = {}): Promise<RateLimitPageResponse<RateLimitDTO>> {
-    const searchParams = new URLSearchParams();
-    if (params.page !== undefined) searchParams.append('page', params.page.toString());
-    if (params.pageSize !== undefined) searchParams.append('pageSize', params.pageSize.toString());
-    if (params.sortBy) searchParams.append('sortBy', params.sortBy);
-    if (params.sortDir) searchParams.append('sortDir', params.sortDir);
-    if (params.scopeType) searchParams.append('scopeType', params.scopeType);
-    if (params.enabled !== undefined) searchParams.append('enabled', params.enabled.toString());
-    const qs = searchParams.toString();
-    const endpoint = qs ? `/rate-limits?${qs}` : '/rate-limits';
-    return this.request<RateLimitPageResponse<RateLimitDTO>>(endpoint);
-  }
-
-  async getRateLimitById(id: number): Promise<RateLimitDTO> {
-    return this.request<RateLimitDTO>(`/rate-limits/${id}`);
-  }
-
-  async createRateLimit(data: RateLimitCreateRequest): Promise<RateLimitDTO> {
-    return this.request<RateLimitDTO>('/rate-limits', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async updateRateLimit(id: number, data: RateLimitUpdateRequest): Promise<RateLimitDTO> {
-    return this.request<RateLimitDTO>(`/rate-limits/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async deleteRateLimit(id: number): Promise<void> {
-    return this.request<void>(`/rate-limits/${id}`, {
-      method: 'DELETE',
-    });
-  }
-
-  async getRateLimitsByScopeType(scopeType: RateLimitScopeType): Promise<RateLimitDTO[]> {
-    return this.request<RateLimitDTO[]>(`/rate-limits/scope/${scopeType}`);
-  }
-
-  async getRateLimitsByEnabled(enabled: boolean): Promise<RateLimitDTO[]> {
-    return this.request<RateLimitDTO[]>(`/rate-limits/enabled/${enabled}`);
-  }
   // 获取所有启用的路由（用于下拉选择）
   async getEnabledRoutes(): Promise<RouteDTO[]> {
     return this.request<RouteDTO[]>('/routes/enabled');

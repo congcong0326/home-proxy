@@ -3,7 +3,6 @@ package org.congcong.controlmanager.service;
 import lombok.RequiredArgsConstructor;
 import org.congcong.controlmanager.dto.*;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.congcong.controlmanager.logstore.AccessLogStoreFactory;
 
 import java.time.LocalDateTime;
@@ -51,21 +50,6 @@ public class LogService {
      */
     public List<TimeSeriesPoint> getUserTrafficTrend(String workerId, Long userId, LocalDateTime from, LocalDateTime to) {
         return accessLogStoreFactory.current().getUserTrafficTrend(normalizeWorkerId(workerId), userId, from, to);
-    }
-
-    /**
-     * 清理过期的分钟级流量数据
-     */
-    @Transactional
-    public int cleanupExpiredMinuteTrafficStats() {
-        return accessLogStoreFactory.current().cleanupExpiredMinuteTrafficStats();
-    }
-
-    /**
-     * 统计过期的分钟级流量数据数量
-     */
-    public long countExpiredMinuteTrafficStats() {
-        return accessLogStoreFactory.current().countExpiredMinuteTrafficStats();
     }
 
     /**

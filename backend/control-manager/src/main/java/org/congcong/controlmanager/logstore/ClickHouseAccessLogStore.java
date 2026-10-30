@@ -45,16 +45,6 @@ public class ClickHouseAccessLogStore implements AccessLogStore {
     }
 
     @Override
-    public int cleanupExpiredMinuteTrafficStats() {
-        return 0;
-    }
-
-    @Override
-    public long countExpiredMinuteTrafficStats() {
-        return 0L;
-    }
-
-    @Override
     public long sumBytes(LocalDateTime from, LocalDateTime to) {
         StringBuilder sb = new StringBuilder("SELECT sum(bytes_in + bytes_out) AS total_bytes FROM default.access_log WHERE 1=1");
         List<Object> params = new ArrayList<>();

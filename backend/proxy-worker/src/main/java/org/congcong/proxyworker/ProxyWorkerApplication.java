@@ -99,7 +99,6 @@ public class ProxyWorkerApplication {
             log.info("  生成时间: {}", newConfig.getGeneratedAt());
             log.info("  入站配置数量: {}", newConfig.getInbounds() != null ? newConfig.getInbounds().size() : 0);
             log.info("  路由配置数量: {}", newConfig.getRoutes() != null ? newConfig.getRoutes().size() : 0);
-            log.info("  限流配置数量: {}", newConfig.getRateLimits() != null ? newConfig.getRateLimits().size() : 0);
             log.info("  用户配置数量: {}", newConfig.getUsers() != null ? newConfig.getUsers().size() : 0);
             log.info("  规则集数量: {}", newConfig.getRuleSets() != null ? newConfig.getRuleSets().size() : 0);
             log.info("  配置哈希: {}", newConfig.getConfigHash());

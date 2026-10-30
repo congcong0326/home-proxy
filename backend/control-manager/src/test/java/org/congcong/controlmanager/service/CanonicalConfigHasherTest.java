@@ -16,12 +16,12 @@ class CanonicalConfigHasherTest {
     @Test
     void logLevelChangesConfigHashAndMissingLevelDefaultsToInfo() {
         CanonicalConfigHasher hasher = new CanonicalConfigHasher();
-        String info = hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, LogLevel.INFO);
-        String warn = hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, LogLevel.WARN);
+        String info = hasher.hash(List.of(), List.of(), List.of(), List.of(), true, LogLevel.INFO);
+        String warn = hasher.hash(List.of(), List.of(), List.of(), List.of(), true, LogLevel.WARN);
 
         assertNotEquals(info, warn);
-        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of(), true, null));
-        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of(), List.of()));
+        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of(), true, null));
+        assertEquals(info, hasher.hash(List.of(), List.of(), List.of(), List.of()));
     }
 
     @Test
@@ -34,8 +34,8 @@ class CanonicalConfigHasherTest {
         inbound.setUpdatedAt(LocalDateTime.of(2026, 7, 25, 20, 26));
 
         CanonicalConfigHasher hasher = new CanonicalConfigHasher();
-        String first = hasher.hash(List.of(inbound), List.of(), List.of(), List.of(), List.of());
-        String second = hasher.hash(List.of(inbound), List.of(), List.of(), List.of(), List.of());
+        String first = hasher.hash(List.of(inbound), List.of(), List.of(), List.of());
+        String second = hasher.hash(List.of(inbound), List.of(), List.of(), List.of());
 
         assertFalse(first.isBlank());
         assertEquals(first, second);

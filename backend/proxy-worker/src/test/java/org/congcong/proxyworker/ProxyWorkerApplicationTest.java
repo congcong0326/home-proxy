@@ -137,7 +137,6 @@ class ProxyWorkerApplicationTest {
         response.setGeneratedAt(LocalDateTime.of(2026, 6, 28, 12, 0));
         response.setInbounds(List.of());
         response.setRoutes(List.of());
-        response.setRateLimits(List.of());
         response.setUsers(List.of());
         response.setRuleSets(List.of());
         response.setConfigHash("hash-001");

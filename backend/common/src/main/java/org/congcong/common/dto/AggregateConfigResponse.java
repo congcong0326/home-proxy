@@ -43,19 +43,9 @@ public class AggregateConfigResponse {
     private List<RouteDTO> routes;
 
     /**
-     * 限流配置列表
-     */
-    private List<RateLimitDTO> rateLimits;
-
-    /**
      * 用户配置列表
      */
     private List<UserDtoWithCredential> users;
-
-    /**
-     * dns规则
-     */
-    private List<DnsRuleDTO> dnsRules;
 
     /**
      * 已发布的规则集
@@ -73,7 +63,6 @@ public class AggregateConfigResponse {
     public static AggregateConfigResponse of(String workerId,
                                            List<InboundConfigDTO> inbounds,
                                            List<RouteDTO> routes,
-                                           List<RateLimitDTO> rateLimits,
                                            List<UserDtoWithCredential> users,
                                            List<RuleSetDTO> ruleSets,
                                            String configHash) {
@@ -83,7 +72,6 @@ public class AggregateConfigResponse {
         response.setGeneratedAt(LocalDateTime.now());
         response.setInbounds(inbounds);
         response.setRoutes(routes);
-        response.setRateLimits(rateLimits);
         response.setUsers(users);
         response.setRuleSets(ruleSets);
         response.setConfigHash(configHash);
@@ -93,10 +81,9 @@ public class AggregateConfigResponse {
     /** Compatibility helper for callers that are upgraded independently. */
     public static AggregateConfigResponse of(List<InboundConfigDTO> inbounds,
                                            List<RouteDTO> routes,
-                                           List<RateLimitDTO> rateLimits,
                                            List<UserDtoWithCredential> users,
                                            List<RuleSetDTO> ruleSets,
                                            String configHash) {
-        return of(null, inbounds, routes, rateLimits, users, ruleSets, configHash);
+        return of(null, inbounds, routes, users, ruleSets, configHash);
     }
 }

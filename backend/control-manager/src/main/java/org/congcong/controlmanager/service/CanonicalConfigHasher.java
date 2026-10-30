@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.dto.InboundConfigDTO;
-import org.congcong.common.dto.RateLimitDTO;
 import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RuleSetDTO;
 import org.congcong.common.dto.UserDtoWithCredential;
@@ -24,24 +23,20 @@ public class CanonicalConfigHasher {
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
             .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
 
-    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
-                       List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets) {
-        return hash(inbounds, routes, rateLimits, users, ruleSets, true);
+    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets) {
+        return hash(inbounds, routes, users, ruleSets, true);
     }
 
-    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
-                       List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled) {
-        return hash(inbounds, routes, rateLimits, users, ruleSets, logReportingEnabled, LogLevel.INFO);
+    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled) {
+        return hash(inbounds, routes, users, ruleSets, logReportingEnabled, LogLevel.INFO);
     }
 
-    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<RateLimitDTO> rateLimits,
-                       List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled,
+    public String hash(List<InboundConfigDTO> inbounds, List<RouteDTO> routes, List<UserDtoWithCredential> users, List<RuleSetDTO> ruleSets, boolean logReportingEnabled,
                        LogLevel logLevel) {
         try {
             LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("inbounds", inbounds);
             snapshot.put("routes", routes);
-            snapshot.put("rateLimits", rateLimits);
             snapshot.put("users", users);
             snapshot.put("ruleSets", ruleSets);
             snapshot.put("logReportingEnabled", logReportingEnabled);
