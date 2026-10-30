@@ -1,11 +1,16 @@
 FROM eclipse-temurin:17-jre-jammy
 
+# sqlite3 CLI for operators: inspect /data/home-proxy.db and /data/telemetry.db inside the container.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY backend/control-manager/target/control-manager-*.jar /app/control-manager.jar
 COPY data/geoip/ /app/data/geoip/
 
-# SQLite metadata database and its online backups live under /data (mount a volume here).
+# SQLite metadata database, its online backups and the telemetry database live under /data (mount a volume here).
 ENV HOME_PROXY_DATA_DIR=/data
 ENV JAVA_OPTS=""
 VOLUME /data

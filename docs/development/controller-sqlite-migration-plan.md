@@ -1,6 +1,6 @@
 # 控制端数据库裁剪研发计划
 
-> 状态：阶段 1 代码清扫已完成（见 §2.6）；阶段 2 代码与文档已完成（见 §3.3），待人工确认其中的差异清单与线上无关的验收项；阶段 3 的导入脚本与本机演练已完成（见 §4.3），线上切换未做。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
+> 状态：阶段 1 代码清扫已完成（见 §2.6）；阶段 2 代码与文档已完成（见 §3.3），待人工确认其中的差异清单与线上无关的验收项；阶段 3 的导入脚本与本机演练已完成（见 §4.3），线上切换未做；阶段 4 代码、测试与 E2E 已完成（见 §5.1），界面查询待人工验证。设计细节（SQLite 运行参数、类型映射、导入脚本校验、切换回滚）见《[控制端数据库裁剪设计](controller-sqlite-migration-design.md)》，本文只回答"按什么顺序做什么、怎样算做完"。
 >
 > **范围调整**（相对设计文档）：
 > 1. 先做 MySQL → SQLite（元数据）；ClickHouse 日志与遥测**延后**为独立的第 4 阶段，期间 ClickHouse 容器与代码保持不变。
@@ -179,6 +179,32 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 - 阶段 0 式盘点：17 处 `FINAL` 的用途、旧 `access_log`/`auth_log` 与 `/api/logs/access` 是否仍有写入、`agg_*` 相关接口的最终归属、遥测查询是否需要跨库；
 - 把 `overview-concurrency.sql` 的算法与现有独立对照实现（`gateway-observability-concurrency-e2e.py`）准备为改写后的比对基准；
 - 阶段 1 中推迟的项（`LogController` 旧日志接口等）在此阶段一并处理。
+
+### 5.1 阶段 4 执行结果
+
+**盘点结论**：ClickHouse 中只有 5 张表。在用的是 `telemetry.proxy_session_log_v1`、`dns_query_log_v1`、`credential_auth_log_v1` 三张遥测表；旧 `default.access_log`/`auth_log` 全仓库没有写入方（唯一的 `INSERT` 在 `TelemetryStore`），读它们的接口一直返回空。17 处 `FINAL` 都只用于"同一事实重发只取一条"，没有依赖"多版本取最新"的语义。
+
+| 项 | 结论 |
+|---|---|
+| 存储 | 独立文件 `<数据目录>/telemetry.db`（`observability.sqlite.url`），WAL、`busy_timeout`、`BEGIN IMMEDIATE`，与元数据库互不争锁；首次建库设 `auto_vacuum=INCREMENTAL`，`PRAGMA user_version=1`。`TelemetryDataSourceConfig`、`TelemetryJdbcClient` 替换 `clickhouse/` 包 |
+| 表结构 | 仍由 `TelemetrySchema` 按 V1 DTO 字段反射生成：整数／布尔／时间为 `INTEGER`（时间为 UTC epoch 微秒），字符串与列表（JSON 数组）为 `TEXT`；索引 `(worker_id, occurred_at)`、`(occurred_at)`，会话表加 `(worker_id, inbound_id, occurred_at)`，认证表加 `(worker_id, worker_instance_id, connection_id)` |
+| 去重 | 唯一键 `(worker_id, worker_instance_id, record_id)` + `INSERT OR IGNORE`，重发保留首次写入（含 `received_at`）；全部 `FINAL` 删除。一批在一个事务内写入，失败整批保留在内存队列重试 |
+| 保留期 | `TTL` 改为 `TelemetryStore.purgeExpired`：每小时按表分批（5000 行）删除过期事实后 `incremental_vacuum`；`observability.*-retention-days` 默认不设即不删，与原行为一致 |
+| 查询改写 | `multiIf`/`countIf`/`sumIf` → `CASE`；`intDiv(toUnixTimestamp64Micro(..))` → 微秒整数除法；`positionCaseInsensitiveUTF8` → `instr(lower(..), lower(?))`（仅 ASCII 大小写折叠）；`LIMIT 21 BY` → `ROW_NUMBER()`；元组 `IN ((?,?))` → `IN (VALUES (?,?))`；`toJSONString(array)` → 分列分组后 `json_array`；`quantileExactIf(0.95)` → 窗口函数取排序后第 `floor(0.95n)` 个样本（与 ClickHouse 语义一致）；`firstSessionAt` 仍输出 `yyyy-MM-dd HH:mm:ss.SSSSSS`（UTC） |
+| 大数 | `UInt128` 累加改为 SQLite 64 位整数，溢出时报错而不是回绕；对单节点字节计数（上限约 9.2 EB）足够。接口仍以字符串返回 |
+| 并发度 SQL | `resources/telemetry/overview-concurrency.sql`：`ARRAY JOIN`/`range` 改为 `UNION ALL` 事件与递归 CTE 桶边界，`leadInFrame` 改为 `LEAD`，`Int128` 改为 64 位。`scripts/e2e/gateway-observability-concurrency-e2e.py` 已改为用内存 SQLite 跑生产 SQL，7 个场景（含 4000 条随机区间、6 万条区间）与独立区间交集算法逐桶一致 |
+| 旧 `access_log` 链路 | **已删除**：`clickhouse/`、`logstore/`、`LogService`、`LogController`（`/api/logs/**`）及专用 DTO；前端未挂路由的 `LogAudit`、`AggregatedAnalysis`、`LegacyTrafficOverview`、入站页"旧日志"来源与对应 API 方法；`scripts/clickhouse/`。仍在用的两处改读会话表：`UserTrafficStatsService`（首页状态面板，上传为 `byteIn`、下载为 `byteOut`）、`TrafficReportMailHandler`（Top 用户／目标／路由与日、月总量；"按应用"改为"按目标"，因为会话表没有原 `cutToFirstSignificantSubdomain` 的应用口径） |
+| 部署 | `docker-compose.control.yml` 与两个 e2e 临时栈去掉 `clickhouse` 服务、环境变量与数据卷，控制面只剩 `control-manager` 一个容器；`Dockerfile.control-manager` 安装 `sqlite3` 命令行工具，供运维与 E2E 只读查询；`pom.xml` 去掉 `clickhouse-jdbc`；`Makefile` 去掉 `CLICKHOUSE_IMAGE`（`docker-save-offline` 保留为 `docker-save` 的别名） |
+
+**测试**：新增 `TelemetrySqliteFixture` 与 `TelemetrySqliteQueryTest`，经真实 ingest → 缓冲 → flush 写入临时 SQLite 文件后，按手算结果核对重发去重、大数往返、审计分页／详情／认证尝试关联、概览（流量、连接、DNS、认证、并发度含裁剪与不足一桶的末桶）、分布 TopN 与全量分母、入站月流量、认证地理分布、用户流量统计、保留期删除；`NetworkInspectionServiceTest` 改为真实 SQLite 数据（含 P95）。其余 mock 单测按新 SQL 与微秒时间列更新。`mvn -pl control-manager -am test -DskipTests=false` 178 项通过；前端 `tsc --noEmit` 与 `npm test` 85 项通过。
+
+**启动与 E2E（2026-10-30）**：在本机无 ClickHouse 的情况下用打包后的 jar 启动，4.6 秒内启动完成，自动创建 `telemetry.db` 的 3 张表与 9 个索引。`make e2e-transparent` 通过（52 项 PASS），新增的落库断言显示该 Worker 在 `telemetry.db` 中写入 72 条会话、42 条 DNS 记录；`make e2e-direct-outbound-safety` 通过（6 项 PASS），其审计断言改为在容器内用 `sqlite3` 查询 `proxy_session_log_v1`；本机 29290 端口被常驻 home-01 环境的 `fake-ip-persistent-e2e.py serve` 占用，运行时用 `E2E_DIRECT_SAFETY_OVERRIDE_PORT=29390` 换端口。
+
+**未做 / 待确认**：
+- 管理页面（概览、分布、审计、入站流量、首页状态面板）的界面效果由人工验证；
+- 线上 ClickHouse 的历史日志不迁移（设计文档 §1.3），切换后新日志从零开始累计，旧 ClickHouse 容器与数据卷在确认后再手工清理；
+- `gateway-observability-overview-e2e.py`、`gateway-observability-protocol-probe.py` 已改为读 SQLite，但依赖常驻 home-01 环境，本机未运行；
+- 历史设计／测试文档中的 ClickHouse 描述保持原样。
 
 ## 6. 风险与对策
 

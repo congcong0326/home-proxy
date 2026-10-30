@@ -3,7 +3,7 @@ package org.congcong.controlmanager.telemetry;
 import lombok.Data;
 import java.time.Instant;
 
-/** Bounded audit scope. Filters are applied in ClickHouse before pagination. */
+/** Bounded audit scope. Filters are applied in SQL before pagination. */
 @Data
 public class TelemetryQueryRequest {
     private String workerId;

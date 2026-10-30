@@ -1,33 +1,33 @@
 package org.congcong.controlmanager.telemetry;
 
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.springframework.stereotype.Service;
 import java.math.BigInteger;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.util.*;
 
-/** TopN over all unique ended sessions, with full-range denominators and UInt128 sums. */
+/** TopN over all unique ended sessions, with full-range denominators. SQLite sums are 64-bit and fail on overflow. */
 @Service
 public class DistributionService {
-    private final ClickHouseJdbcClient client;
+    private final TelemetryJdbcClient client;
     private final TelemetryStore store;
-    private record Dimension(String keys, String missing) { }
-    private static final String USER = "coalesce(toString(user_id),'')", NAME = "coalesce(username,'')";
-    private static final String TARGET = "coalesce(nullIf(logical_target_host,''),'')";
-    private static final String ROUTE = "coalesce(toString(route_id),'')", ROUTE_NAME = "coalesce(route_name,'')";
+    /** Key expressions are grouped and ordered column by column, then returned as one JSON array. */
+    private record Dimension(List<String> keys, String missing) { }
+    private static final String USER = "coalesce(CAST(user_id AS TEXT),'')", NAME = "coalesce(username,'')";
+    private static final String TARGET = "coalesce(logical_target_host,'')";
+    private static final String ROUTE = "coalesce(CAST(route_id AS TEXT),'')", ROUTE_NAME = "coalesce(route_name,'')";
     private static final Map<String, Dimension> DIMENSIONS = Map.of(
-            "users", new Dimension("[" + USER + "," + NAME + "]", USER + " = '' AND " + NAME + " = ''"),
-            "targets", new Dimension("[" + TARGET + "]", TARGET + " = ''"),
-            "user_targets", new Dimension("[" + USER + "," + NAME + "," + TARGET + "]",
+            "users", new Dimension(List.of(USER, NAME), USER + " = '' AND " + NAME + " = ''"),
+            "targets", new Dimension(List.of(TARGET), TARGET + " = ''"),
+            "user_targets", new Dimension(List.of(USER, NAME, TARGET),
                     "(" + USER + " = '' AND " + NAME + " = '') OR " + TARGET + " = ''"),
-            "routes", new Dimension("[" + ROUTE + "," + ROUTE_NAME + "]", ROUTE + " = '' AND " + ROUTE_NAME + " = ''"),
-            "client_ips", new Dimension("[coalesce(client_ip,'')]", "coalesce(client_ip,'') = ''"),
-            "categories", new Dimension("[coalesce(traffic_category,'UNKNOWN')]", "coalesce(traffic_category,'UNKNOWN') = 'UNKNOWN'"));
+            "routes", new Dimension(List.of(ROUTE, ROUTE_NAME), ROUTE + " = '' AND " + ROUTE_NAME + " = ''"),
+            "client_ips", new Dimension(List.of("coalesce(client_ip,'')"), "coalesce(client_ip,'') = ''"),
+            "categories", new Dimension(List.of("coalesce(traffic_category,'UNKNOWN')"), "coalesce(traffic_category,'UNKNOWN') = 'UNKNOWN'"));
     private static final Map<String, String> METRICS = Map.of(
             "connections", "group_connections", "bytes", "group_upload + group_download", "upload", "group_upload", "download", "group_download");
 
-    public DistributionService(ClickHouseJdbcClient client, TelemetryStore store) {
+    public DistributionService(TelemetryJdbcClient client, TelemetryStore store) {
         this.client = client;
         this.store = store;
     }
@@ -52,16 +52,22 @@ public class DistributionService {
         filter(where, params, "client_ip", request.getClientIp(), false);
         params.add(request.getLimit());
         // Window aggregates run before LIMIT: the denominator includes every group, including unknowns.
-        String sql = "WITH grouped AS (SELECT " + dimension.keys + " AS dimension_keys, count() AS group_connections, "
-                + "sum(toUInt128(coalesce(upload_bytes,0))) AS group_upload, "
-                + "sum(toUInt128(coalesce(download_bytes,0))) AS group_download, countIf(" + dimension.missing + ") AS missing "
-                + "FROM " + TelemetrySchema.SESSIONS.table + " FINAL WHERE " + where + " GROUP BY dimension_keys) "
-                + "SELECT toJSONString(dimension_keys) AS keys_json, toString(group_connections) AS connections, "
-                + "toString(group_upload) AS upload, toString(group_download) AS download, toString(" + metric + ") AS value, "
-                + "toString(sum(group_connections) OVER ()) AS total_connections, toString(sum(group_upload) OVER ()) AS total_upload, "
-                + "toString(sum(group_download) OVER ()) AS total_download, toString(sum(" + metric + ") OVER ()) AS total_value, "
-                + "toString(count() OVER ()) AS groups, toString(sum(missing) OVER ()) AS missing_connections "
-                + "FROM grouped ORDER BY " + metric + " DESC, dimension_keys ASC LIMIT ?";
+        List<String> keyColumns = new ArrayList<>(), keySelect = new ArrayList<>();
+        for (int i = 0; i < dimension.keys.size(); i++) {
+            keyColumns.add("k" + i);
+            keySelect.add(dimension.keys.get(i) + " AS k" + i);
+        }
+        String groupKeys = String.join(", ", keyColumns);
+        String sql = "WITH grouped AS (SELECT " + String.join(", ", keySelect) + ", COUNT(*) AS group_connections, "
+                + "SUM(coalesce(upload_bytes,0)) AS group_upload, "
+                + "SUM(coalesce(download_bytes,0)) AS group_download, SUM(CASE WHEN " + dimension.missing + " THEN 1 ELSE 0 END) AS missing "
+                + "FROM " + TelemetrySchema.SESSIONS.table + " WHERE " + where + " GROUP BY " + groupKeys + ") "
+                + "SELECT json_array(" + groupKeys + ") AS keys_json, CAST(group_connections AS TEXT) AS connections, "
+                + "CAST(group_upload AS TEXT) AS upload, CAST(group_download AS TEXT) AS download, CAST(" + metric + " AS TEXT) AS value, "
+                + "CAST(SUM(group_connections) OVER () AS TEXT) AS total_connections, CAST(SUM(group_upload) OVER () AS TEXT) AS total_upload, "
+                + "CAST(SUM(group_download) OVER () AS TEXT) AS total_download, CAST(SUM(" + metric + ") OVER () AS TEXT) AS total_value, "
+                + "CAST(COUNT(*) OVER () AS TEXT) AS groups, CAST(SUM(missing) OVER () AS TEXT) AS missing_connections "
+                + "FROM grouped ORDER BY " + metric + " DESC, " + groupKeys + " LIMIT ?";
         var rows = client.query(sql, params.toArray());
         var items = new ArrayList<Item>();
         BigInteger top = BigInteger.ZERO;
@@ -79,9 +85,9 @@ public class DistributionService {
         }
         Map<String, Object> total = rows.isEmpty() ? Map.of() : rows.get(0);
         String totalValue = number(total, "total_value");
-        var first = client.query("SELECT toString(minOrNull(occurred_at)) AS first_at FROM "
-                + TelemetrySchema.SESSIONS.table + " FINAL WHERE worker_id = ?", request.getWorkerId());
-        String firstAt = first.isEmpty() || first.get(0).get("first_at") == null ? null : first.get(0).get("first_at").toString();
+        var first = client.query("SELECT MIN(occurred_at) AS first_at FROM "
+                + TelemetrySchema.SESSIONS.table + " WHERE worker_id = ?", request.getWorkerId());
+        String firstAt = first.isEmpty() ? null : TelemetryJdbcClient.utcText(first.get(0).get("first_at"));
         return new Distribution(request.getFrom().toString(), request.getTo().toString(), request.getDimension(), request.getMetric(),
                 items, counters(total, "total_"), totalValue, new BigInteger(totalValue).subtract(top).toString(),
                 number(total, "groups"), number(total, "missing_connections"), firstAt, "ENDED_SESSIONS_ONLY", "[from,to)");

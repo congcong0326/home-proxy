@@ -58,7 +58,7 @@ const assert = require('node:assert/strict');
     await page.screenshot({ path: path.join(output, 'session-auth-failure.png'), fullPage: true });
     await page.getByRole('dialog').locator('.ant-drawer-close').click();
     await page.screenshot({ path: path.join(output, 'sessions.png'), fullPage: true });
-    // Filter in ClickHouse and open a known rewritten target sample.
+    // Filter server-side and open a known rewritten target sample.
     await page.getByRole('textbox', { name: '目标／域名' }).fill('10.254.94.1');
     const filtered = page.waitForResponse(r => r.url().includes('/sessions/page?') && r.url().includes('target=') && r.status() === 200);
     await page.getByRole('button', { name: /查\s*询/ }).click();

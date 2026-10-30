@@ -7,7 +7,6 @@ import { ProtocolType } from '../types/route';
 jest.mock('../services/api', () => ({
   apiService: {
     getInbounds: jest.fn(),
-    getInboundMonthlyTraffic: jest.fn(),
     getInboundMonthlyTrafficV1: jest.fn(),
     getWorkers: jest.fn(),
     getUsers: jest.fn(),
@@ -61,12 +60,6 @@ beforeEach(() => {
   Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
   window.dispatchEvent(new Event('resize'));
   (apiService.getInbounds as jest.Mock).mockResolvedValue(mockInboundResponse);
-  (apiService.getInboundMonthlyTraffic as jest.Mock).mockResolvedValue({
-    inboundId: 1,
-    bytesIn: 0,
-    bytesOut: 0,
-    totalBytes: 0,
-  });
   (apiService.getInboundMonthlyTrafficV1 as jest.Mock).mockResolvedValue({
     inboundId: 1, workerId: 'home-01', period: '2026-10', timeZone: 'Asia/Shanghai',
     traffic: { upload: '1024', download: '2048', total: '3072' },
@@ -88,7 +81,6 @@ test('queries new monthly facts for each inbound and Worker and exposes category
   const traffic = await screen.findAllByText('1 KB / 2 KB');
   expect(apiService.getInboundMonthlyTrafficV1).toHaveBeenCalledWith(1, 'home-01');
   expect(apiService.getInboundMonthlyTrafficV1).toHaveBeenCalledWith(2, 'home-02');
-  expect(apiService.getInboundMonthlyTraffic).not.toHaveBeenCalled();
   fireEvent.mouseEnter(traffic[0]);
   expect(await screen.findByText(/内网访问（目标重写）：/)).toBeInTheDocument();
   expect(screen.getByText(/其他内网：/)).toBeInTheDocument();
@@ -96,17 +88,16 @@ test('queries new monthly facts for each inbound and Worker and exposes category
   expect(screen.getByText('总量：3 KB')).toBeInTheDocument();
 });
 
-test('new query failures are visible and never automatically use legacy traffic', async () => {
+test('new query failures are visible', async () => {
   (apiService.getInboundMonthlyTrafficV1 as jest.Mock).mockRejectedValue(new Error('QUERY_DISABLED'));
   const warning = jest.spyOn(console, 'warn').mockImplementation(() => {});
   render(<InboundManagement />);
   expect(await screen.findAllByText('查询失败')).toHaveLength(2);
   expect(screen.queryByText('0 B / 0 B')).not.toBeInTheDocument();
-  expect(apiService.getInboundMonthlyTraffic).not.toHaveBeenCalled();
   warning.mockRestore();
 });
 
-test('empty new history displays zero without filling it from old logs', async () => {
+test('empty history displays zero', async () => {
   const sample = await (apiService.getInboundMonthlyTrafficV1 as jest.Mock)();
   (apiService.getInboundMonthlyTrafficV1 as jest.Mock).mockResolvedValue({
     ...sample,
@@ -117,20 +108,6 @@ test('empty new history displays zero without filling it from old logs', async (
   });
   render(<InboundManagement />);
   expect(await screen.findAllByText('0 B / 0 B')).toHaveLength(2);
-  expect(apiService.getInboundMonthlyTraffic).not.toHaveBeenCalled();
-});
-
-test('explicit legacy selection switches only traffic requests', async () => {
-  render(<InboundManagement />);
-  await screen.findAllByText('1 KB / 2 KB');
-  const inboundCalls = (apiService.getInbounds as jest.Mock).mock.calls.length;
-  const source = screen.getByRole('combobox', { name: '流量统计来源' });
-  fireEvent.mouseDown(source.closest('.ant-select-selector') as Element);
-  fireEvent.click(await screen.findByTitle('旧日志'));
-  await screen.findAllByText('0 B / 0 B');
-  expect(apiService.getInboundMonthlyTraffic).toHaveBeenCalledWith(1);
-  expect(apiService.getInboundMonthlyTraffic).toHaveBeenCalledWith(2);
-  expect(apiService.getInbounds).toHaveBeenCalledTimes(inboundCalls);
 });
 
 const openCreateModal = async () => {

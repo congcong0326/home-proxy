@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.dto.WorkerMetricsDTO;
 import org.congcong.common.telemetry.*;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.congcong.controlmanager.entity.WorkerStatus;
 import org.congcong.controlmanager.repository.WorkerStatusRepository;
 import org.junit.jupiter.api.Test;
@@ -15,7 +14,7 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class OverviewServiceTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryStore store = mock(TelemetryStore.class);
     private final WorkerStatusRepository workers = mock(WorkerStatusRepository.class);
     private final OverviewService service = new OverviewService(client, store, workers);
@@ -41,7 +40,7 @@ class OverviewServiceTest {
         var result = service.overview(q);
         var traffic = (Map<?, ?>) result.get("traffic");
         assertEquals("9007199254741000", traffic.get("total"));
-        assertTrue(queries.stream().allMatch(sql -> sql.contains(" FINAL WHERE ")));
+        assertTrue(queries.stream().noneMatch(sql -> sql.contains("FINAL")));
         assertTrue(queries.stream().noneMatch(sql -> sql.contains("default.access_log")));
         String auth = queries.stream().filter(sql -> sql.contains("credential_auth_log_v1")).findFirst().orElseThrow();
         assertTrue(auth.contains("attempted_username = ?"));
@@ -49,9 +48,9 @@ class OverviewServiceTest {
         String dns = queries.stream().filter(sql -> sql.contains("dns_query_log_v1")).findFirst().orElseThrow();
         assertFalse(dns.contains("traffic_category"));
         assertTrue(dns.contains("response_sent = false"));
-        String concurrency = queries.stream().filter(sql -> sql.contains("leadInFrame")).findFirst().orElseThrow();
-        assertTrue(concurrency.contains("connected_at < fromUnixTimestamp64Micro(toInt64(?), 'UTC')"));
-        assertTrue(concurrency.contains("ended_at > fromUnixTimestamp64Micro(toInt64(?), 'UTC')"));
+        String concurrency = queries.stream().filter(sql -> sql.contains("LEAD(event_us")).findFirst().orElseThrow();
+        assertTrue(concurrency.contains("connected_at < ?"));
+        assertTrue(concurrency.contains("ended_at > ?"));
         assertFalse(concurrency.contains("occurred_at >="));
     }
     @Test
@@ -62,7 +61,7 @@ class OverviewServiceTest {
         install(metrics);
         when(client.query(anyString(), any(Object[].class))).thenAnswer(call -> {
             String sql = call.getArgument(0);
-            if (sql.contains("leadInFrame")) throw new IllegalStateException("MEMORY_LIMIT_EXCEEDED");
+            if (sql.contains("LEAD(event_us")) throw new IllegalStateException("MEMORY_LIMIT_EXCEEDED");
             if (sql.contains("AS upload") && sql.contains("bucket_index")) {
                 return List.of(Map.of("bucket_index", 0, "upload", "1234", "download", "7"));
             }
@@ -92,7 +91,7 @@ class OverviewServiceTest {
         q.setConnectionResult("FAILURE"); // Attempt result must not filter established intervals.
         when(client.query(anyString(), any(Object[].class))).thenAnswer(call -> {
             String sql = call.getArgument(0);
-            if (!sql.contains("leadInFrame")) return List.of();
+            if (!sql.contains("LEAD(event_us")) return List.of();
             assertArrayEquals(new Object[] {
                     q.getFrom().getEpochSecond() * 1_000_000, q.getTo().getEpochSecond() * 1_000_000,
                     60_000_000L, "edge", "192.168.1.2", "alice", q.getTo().getEpochSecond() * 1_000_000,

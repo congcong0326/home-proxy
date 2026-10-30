@@ -9,8 +9,6 @@ jest.mock('./pages/ProxyConfig', () => () => <div>ProxyConfig</div>);
 jest.mock('./pages/UserManagement', () => () => <div>UserManagement</div>);
 jest.mock('./pages/RouteManagement', () => () => <div>RouteManagement</div>);
 jest.mock('./pages/InboundManagement', () => () => <div>InboundManagement</div>);
-jest.mock('./pages/LogAudit', () => () => <div>LogAudit</div>);
-jest.mock('./pages/AggregatedAnalysis', () => () => <div>AggregatedAnalysis</div>);
 jest.mock('./pages/Dashboard', () => () => <div>Dashboard</div>);
 jest.mock('./pages/TrafficOverview', () => () => <div>TrafficOverview</div>);
 jest.mock('./pages/WolManagement', () => () => <div>WolManagement</div>);

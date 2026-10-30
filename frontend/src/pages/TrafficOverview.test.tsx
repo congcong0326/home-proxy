@@ -9,7 +9,7 @@ jest.mock('echarts', () => ({ connect: jest.fn(), disconnect: jest.fn() }));
 jest.mock('chartjs-adapter-date-fns', () => ({}));
 jest.mock('../services/api', () => ({ __esModule: true, default: {
   getWorkers: jest.fn(), getObservabilityOverview: jest.fn(), getObservabilityLive: jest.fn(),
-  getDailyUserTrafficStats: jest.fn(), getMonthlyUserTrafficStats: jest.fn(), getGlobalTrafficTrend: jest.fn(), getUsers: jest.fn(),
+  getDailyUserTrafficStats: jest.fn(), getMonthlyUserTrafficStats: jest.fn(), getUsers: jest.fn(),
 } }));
 const data = (total = '1024'): OverviewData => ({
   from: '2026-10-09T00:00:00Z', to: '2026-10-09T01:00:00Z', timeZone: 'Asia/Shanghai', bucketSeconds: 60,

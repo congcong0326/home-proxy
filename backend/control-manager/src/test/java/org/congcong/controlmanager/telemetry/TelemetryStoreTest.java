@@ -1,7 +1,6 @@
 package org.congcong.controlmanager.telemetry;
 
 import org.congcong.common.telemetry.*;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
@@ -12,13 +11,13 @@ import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 
 class TelemetryStoreTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryProperties properties = new TelemetryProperties();
     private final java.util.concurrent.atomic.AtomicLong now = new java.util.concurrent.atomic.AtomicLong();
     private final TelemetryStore store = new TelemetryStore(client, properties, mock(CredentialGeoAnalysis.class), now::get);
 
     @Test
-    void ackIsReturnedAfterMemoryAdmissionWithoutAnyCkRequest() throws Exception {
+    void ackIsReturnedAfterMemoryAdmissionWithoutAnyDatabaseRequest() throws Exception {
         var batch = batch();
         var ack = store.ingest("authenticated-node", batch);
         assertTrue(ack.isPersisted());
@@ -30,12 +29,12 @@ class TelemetryStoreTest {
         now.set(120_000_000_000L);
         store.flushDue();
         var params = org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), params.capture());
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO proxy_session_log_v1"), params.capture());
         var fields = TelemetrySchema.SESSIONS.fields().stream().map(TelemetrySchema::column).toList();
         List<?> row = (List<?>) params.getValue().get(0);
         assertEquals("authenticated-node", row.get(fields.indexOf("worker_id")));
         assertEquals(0L, row.get(fields.indexOf("upload_bytes")));
-        verify(client, never()).query(anyString(), any(Object[].class));
+        verify(client, never()).query(startsWith("SELECT"), any(Object[].class));
     }
 
     @Test
@@ -52,7 +51,7 @@ class TelemetryStoreTest {
             }
         }
         store.flushDue();
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 1000));
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO proxy_session_log_v1"), argThat(rows -> rows.size() == 1000));
         assertEquals(0, store.bufferStatus().get("queueDepth"));
     }
 
@@ -65,7 +64,7 @@ class TelemetryStoreTest {
         verifyNoInteractions(client);
         now.set(120_000_000_000L);
         store.flushDue();
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
         assertEquals(0, store.bufferStatus().get("queueDepth"));
     }
 
@@ -78,24 +77,24 @@ class TelemetryStoreTest {
         store.ingest("node", authBatch);
         store.ingest("node", batch());
         store.flushDue();
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
-        verify(client, never()).batchExecute(startsWith("INSERT INTO telemetry.credential_auth_log_v1"), anyList());
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO proxy_session_log_v1"), argThat(rows -> rows.size() == 2));
+        verify(client, never()).batchExecute(startsWith("INSERT OR IGNORE INTO credential_auth_log_v1"), anyList());
         now.set(180_000_000_000L);
         store.flushDue();
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.credential_auth_log_v1"), argThat(rows -> rows.size() == 1));
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO credential_auth_log_v1"), argThat(rows -> rows.size() == 1));
     }
 
     @Test
     void failedFlushRetainsRecordsAndReceivedAtUntilSuccessfulRetry() throws Exception {
         store.ingest("node", batch());
         now.set(120_000_000_000L);
-        when(client.batchExecute(startsWith("INSERT INTO"), anyList()))
-                .thenThrow(new RuntimeException("CK unavailable")).thenReturn(new int[]{1});
+        when(client.batchExecute(startsWith("INSERT OR IGNORE INTO"), anyList()))
+                .thenThrow(new RuntimeException("SQLITE_BUSY")).thenReturn(new int[]{1});
         store.flushDue();
         assertEquals(1, store.bufferStatus().get("queueDepth"));
         store.flushDue();
         var params = org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(client, times(2)).batchExecute(startsWith("INSERT INTO"), params.capture());
+        verify(client, times(2)).batchExecute(startsWith("INSERT OR IGNORE INTO"), params.capture());
         assertEquals(params.getAllValues().get(0), params.getAllValues().get(1));
         assertEquals(0, store.bufferStatus().get("queueDepth"));
         assertEquals(0L, store.bufferStatus().get("bufferBytes"));
@@ -123,7 +122,7 @@ class TelemetryStoreTest {
         properties.setBufferMaxBytes(67108864);
         store.ingest("node", batch());
         store.stop();
-        verify(client).batchExecute(startsWith("INSERT INTO telemetry.proxy_session_log_v1"), argThat(rows -> rows.size() == 1));
+        verify(client).batchExecute(startsWith("INSERT OR IGNORE INTO proxy_session_log_v1"), argThat(rows -> rows.size() == 1));
         assertThrows(IllegalStateException.class, () -> store.ingest("node", batch()));
     }
 
@@ -154,26 +153,29 @@ class TelemetryStoreTest {
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "", now.minusSeconds(60), now, 100, 0, null));
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(60), now, 201, 0, null));
         assertThrows(IllegalArgumentException.class, () -> store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(31 * 86400L + 1), now, 100, 0, null));
-        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(Map.of("raw_json", "{\"downloadBytes\":\"9007199254740993\",\"dnsDurationUs\":null,\"rateLimitWaitUs\":null,\"rateLimitPolicyId\":null}", "received_at", "2026-10-09 01:00:00")));
+        when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(Map.of("raw_json", "{\"downloadBytes\":\"9007199254740993\",\"dnsDurationUs\":null,\"rateLimitWaitUs\":null,\"rateLimitPolicyId\":null}", "received_at", 1_791_507_600_000_000L)));
         var rows = store.query(TelemetrySchema.SESSIONS, "node", now.minusSeconds(60), now, 100, 0, null);
         assertEquals("9007199254740993", rows.get(0).get("downloadBytes"));
         assertNull(rows.get(0).get("dnsDurationUs"));
         assertFalse(rows.get(0).containsKey("rateLimitWaitUs"));
         assertFalse(rows.get(0).containsKey("rateLimitPolicyId"));
-        verify(client).query(contains(" FINAL WHERE worker_id = ?"), any(Object[].class));
+        assertEquals("2026-10-09T01:00:00Z", rows.get(0).get("receivedAt"));
+        verify(client).query(contains("FROM proxy_session_log_v1 WHERE worker_id = ?"), any(Object[].class));
     }
 
     @Test
     void schemasOnlyCreateIndependentTablesAndDoNotConvertUnknownToZero() {
         for (TelemetrySchema schema : TelemetrySchema.values()) {
             String ddl = schema.ddl();
-            assertTrue(ddl.startsWith("CREATE TABLE IF NOT EXISTS telemetry."));
-            assertTrue(ddl.contains("DateTime64(6, 'UTC')"));
-            assertFalse(ddl.contains("default."));
+            assertTrue(ddl.startsWith("CREATE TABLE IF NOT EXISTS " + schema.table + " ("));
+            assertTrue(ddl.contains("occurred_at INTEGER NOT NULL"));
+            assertTrue(ddl.contains("received_at INTEGER NOT NULL"));
             assertFalse(ddl.contains("DROP"));
-            assertFalse(ddl.contains("TTL"));
+            assertTrue(schema.indexes().get(0).startsWith("CREATE UNIQUE INDEX IF NOT EXISTS ux_" + schema.table + "_fact"));
         }
-        assertTrue(TelemetrySchema.SESSIONS.ddl().contains("dns_duration_us Nullable(UInt64)"));
+        // Unknown values stay NULL rather than being coerced to 0.
+        assertTrue(TelemetrySchema.SESSIONS.ddl().contains("dns_duration_us INTEGER,"));
+        assertTrue(TelemetrySchema.DNS.ddl().contains("answer_ips TEXT"));
     }
     private static final com.fasterxml.jackson.databind.ObjectMapper WIRE = new com.fasterxml.jackson.databind.ObjectMapper()
             .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
@@ -254,15 +256,23 @@ class TelemetryStoreTest {
     void retentionDaysMapToTheirOwnTables() {
         properties.setSessionRetentionDays(11);
         properties.setDnsRetentionDays(22);
-        properties.setAuthRetentionDays(33);
-        store.requireQueryAvailable();
-        var statements = org.mockito.ArgumentCaptor.forClass(String.class);
-        verify(client, atLeastOnce()).execute(statements.capture());
-        var ttl = statements.getAllValues().stream().filter(sql -> sql.startsWith("CREATE TABLE")).toList();
-        assertEquals(3, ttl.size());
-        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("proxy_session_log_v1") && sql.endsWith("INTERVAL 11 DAY")));
-        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("dns_query_log_v1") && sql.endsWith("INTERVAL 22 DAY")));
-        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("credential_auth_log_v1") && sql.endsWith("INTERVAL 33 DAY")));
+        Instant before = Instant.now();
+        store.purgeExpired();
+        var cutoffs = new java.util.HashMap<String, Instant>();
+        var sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        var params = org.mockito.ArgumentCaptor.forClass(Object[].class);
+        verify(client, atLeastOnce()).execute(sql.capture(), params.capture());
+        for (int i = 0; i < sql.getAllValues().size(); i++) {
+            String statement = sql.getAllValues().get(i);
+            if (statement.startsWith("DELETE FROM ")) {
+                cutoffs.put(statement.substring("DELETE FROM ".length(), statement.indexOf(' ', "DELETE FROM ".length())),
+                        (Instant) params.getAllValues().get(i)[0]);
+            }
+        }
+        // Authentication has no retention configured, so its table is never purged.
+        assertEquals(java.util.Set.of("proxy_session_log_v1", "dns_query_log_v1"), cutoffs.keySet());
+        assertEquals(11, java.time.Duration.between(cutoffs.get("proxy_session_log_v1"), before).plusMinutes(1).toDays());
+        assertEquals(22, java.time.Duration.between(cutoffs.get("dns_query_log_v1"), before).plusMinutes(1).toDays());
     }
 
     private TelemetryBatchV1 batch() {

@@ -1,7 +1,8 @@
 package org.congcong.controlmanager.service.mail.inspection;
 
 import lombok.RequiredArgsConstructor;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
+import org.congcong.controlmanager.telemetry.TelemetryJdbcClient;
+import org.congcong.controlmanager.telemetry.TelemetrySchema;
 import org.congcong.controlmanager.telemetry.TelemetryStore;
 import org.springframework.stereotype.Service;
 
@@ -16,11 +17,11 @@ import static org.congcong.controlmanager.service.mail.inspection.InspectionForm
 @Service
 @RequiredArgsConstructor
 public class NetworkInspectionService {
-    private static final String SESSIONS = "telemetry.proxy_session_log_v1";
-    private static final String DNS = "telemetry.dns_query_log_v1";
+    private static final String SESSIONS = TelemetrySchema.SESSIONS.table;
+    private static final String DNS = TelemetrySchema.DNS.table;
     private static final String DNS_FAILURE = "(outcome = 'ERROR' OR response_sent = false) "
-            + "AND ifNull(outcome, '') NOT IN ('BLOCKED', 'CANCELLED')";
-    private final ClickHouseJdbcClient client;
+            + "AND coalesce(outcome, '') NOT IN ('BLOCKED', 'CANCELLED')";
+    private final TelemetryJdbcClient client;
     private final TelemetryStore store;
     private final InspectionProperties properties;
 
@@ -30,18 +31,18 @@ public class NetworkInspectionService {
         store.requireQueryAvailable();
         Scope scope = scope(workers, from, to);
         var rows = client.query("""
-                SELECT worker_id, toString(count()) AS records,
-                  toString(countIf(connect_outcome = 'CONNECTED')) AS connected,
-                  toString(countIf(connect_outcome = 'FAILED')) AS failed,
-                  toString(countIf(connect_outcome = 'BLOCKED')) AS blocked,
-                  toString(countIf(connect_outcome = 'CANCELLED')) AS cancelled,
-                  toString(countIf(connect_outcome = 'CONNECTED' AND session_outcome = 'ERROR_END')) AS transfer_errors,
-                  toString(countIf(connect_outcome = 'CONNECTED' AND channel_setup_duration_us IS NOT NULL)) AS timing_samples,
-                  quantileExactIf(0.95)(ifNull(channel_setup_duration_us, 0),
-                    connect_outcome = 'CONNECTED' AND channel_setup_duration_us IS NOT NULL) AS setup_p95
-                FROM telemetry.proxy_session_log_v1 FINAL WHERE
+                SELECT worker_id, COUNT(*) AS records,
+                  SUM(CASE WHEN connect_outcome = 'CONNECTED' THEN 1 ELSE 0 END) AS connected,
+                  SUM(CASE WHEN connect_outcome = 'FAILED' THEN 1 ELSE 0 END) AS failed,
+                  SUM(CASE WHEN connect_outcome = 'BLOCKED' THEN 1 ELSE 0 END) AS blocked,
+                  SUM(CASE WHEN connect_outcome = 'CANCELLED' THEN 1 ELSE 0 END) AS cancelled,
+                  SUM(CASE WHEN connect_outcome = 'CONNECTED' AND session_outcome = 'ERROR_END' THEN 1 ELSE 0 END) AS transfer_errors,
+                  SUM(CASE WHEN connect_outcome = 'CONNECTED' AND channel_setup_duration_us IS NOT NULL THEN 1 ELSE 0 END) AS timing_samples
+                FROM proxy_session_log_v1 WHERE
                 """ + scope.where + " GROUP BY worker_id ORDER BY worker_id", scope.params.toArray());
         Map<String, Map<String, Object>> byWorker = index(rows);
+        var setupP95 = p95(SESSIONS, "channel_setup_duration_us", scope,
+                "connect_outcome = 'CONNECTED' AND channel_setup_duration_us IS NOT NULL", "worker_id");
         var starts = historyStarts(SESSIONS, workers, "");
         var items = new ArrayList<InspectionSection.Item>();
         for (String worker : workers) {
@@ -53,7 +54,7 @@ public class NetworkInspectionService {
                     "建连失败率", rate(failed, connected.add(failed)),
                     "策略阻断 / 客户端取消", integer(row.get("blocked")) + " / " + integer(row.get("cancelled")),
                     "建连后传输错误", integer(row.get("transfer_errors")).toString(),
-                    "成功建连耗时 P95", milliseconds(row.get("setup_p95"), row.get("timing_samples")),
+                    "成功建连耗时 P95", milliseconds(setupP95.get(List.of(worker)), row.get("timing_samples")),
                     "历史覆盖", coverage(starts.get(worker), from, zone)));
         }
         var failures = client.query("""
@@ -61,10 +62,10 @@ public class NetworkInspectionService {
                   coalesce(error_code, 'UNKNOWN') AS error, coalesce(route_name, '') AS route,
                   coalesce(outbound_node_id, '') AS outbound,
                   coalesce(logical_target_host, effective_target_host, '') AS target,
-                  toString(count()) AS records, min(connection_id) AS example_connection
-                FROM telemetry.proxy_session_log_v1 FINAL WHERE
+                  COUNT(*) AS records, MIN(connection_id) AS example_connection
+                FROM proxy_session_log_v1 WHERE
                 """ + scope.where + " AND (connect_outcome = 'FAILED' OR session_outcome = 'ERROR_END')"
-                + " GROUP BY worker_id, stage, error, route, outbound, target ORDER BY count() DESC, worker_id, stage, error LIMIT 10",
+                + " GROUP BY worker_id, stage, error, route, outbound, target ORDER BY COUNT(*) DESC, worker_id, stage, error LIMIT 10",
                 scope.params.toArray());
         for (var row : failures) {
             items.add(InspectionSection.item("主要错误：" + text(row.get("worker_id")) + " / " + text(row.get("stage")),
@@ -85,12 +86,12 @@ public class NetworkInspectionService {
         Scope scope = scope(workers, from, to);
         var rows = client.query("""
                 SELECT worker_id,
-                  toString(sumIf(toUInt128(ifNull(upload_bytes, 0)), traffic_category = 'EXTERNAL')) AS upload,
-                  toString(sumIf(toUInt128(ifNull(download_bytes, 0)), traffic_category = 'EXTERNAL')) AS download,
-                  toString(countIf(traffic_category = 'EXTERNAL')) AS external_records,
-                  toString(sumIf(toUInt128(ifNull(upload_bytes, 0)) + toUInt128(ifNull(download_bytes, 0)),
-                    ifNull(traffic_category, 'UNKNOWN') = 'UNKNOWN')) AS unknown_bytes
-                FROM telemetry.proxy_session_log_v1 FINAL WHERE
+                  SUM(CASE WHEN traffic_category = 'EXTERNAL' THEN coalesce(upload_bytes, 0) ELSE 0 END) AS upload,
+                  SUM(CASE WHEN traffic_category = 'EXTERNAL' THEN coalesce(download_bytes, 0) ELSE 0 END) AS download,
+                  SUM(CASE WHEN traffic_category = 'EXTERNAL' THEN 1 ELSE 0 END) AS external_records,
+                  SUM(CASE WHEN coalesce(traffic_category, 'UNKNOWN') = 'UNKNOWN'
+                    THEN coalesce(upload_bytes, 0) + coalesce(download_bytes, 0) ELSE 0 END) AS unknown_bytes
+                FROM proxy_session_log_v1 WHERE
                 """ + scope.where + " GROUP BY worker_id ORDER BY worker_id", scope.params.toArray());
         var byWorker = index(rows);
         var starts = historyStarts(SESSIONS, workers, "");
@@ -121,13 +122,14 @@ public class NetworkInspectionService {
         if (workers.isEmpty()) return empty(title);
         store.requireQueryAvailable();
         Scope scope = scope(workers, from, to);
-        var rows = client.query("SELECT worker_id, coalesce(answer_mode, 'UNKNOWN') AS mode, toString(count()) AS records, "
-                + "toString(countIf(outcome = 'ANSWERED' AND response_sent = true)) AS answered, "
-                + "toString(countIf(" + DNS_FAILURE + ")) AS errors, "
-                + "toString(countIf(duration_us IS NOT NULL)) AS timing_samples, "
-                + "quantileExactIf(0.95)(ifNull(duration_us, 0), duration_us IS NOT NULL) AS p95 "
-                + "FROM " + DNS + " FINAL WHERE " + scope.where + " AND query_origin = 'CLIENT'"
+        var rows = client.query("SELECT worker_id, coalesce(answer_mode, 'UNKNOWN') AS mode, COUNT(*) AS records, "
+                + "SUM(CASE WHEN outcome = 'ANSWERED' AND response_sent = true THEN 1 ELSE 0 END) AS answered, "
+                + "SUM(CASE WHEN " + DNS_FAILURE + " THEN 1 ELSE 0 END) AS errors, "
+                + "SUM(CASE WHEN duration_us IS NOT NULL THEN 1 ELSE 0 END) AS timing_samples "
+                + "FROM " + DNS + " WHERE " + scope.where + " AND query_origin = 'CLIENT'"
                 + " GROUP BY worker_id, mode ORDER BY worker_id, mode", scope.params.toArray());
+        var p95 = p95(DNS, "duration_us", scope, "query_origin = 'CLIENT' AND duration_us IS NOT NULL",
+                "worker_id", "coalesce(answer_mode, 'UNKNOWN')");
         var starts = historyStarts(DNS, workers, " AND query_origin = 'CLIENT'");
         var items = new ArrayList<InspectionSection.Item>();
         for (var row : rows) {
@@ -135,7 +137,7 @@ public class NetworkInspectionService {
             items.add(InspectionSection.item("网关 " + text(row.get("worker_id")) + " / 应答模式 " + text(row.get("mode")),
                     "客户端查询量", text(row.get("records")), "已应答 / 服务错误", answered + " / " + errors,
                     "服务错误率", rate(errors, answered.add(errors)),
-                    "处理耗时 P95", milliseconds(row.get("p95"), row.get("timing_samples")),
+                    "处理耗时 P95", milliseconds(p95.get(List.of(text(row.get("worker_id")), text(row.get("mode")))), row.get("timing_samples")),
                     "历史覆盖", coverage(starts.get(row.get("worker_id")), from, zone)));
         }
         for (String worker : workers) {
@@ -151,11 +153,36 @@ public class NetworkInspectionService {
     }
 
     private Map<String, Instant> historyStarts(String table, List<String> workers, String extra) {
-        var rows = client.query("SELECT worker_id, min(occurred_at) AS first_at FROM " + table
-                + " FINAL WHERE " + workerScope(workers) + extra + " GROUP BY worker_id", workers.toArray());
+        var rows = client.query("SELECT worker_id, MIN(occurred_at) AS first_at FROM " + table
+                + " WHERE " + workerScope(workers) + extra + " GROUP BY worker_id", workers.toArray());
         Map<String, Instant> starts = new HashMap<>();
-        for (var row : rows) starts.put(row.get("worker_id").toString(), instant(row.get("first_at")));
+        for (var row : rows) starts.put(row.get("worker_id").toString(), TelemetryJdbcClient.instant(row.get("first_at")));
         return starts;
+    }
+
+    /**
+     * Exact P95 per group with ClickHouse {@code quantileExact} semantics: the sorted value at index
+     * {@code floor(0.95 * n)}, clamped to the last sample. Keys are the group columns as text.
+     */
+    private Map<List<String>, Object> p95(String table, String value, Scope scope, String condition, String... groups) {
+        List<String> keys = new ArrayList<>(), keySelect = new ArrayList<>();
+        for (int i = 0; i < groups.length; i++) {
+            keys.add("g" + i);
+            keySelect.add(groups[i] + " AS g" + i);
+        }
+        String partition = String.join(", ", keys);
+        var rows = client.query("SELECT " + partition + ", MIN(v) AS p95 FROM (SELECT " + String.join(", ", keySelect) + ", "
+                + value + " AS v, ROW_NUMBER() OVER (PARTITION BY " + String.join(", ", groups) + " ORDER BY " + value + ") - 1 AS position, "
+                + "COUNT(*) OVER (PARTITION BY " + String.join(", ", groups) + ") AS samples FROM " + table
+                + " WHERE " + scope.where + " AND " + condition + ") WHERE position = min(CAST(samples * 0.95 AS INTEGER), samples - 1)"
+                + " GROUP BY " + partition, scope.params.toArray());
+        Map<List<String>, Object> result = new HashMap<>();
+        for (var row : rows) {
+            List<String> key = new ArrayList<>();
+            for (String column : keys) key.add(text(row.get(column)));
+            result.put(key, row.get("p95"));
+        }
+        return result;
     }
 
     private static String coverage(Instant start, Instant from, ZoneId zone) {

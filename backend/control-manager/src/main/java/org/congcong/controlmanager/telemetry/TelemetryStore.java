@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.congcong.common.telemetry.*;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,7 +23,9 @@ import java.util.*;
 @Service
 @Slf4j
 public class TelemetryStore implements ApplicationRunner {
-    private final ClickHouseJdbcClient client;
+    static final int SCHEMA_VERSION = 1;
+    private static final int RETENTION_DELETE_BATCH = 5000;
+    private final TelemetryJdbcClient client;
     private final TelemetryProperties properties;
     private final CredentialGeoAnalysis geo;
     private final ObjectMapper mapper = new ObjectMapper().registerModule(new JavaTimeModule())
@@ -42,11 +43,11 @@ public class TelemetryStore implements ApplicationRunner {
     private boolean stopping;
 
     @Autowired
-    public TelemetryStore(ClickHouseJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo) {
+    public TelemetryStore(TelemetryJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo) {
         this(client, properties, geo, System::nanoTime);
     }
 
-    TelemetryStore(ClickHouseJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo,
+    TelemetryStore(TelemetryJdbcClient client, TelemetryProperties properties, CredentialGeoAnalysis geo,
                    LongSupplier nanoTime) {
         this.client = client;
         this.properties = properties;
@@ -95,16 +96,49 @@ public class TelemetryStore implements ApplicationRunner {
 
     private synchronized void initialize() {
         if (ready) return;
-        client.execute("CREATE DATABASE IF NOT EXISTS telemetry");
         for (TelemetrySchema schema : TelemetrySchema.values()) {
             Integer days = schema.retentionDays(properties);
             if (days != null && days <= 0) throw new IllegalArgumentException("Retention must be positive");
-            client.execute(schema.ddl() + (days == null ? "" : " TTL occurred_at + INTERVAL " + days + " DAY"));
         }
+        if (client.userVersion() == 0) {
+            // auto_vacuum only changes on a fresh file, and opening it in WAL mode already wrote the header:
+            // VACUUM (instant while empty) applies it, so retention deletes can later release pages.
+            client.execute("PRAGMA auto_vacuum = INCREMENTAL");
+            client.execute("VACUUM");
+        }
+        for (TelemetrySchema schema : TelemetrySchema.values()) {
+            client.execute(schema.ddl());
+            for (String index : schema.indexes()) client.execute(index);
+        }
+        client.execute("PRAGMA user_version = " + SCHEMA_VERSION);
         ready = true;
     }
 
-    /** ACK means the complete batch is frozen in manager memory, not yet stored in CK. */
+    /** Retention replaces the ClickHouse TTL: bounded deletes keep each write transaction short. */
+    @Scheduled(fixedDelayString = "${observability.retention-check-ms:3600000}", initialDelayString = "${observability.retention-initial-delay-ms:60000}")
+    public void purgeExpired() {
+        if (!properties.isIngestEnabled() && !properties.isQueryEnabled()) return;
+        try {
+            initialize();
+            boolean deleted = false;
+            for (TelemetrySchema schema : TelemetrySchema.values()) {
+                Integer days = schema.retentionDays(properties);
+                if (days == null) continue;
+                Instant cutoff = Instant.now().minus(java.time.Duration.ofDays(days));
+                int removed;
+                do {
+                    removed = client.execute("DELETE FROM " + schema.table + " WHERE rowid IN (SELECT rowid FROM "
+                            + schema.table + " WHERE occurred_at < ? LIMIT " + RETENTION_DELETE_BATCH + ")", cutoff);
+                    deleted |= removed > 0;
+                } while (removed >= RETENTION_DELETE_BATCH);
+            }
+            if (deleted) client.execute("PRAGMA incremental_vacuum");
+        } catch (RuntimeException e) {
+            log.warn("Telemetry retention cleanup failed: {}", e.toString());
+        }
+    }
+
+    /** ACK means the complete batch is frozen in manager memory, not yet stored in the telemetry database. */
     public TelemetryAckV1 ingest(String authenticatedWorkerId, TelemetryBatchV1 batch) throws Exception {
         if (!properties.isIngestEnabled()) throw new IllegalStateException("INGEST_DISABLED");
         // Older workers still send removed events and non-failure auth records: size limits apply to the
@@ -275,18 +309,18 @@ public class TelemetryStore implements ApplicationRunner {
             List<Object> values = new ArrayList<>();
             for (var field : fields) {
                 Object value = field.get(row.record);
-                if (value instanceof Instant time) value = Timestamp.from(time);
-                else if (value instanceof Enum<?> e) value = e.name();
-                else if (field.getType() == List.class) value = value == null ? new String[0] : ((List<?>) value).toArray(String[]::new);
+                if (value instanceof Enum<?> e) value = e.name();
+                else if (field.getType() == List.class) value = mapper.writeValueAsString(value == null ? List.of() : value);
                 values.add(value);
             }
-            values.add(Timestamp.from(row.receivedAt));
+            values.add(row.receivedAt);
             values.add(row.hash);
             values.add(row.json);
             values.add(row.record instanceof CredentialAuthLogV1 auth ? mapper.writeValueAsString(geo.analyze(auth)) : null);
             params.add(values);
         }
-        client.batchExecute("INSERT INTO " + schema.table + " (" + String.join(",", columns) + ") VALUES ("
+        // Re-sent facts hit the unique key and are ignored; the first stored copy (and its received_at) wins.
+        client.batchExecute("INSERT OR IGNORE INTO " + schema.table + " (" + String.join(",", columns) + ") VALUES ("
                 + String.join(",", Collections.nCopies(columns.size(), "?")) + ")", params);
     }
 
@@ -307,7 +341,7 @@ public class TelemetryStore implements ApplicationRunner {
                 .query(
                         "SELECT raw_json, received_at, analysis_json FROM "
                                 + schema.table
-                                + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                                + " WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
                                 + filter
                                 + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?",
                         params.toArray())
@@ -321,18 +355,7 @@ public class TelemetryStore implements ApplicationRunner {
                                                         row.get("raw_json").toString(), Map.class));
                                 result.remove("rateLimitPolicyId");
                                 result.remove("rateLimitWaitUs");
-                                Object received = row.get("received_at");
-                                String receivedAt =
-                                        received instanceof Timestamp time
-                                                ? time.toInstant().toString()
-                                                : received instanceof java.time.LocalDateTime time
-                                                        ? time.toInstant(java.time.ZoneOffset.UTC)
-                                                                .toString()
-                                                        : received.toString().replace(" ", "T")
-                                                                + (received.toString().endsWith("Z")
-                                                                        ? ""
-                                                                        : "Z");
-                                result.put("receivedAt", receivedAt);
+                                result.put("receivedAt", TelemetryJdbcClient.instant(row.get("received_at")).toString());
                                 attachAnalysis(
                                         result,
                                         row.get("analysis_json"),
@@ -351,13 +374,13 @@ public class TelemetryStore implements ApplicationRunner {
     public AuditPage page(TelemetrySchema schema, TelemetryQueryRequest request) {
         SqlScope scope = auditScope(schema, request);
         initialize();
-        var count = client.query("SELECT count() AS total FROM " + schema.table + " FINAL WHERE " + scope.where,
+        var count = client.query("SELECT COUNT(*) AS total FROM " + schema.table + " WHERE " + scope.where,
                 scope.params.toArray());
         List<Object> params = new ArrayList<>(scope.params);
         params.add(request.getLimit());
         params.add(request.getOffset());
         var rows = readAuditRows("SELECT raw_json, received_at, analysis_json FROM " + schema.table
-                + " FINAL WHERE " + scope.where + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?", params);
+                + " WHERE " + scope.where + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?", params);
         if (schema == TelemetrySchema.SESSIONS) attachCredentialAttempts(rows, request);
         return new AuditPage(rows, count.get(0).get("total").toString(), request.getLimit(), request.getOffset(),
                 10000, "[from,to)");
@@ -370,7 +393,7 @@ public class TelemetryStore implements ApplicationRunner {
         List<Object> params = new ArrayList<>(scope.params);
         params.add(recordId);
         var rows = readAuditRows("SELECT raw_json, received_at, analysis_json FROM " + schema.table
-                + " FINAL WHERE " + scope.where + " AND record_id = ? LIMIT 1", params);
+                + " WHERE " + scope.where + " AND record_id = ? LIMIT 1", params);
         if (schema == TelemetrySchema.SESSIONS) attachCredentialAttempts(rows, request);
         return rows.isEmpty() ? null : rows.get(0);
     }
@@ -390,26 +413,27 @@ public class TelemetryStore implements ApplicationRunner {
         if (request.getConnectionId() != null && !request.getConnectionId().isBlank()) UUID.fromString(request.getConnectionId());
         if (schema == TelemetrySchema.SESSIONS && has(request.getUsername())) {
             if (request.getUsername().length() > 2048) throw new IllegalArgumentException("Filter too long");
-            where.append(" AND (positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR (worker_instance_id, connection_id) IN ("
+            where.append(" AND (" + containsText("username") + " OR (worker_instance_id, connection_id) IN ("
                     + "SELECT worker_instance_id, connection_id FROM " + TelemetrySchema.AUTH.table
-                    + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
-                    + " AND positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0))");
+                    + " WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                    + " AND " + containsText("attempted_username") + "))");
             params.addAll(List.of(request.getUsername(), request.getWorkerId(),
                     Timestamp.from(request.getTo().minus(java.time.Duration.ofDays(31))), Timestamp.from(request.getTo()), request.getUsername()));
         } else addFilter(where, params, request.getUsername(), schema == TelemetrySchema.AUTH
-                ? "(positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0)"
-                : "positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0", schema == TelemetrySchema.AUTH ? 2 : 1);
+                ? "(" + containsText("username") + " OR " + containsText("attempted_username") + ")"
+                : containsText("username"), schema == TelemetrySchema.AUTH ? 2 : 1);
         addFilter(where, params, request.getClientIp(), "client_ip = ?", 1);
         addFilter(where, params, request.getProtocol(), "inbound_protocol = ?", 1);
         String outcome = schema == TelemetrySchema.SESSIONS ? "session_outcome" : schema == TelemetrySchema.AUTH ? "auth_outcome" : "outcome";
         addFilter(where, params, request.getOutcome(), outcome + " = ?", 1);
         if (schema == TelemetrySchema.SESSIONS) {
-            addFilter(where, params, request.getTarget(), "(positionCaseInsensitiveUTF8(ifNull(logical_target_host,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(effective_target_host,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(original_dst_ip,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(selected_target_ip,''), ?) > 0)", 4);
-            addFilter(where, params, request.getRoute(), "(positionCaseInsensitiveUTF8(ifNull(route_name,''), ?) > 0 OR toString(route_id) = ?)", 2);
+            addFilter(where, params, request.getTarget(), "(" + containsText("logical_target_host") + " OR " + containsText("effective_target_host")
+                    + " OR " + containsText("original_dst_ip") + " OR " + containsText("selected_target_ip") + ")", 4);
+            addFilter(where, params, request.getRoute(), "(" + containsText("route_name") + " OR CAST(route_id AS TEXT) = ?)", 2);
             addFilter(where, params, request.getTrafficCategory(), "traffic_category = ?", 1);
             addFilter(where, params, request.getConnectOutcome(), "connect_outcome = ?", 1);
         } else if (schema == TelemetrySchema.DNS) {
-            addFilter(where, params, request.getTarget(), "positionCaseInsensitiveUTF8(ifNull(qname,''), ?) > 0", 1);
+            addFilter(where, params, request.getTarget(), containsText("qname"), 1);
             addFilter(where, params, request.getQtype(), "qtype = ?", 1);
         } else {
             addFilter(where, params, request.getAuthMethod(), "auth_method = ?", 1);
@@ -432,6 +456,11 @@ public class TelemetryStore implements ApplicationRunner {
         return value != null && !value.isBlank();
     }
 
+    /** Case-insensitive substring match (ASCII case folding, as SQLite {@code lower} does). */
+    static String containsText(String column) {
+        return "instr(lower(coalesce(" + column + ",'')), lower(?)) > 0";
+    }
+
     /** Read-time association; neither the original session fact nor verified identity is rewritten. */
     private void attachCredentialAttempts(List<Map<String, Object>> sessions, TelemetryQueryRequest request) {
         Map<List<String>, List<Map<String, Object>>> associated = new LinkedHashMap<>();
@@ -444,10 +473,13 @@ public class TelemetryStore implements ApplicationRunner {
         List<Object> params = new ArrayList<>(List.of(request.getWorkerId(),
                 Timestamp.from(request.getTo().minus(java.time.Duration.ofDays(31))), Timestamp.from(request.getTo())));
         associated.keySet().forEach(params::addAll);
-        var attempts = client.query("SELECT worker_instance_id, connection_id, auth_attempt_id, attempted_username, auth_outcome, auth_method, occurred_at FROM "
-                + TelemetrySchema.AUTH.table + " FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
-                + " AND (worker_instance_id, connection_id) IN (" + String.join(",", Collections.nCopies(associated.size(), "(?,?)")) + ")"
-                + " ORDER BY occurred_at DESC, record_id LIMIT 21 BY worker_instance_id, connection_id", params.toArray());
+        // ROW_NUMBER keeps at most 21 attempts per connection (ClickHouse LIMIT 21 BY), enough to flag truncation.
+        var attempts = client.query("SELECT worker_instance_id, connection_id, auth_attempt_id, attempted_username, auth_outcome, auth_method, occurred_at FROM ("
+                + "SELECT worker_instance_id, connection_id, auth_attempt_id, attempted_username, auth_outcome, auth_method, occurred_at, record_id, "
+                + "ROW_NUMBER() OVER (PARTITION BY worker_instance_id, connection_id ORDER BY occurred_at DESC, record_id) AS attempt_rank FROM "
+                + TelemetrySchema.AUTH.table + " WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"
+                + " AND (worker_instance_id, connection_id) IN (VALUES " + String.join(",", Collections.nCopies(associated.size(), "(?,?)")) + ")"
+                + ") WHERE attempt_rank <= 21 ORDER BY occurred_at DESC, record_id", params.toArray());
         for (var attempt : attempts) {
             var target = associated.get(List.of(attempt.get("worker_instance_id").toString(), attempt.get("connection_id").toString()));
             if (target == null) continue;
@@ -456,10 +488,7 @@ public class TelemetryStore implements ApplicationRunner {
             result.put("attemptedUsername", attempt.get("attempted_username"));
             result.put("authOutcome", attempt.get("auth_outcome"));
             result.put("authMethod", attempt.get("auth_method"));
-            Object occurred = attempt.get("occurred_at");
-            result.put("occurredAt", occurred instanceof Timestamp time ? time.toInstant().toString()
-                    : occurred instanceof java.time.LocalDateTime time ? time.toInstant(java.time.ZoneOffset.UTC).toString()
-                    : occurred.toString().replace(" ", "T") + (occurred.toString().endsWith("Z") ? "" : "Z"));
+            result.put("occurredAt", TelemetryJdbcClient.instant(attempt.get("occurred_at")).toString());
             target.add(result);
         }
         for (var session : sessions) {
@@ -488,18 +517,7 @@ public class TelemetryStore implements ApplicationRunner {
                                                         row.get("raw_json").toString(), Map.class));
                                 result.remove("rateLimitPolicyId");
                                 result.remove("rateLimitWaitUs");
-                                Object received = row.get("received_at");
-                                result.put(
-                                        "receivedAt",
-                                        received instanceof Timestamp time
-                                                ? time.toInstant().toString()
-                                                : received instanceof java.time.LocalDateTime time
-                                                        ? time.toInstant(java.time.ZoneOffset.UTC)
-                                                                .toString()
-                                                        : received.toString().replace(" ", "T")
-                                                                + (received.toString().endsWith("Z")
-                                                                        ? ""
-                                                                        : "Z"));
+                                result.put("receivedAt", TelemetryJdbcClient.instant(row.get("received_at")).toString());
                                 attachAnalysis(
                                         result,
                                         row.get("analysis_json"),

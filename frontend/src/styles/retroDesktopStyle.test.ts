@@ -38,16 +38,9 @@ describe('desktop retro style coverage', () => {
     );
   });
 
-  test('log audit imports its page skin and shared controls have visible retro borders', () => {
-    const logAuditPage = readSource('pages/LogAudit.tsx');
-    const logAuditCss = readSource('pages/LogAudit.css');
+  test('shared controls have visible retro borders', () => {
     const retroCss = readSource('styles/retro-noc.css');
 
-    expect(logAuditPage).toContain("import './LogAudit.css';");
-    expect(logAuditPage).toContain('className="log-audit-page"');
-    expect(logAuditCss).toMatch(
-      /\.log-audit-card\s*\{[^}]*border:\s*2px solid var\(--retro-border\)[^}]*background:\s*var\(--retro-panel\)/s
-    );
     expect(retroCss).toMatch(
       /\.ant-input,\s*\.ant-input-affix-wrapper,\s*\.ant-input-number,\s*\.ant-picker,\s*\.ant-select-selector\s*\{[^}]*border:\s*2px solid var\(--retro-border\) !important/s
     );

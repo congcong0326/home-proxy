@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage A real proxy -> bounded memory buffer -> negotiated WSS -> ClickHouse/API E2E.
+"""Stage A real proxy -> bounded memory buffer -> negotiated WSS -> telemetry SQLite/API E2E.
 
 The script NEVER deletes/truncates log tables or removes Docker volumes. Fixtures
 and resulting telemetry rows are kept for manual inspection. Only local sockets

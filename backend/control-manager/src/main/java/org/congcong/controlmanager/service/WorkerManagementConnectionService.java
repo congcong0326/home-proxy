@@ -58,7 +58,6 @@ public class WorkerManagementConnectionService {
     private final ProxyWorkerRepository proxyWorkerRepository;
     private final AggregateConfigCacheService aggregateConfigCacheService;
     private final WorkerControlService workerControlService;
-    private final LogService logService;
     private final org.congcong.controlmanager.telemetry.TelemetryStore telemetryStore;
     private final org.congcong.controlmanager.telemetry.TelemetryProperties telemetryProperties;
     private final java.util.concurrent.ThreadPoolExecutor telemetryExecutor =

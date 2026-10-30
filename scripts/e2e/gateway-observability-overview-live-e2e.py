@@ -74,8 +74,11 @@ try:
         wait_count('EXTERNAL', baseline['EXTERNAL'] + 1)
         for client in clients: client.close()
         wait_count('ALL', baseline['ALL'])
+        # Ended sessions reach the telemetry database at the controller's next flush.
+        flush_seconds = api.request('/api/observability/v1/status?workerId=' + stage.WORKER)['managerBuffer']['flushMaxDelayMs'] / 1000
         stage.wait('ended logs reconstruct overlapping tunnels', lambda:
-            int(api.request('/api/observability/v1/overview?' + urlencode(scope()))['concurrency']['peak']) >= 3, timeout=15)
+            int(api.request('/api/observability/v1/overview?' + urlencode(scope()))['concurrency']['peak']) >= 3,
+            timeout=flush_seconds + 60)
     report = dict(realTunnels=True, external=2, internalRewrite=1, idleConnectionsCounted=True,
                   failedAuthenticationExcluded=True, closeDecrements=True, historicalPeakAtLeast3=True, logsRetained=True)
     Path('/tmp/gateway-observability-overview-live-e2e.json').write_text(json.dumps(report, indent=2))

@@ -45,7 +45,7 @@ NasProxy 现在更像一个给家庭网络用的代理网关和控制台：管�
 - **策略路由**：可以按用户、入站、域名、GeoIP 和规则集匹配，策略包括直连、阻断、出站代理、目标重写和 DNS 重写。
 - **多种出站**：支持上游 SOCKS5、HTTP CONNECT、Shadowsocks、DNS/DoT，以及 VLESS + REALITY Vision，适合接已有的 Xray/REALITY 节点。
 - **规则集同步**：可以维护 AI、流媒体、SaaS、开发、广告、Geo 等分类规则，从 Git Raw 或 HTTP 文件同步后发布给 worker。
-- **日志和看板**：worker 上报访问日志，控制面用 ClickHouse 做日志审计、流量趋势、用户流量、目标 TopN 和聚合分析。
+- **日志和看板**：worker 上报会话、DNS 与认证失败日志，控制面存入内嵌 SQLite 遥测库，做日志审计、流量概览、并发、用户流量、目标 TopN 和分布分析。
 - **家庭运维功能**：WOL、磁盘 SMART 上报、邮件网关、计划任务、SQLite 数据库备份和恢复。
 - **每日巡检邮件**：新增 `ops.inspection`，按定时任务汇总过去 24 小时磁盘、网络质量、主网关外网流量和成功认证位置变化；支持邮件预览。配置与统计边界见 [每日巡检邮件](docs/development/mail-inspection.md)。
 - **Docker 部署**：镜像已经推到 Docker Hub，可以直接用 Docker Compose 拉起来。
@@ -73,8 +73,7 @@ docker pull congcong0326/home-proxy-worker:latest
 
 运行时会启动这些服务：
 
-- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源。配置元数据保存在内嵌 SQLite（容器内 `/data/home-proxy.db`，对应数据卷 `control-data`），无需独立数据库容器
-- `clickhouse`：访问日志和统计库，仅 Docker 内部网络可访问
+- `control-manager`：控制面、管理页面和 API，默认绑定 `0.0.0.0:18081`；请通过宿主机防火墙或云安全组限制访问来源。配置元数据与日志都保存在内嵌 SQLite（容器内 `/data/home-proxy.db` 与 `/data/telemetry.db`，对应数据卷 `control-data`），无需任何独立数据库容器
 - `proxy-worker`：实际代理转发节点，通常和控制面分开部署，也可以部署在同一台机器
 
 新版日志采集、接收和统计查询默认开启。管理端使用 Spring Boot 配置 `observability.ingest-enabled`、`observability.query-enabled`，可分别通过环境变量 `OBSERVABILITY_INGEST_ENABLED=false`、`OBSERVABILITY_QUERY_ENABLED=false` 关闭；Worker 可通过 `OBSERVABILITY_ENABLED=false` 关闭新版采集。修改环境变量后需要重建对应容器。新版统计从采集开启后累计，旧日志不会自动补入。
@@ -95,41 +94,13 @@ cat > docker-compose.yml <<'YAML'
 name: home-proxy-control
 
 services:
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.8
-    container_name: home-proxy-clickhouse
-    restart: unless-stopped
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-      - clickhouse-logs:/var/log/clickhouse-server
-    healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --host 127.0.0.1 --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-    networks:
-      - home-proxy-db
-
   control-manager:
     image: congcong0326/home-proxy-control-manager:latest
     container_name: home-proxy-control-manager
     restart: unless-stopped
-    depends_on:
-      clickhouse:
-        condition: service_healthy
     environment:
       SERVER_PORT: 8081
       HOME_PROXY_DATA_DIR: /data
-      CLICKHOUSE_URL: jdbc:ch://clickhouse:8123/${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
-      LOGS_PERSISTENCE: ${LOGS_PERSISTENCE:-clickhouse}
       ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
       DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
       GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
@@ -143,8 +114,6 @@ services:
 
 volumes:
   control-data:
-  clickhouse-data:
-  clickhouse-logs:
 
 networks:
   home-proxy-db:
@@ -255,7 +224,6 @@ docker compose -f docker-compose.worker.yml ps
 ```bash
 docker logs -f home-proxy-control-manager
 docker logs -f home-proxy-worker
-docker logs -f home-proxy-clickhouse
 ```
 
 更新镜像：
@@ -282,7 +250,7 @@ docker compose down -v
 docker compose up -d
 ```
 
-这会删除 SQLite 配置库（`control-data`）和 ClickHouse 数据卷，配置、管理员账号和日志都会被清空。
+这会删除数据卷 `control-data`（SQLite 配置库、遥测日志库及其备份），配置、管理员账号和日志都会被清空。
 
 ### 5. 可选配置
 
@@ -292,7 +260,6 @@ docker compose up -d
 cat > .env <<'EOF'
 CONTROL_BIND_ADDRESS=192.168.1.10
 CONTROL_HOST_PORT=18081
-CLICKHOUSE_PASSWORD=congcong
 ADMIN_AUTH_JWT_SECRET=dev_only_change_me_home_proxy_jwt_secret
 EOF
 ```
@@ -304,7 +271,6 @@ CONTROL_BIND_ADDRESS           控制面绑定的宿主机地址，默认 0.0.0.
 CONTROL_HOST_PORT              控制面宿主机端口，默认 18081
 HOME_PROXY_BACKUP_RETENTION    控制端定时备份保留份数，默认 7
 HOME_PROXY_BACKUP_CRON         控制端定时备份 cron（Spring 6 段格式），默认每天 03:30
-CLICKHOUSE_PASSWORD            ClickHouse 密码，默认 congcong
 ADMIN_AUTH_JWT_SECRET          控制面 JWT 签名密钥
 CONTROL_MANAGER_URL            worker 连接控制面的地址
 GEOIP_MMDB_PATH                GeoIP mmdb 文件路径
@@ -341,6 +307,7 @@ environment:
 - 自动备份：控制端按 `HOME_PROXY_BACKUP_CRON`（默认每天 03:30）用 `VACUUM INTO` 写入 `/data/backups/home-proxy-<时间>.db`，保留最近 `HOME_PROXY_BACKUP_RETENTION`（默认 7）份。将该目录同步到数据卷之外才算异地备份。
 - 恢复（页面）：上传 `.db` 并输入确认短语，控制端校验（SQLite 头、`integrity_check`、必需表）后暂存，**重启控制端时**替换当前数据库；被替换的库保存为 `/data/backups/pre-restore-<时间>.db`。
 - 恢复（手动）：停止 `control-manager` → 用备份文件替换 `/data/home-proxy.db`，并删除 `/data/home-proxy.db-wal`、`-shm` → 启动。
+- 日志库 `/data/telemetry.db` 不在上述备份范围内：它可以随时删除，控制端启动时重建空表（历史日志随之丢失）。镜像内带 `sqlite3`，可只读查看：`docker exec home-proxy-control-manager sqlite3 -readonly /data/telemetry.db 'SELECT COUNT(*) FROM proxy_session_log_v1'`。
 
 ### 6. 从源码构建镜像
 
@@ -359,14 +326,16 @@ make docker-build          # 打包并构建 control-manager 和 worker 镜像
 make docker-build-control  # 只构建 control-manager 镜像
 make docker-build-worker   # 只构建 worker 镜像
 make docker-save           # 导出应用镜像到 home-proxy-images.tar
-make docker-save-offline   # 导出应用镜像以及 ClickHouse 镜像
+make docker-save-offline   # 同 docker-save（控制面已不依赖第三方镜像）
 ```
 
 更完整的容器化说明见 [docs/development/docker-deployment.md](docs/development/docker-deployment.md)。
 
 ### 新版日志落库与认证位置
 
-管理端接收新版四类日志后先进入有界内存队列并返回 ACK；ACK 表示内存接收，管理端异常退出可能丢失尚未落库的数据。每类日志独立累计 1000 条或最早等待 120 秒后批量写入 ClickHouse，页面只显示已经落库的日志。正常关闭会尽力 flush，CK 写入失败保留内存队列重试。
+管理端接收新版四类日志后先进入有界内存队列并返回 ACK；ACK 表示内存接收，管理端异常退出可能丢失尚未落库的数据。每类日志独立累计 1000 条或最早等待 120 秒后在一个事务内批量写入 SQLite 遥测库 `/data/telemetry.db`，页面只显示已经落库的日志。同一条日志（Worker、实例、记录 ID 相同）重发时只保留首次写入。正常关闭会尽力 flush，写入失败保留内存队列重试。
+
+日志默认永久保留；可用 `OBSERVABILITY_SESSION_RETENTION_DAYS`、`OBSERVABILITY_DNS_RETENTION_DAYS`、`OBSERVABILITY_AUTH_RETENTION_DAYS` 分别设置保留天数，控制端每小时分批删除过期记录并回收空间。
 
 可通过 `OBSERVABILITY_FLUSH_BATCH_SIZE`、`OBSERVABILITY_FLUSH_MAX_DELAY_MS` 调整攒批；管理端总容量默认 `OBSERVABILITY_BUFFER_CAPACITY=20000`、字节预算 `OBSERVABILITY_BUFFER_MAX_BYTES=67108864`。容量满整批拒绝，Worker 保留重试。`/api/observability/v1/status` 返回 `acknowledgement=MANAGER_MEMORY_QUEUE` 与 `managerBuffer` 状态。
 

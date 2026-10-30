@@ -36,7 +36,6 @@ COMPOSE_STARTED=0
 WORKER_STARTED=0
 OVERRIDE_PID=0
 ADMIN_TOKEN=""
-E2E_CLICKHOUSE_PASSWORD=""
 
 fail() {
     echo "E2E failure: $*" >&2
@@ -145,8 +144,6 @@ build_images() {
 setup_control_plane() {
     export E2E_CONTROL_IMAGE="$CONTROL_IMAGE"
     export E2E_CONTROL_PORT="$CONTROL_PORT"
-    E2E_CLICKHOUSE_PASSWORD="e2e_clickhouse_${RUN_ID}"
-    export E2E_CLICKHOUSE_PASSWORD
     export E2E_JWT_SECRET="e2e_jwt_$(openssl rand -hex 24)"
 
     COMPOSE_STARTED=1
@@ -250,9 +247,9 @@ assert_tls_sni_closed() {
 
 audit_private_blocks_visible() {
     local counts blocked network_errors
-    counts="$(docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" exec -T clickhouse \
-        clickhouse-client --user default --password "$E2E_CLICKHOUSE_PASSWORD" --format TSVRaw --query \
-        "SELECT countIf(error_code = 'POLICY_BLOCKED'), countIf(error_code = 'CONNECT_FAILED' AND logical_target_host IN ('127.0.0.1', 'localhost')) FROM telemetry.proxy_session_log_v1 FINAL WHERE worker_id = '${WORKER_ID}'")" || return 1
+    counts="$(docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" exec -T control-manager \
+        sqlite3 -readonly -separator $'\t' /data/telemetry.db \
+        "SELECT coalesce(SUM(error_code = 'POLICY_BLOCKED'), 0), coalesce(SUM(error_code = 'CONNECT_FAILED' AND logical_target_host IN ('127.0.0.1', 'localhost')), 0) FROM proxy_session_log_v1 WHERE worker_id = '${WORKER_ID}'")" || return 1
     blocked="${counts%%$'\t'*}"
     network_errors="${counts#*$'\t'}"
     [[ "$blocked" -ge 4 && "$network_errors" == 0 ]]

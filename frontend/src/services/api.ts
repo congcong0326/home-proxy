@@ -42,25 +42,14 @@ import {
   InboundConfigCreateRequest,
   InboundConfigUpdateRequest,
   InboundQueryParams,
-  InboundTrafficStats,
   InboundMonthlyTrafficV1
 } from '../types/inbound';
 import {
-  AccessLogListItem,
-  AccessLogDetail,
-  AccessLogQueryParams,
-  TimeSeriesPoint as LogTimeSeriesPoint,
-  TopItem,
-  DistributionBucket,
-} from '../types/log';
-import {
   UserTrafficStats,
-  TimeSeriesPoint,
   WolConfig,
   PcStatus,
   IpStatusResponse,
   WolResponse,
-  TrafficTrendParams,
   TrafficStatsParams
 } from '../types/dashboard';
 import { DiskHost, DiskInfo, DiskDetail, DiskPushToken } from '../types/disk';
@@ -436,11 +425,6 @@ class ApiService {
     });
   }
 
-  async getInboundMonthlyTraffic(inboundId: number, month?: string): Promise<InboundTrafficStats> {
-    const query = month ? `?month=${encodeURIComponent(month)}` : '';
-    return this.request<InboundTrafficStats>(`/logs/traffic/inbound/${inboundId}/month${query}`);
-  }
-
   async getInboundMonthlyTrafficV1(inboundId: number, workerId: string, month?: string): Promise<InboundMonthlyTrafficV1> {
     const params = new URLSearchParams({ workerId, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai' });
     if (month) params.set('month', month);
@@ -606,138 +590,6 @@ class ApiService {
     });
   }
 
-  // ========== 日志查询与聚合 ==========
-  // 分页查询访问日志
-  async getAccessLogs(params: AccessLogQueryParams = {}): Promise<PageResponse<AccessLogListItem>> {
-    const searchParams = new URLSearchParams();
-    if (params.from) searchParams.append('from', params.from);
-    if (params.workerId) searchParams.append('workerId', params.workerId);
-    if (params.to) searchParams.append('to', params.to);
-    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
-    if (params.username) searchParams.append('username', params.username);
-    if (params.proxyName) searchParams.append('proxyName', params.proxyName);
-    if (params.inboundId !== undefined) searchParams.append('inboundId', String(params.inboundId));
-    if (params.clientIp) searchParams.append('clientIp', params.clientIp);
-    if (params.status !== undefined) searchParams.append('status', String(params.status));
-    if (params.protocol) searchParams.append('protocol', params.protocol);
-    if (params.routePolicyId !== undefined) searchParams.append('routePolicyId', String(params.routePolicyId));
-    if (params.routePolicyName) searchParams.append('routePolicyName', params.routePolicyName);
-    if (params.srcGeoCountry) searchParams.append('srcGeoCountry', params.srcGeoCountry);
-    if (params.srcGeoCity) searchParams.append('srcGeoCity', params.srcGeoCity);
-    if (params.dstGeoCountry) searchParams.append('dstGeoCountry', params.dstGeoCountry);
-    if (params.dstGeoCity) searchParams.append('dstGeoCity', params.dstGeoCity);
-    if (params.host) searchParams.append('host', params.host);
-    if (params.originalTargetHost) searchParams.append('originalTargetHost', params.originalTargetHost);
-    if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
-    if (params.q) searchParams.append('q', params.q);
-    if (params.page !== undefined) searchParams.append('page', String(params.page));
-    if (params.pageSize !== undefined) searchParams.append('pageSize', String(params.pageSize));
-    if (params.sort) searchParams.append('sort', params.sort);
-
-    const queryString = searchParams.toString();
-    const endpoint = queryString ? `/logs/access?${queryString}` : '/logs/access';
-    return this.request<PageResponse<AccessLogListItem>>(endpoint);
-  }
-
-  // 访问日志详情
-  async getAccessLogById(id: string): Promise<AccessLogDetail> {
-    return this.request<AccessLogDetail>(`/logs/access/${id}`);
-  }
-
-  // 时间序列聚合
-  async getAccessTimeseries(params: AccessLogQueryParams & { metric: string; interval: string }): Promise<LogTimeSeriesPoint[]> {
-    const searchParams = new URLSearchParams();
-    if (params.from) searchParams.append('from', params.from);
-    if (params.to) searchParams.append('to', params.to);
-    searchParams.append('interval', params.interval);
-    searchParams.append('metric', params.metric);
-    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
-    if (params.username) searchParams.append('username', params.username);
-    if (params.proxyName) searchParams.append('proxyName', params.proxyName);
-    if (params.inboundId !== undefined) searchParams.append('inboundId', String(params.inboundId));
-    if (params.clientIp) searchParams.append('clientIp', params.clientIp);
-    if (params.status !== undefined) searchParams.append('status', String(params.status));
-    if (params.protocol) searchParams.append('protocol', params.protocol);
-    if (params.routePolicyId !== undefined) searchParams.append('routePolicyId', String(params.routePolicyId));
-    if (params.srcGeoCountry) searchParams.append('srcGeoCountry', params.srcGeoCountry);
-    if (params.srcGeoCity) searchParams.append('srcGeoCity', params.srcGeoCity);
-    if (params.dstGeoCountry) searchParams.append('dstGeoCountry', params.dstGeoCountry);
-    if (params.dstGeoCity) searchParams.append('dstGeoCity', params.dstGeoCity);
-    if (params.host) searchParams.append('host', params.host);
-    if (params.originalTargetHost) searchParams.append('originalTargetHost', params.originalTargetHost);
-    if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
-
-    const endpoint = `/logs/access/aggregate/timeseries?${searchParams.toString()}`;
-    return this.request<LogTimeSeriesPoint[]>(endpoint);
-  }
-
-  // TopN 聚合
-  async getAccessTop(params: AccessLogQueryParams & { metric: string; dimension: string; limit?: number }): Promise<TopItem[]> {
-    const searchParams = new URLSearchParams();
-    if (params.from) searchParams.append('from', params.from);
-    if (params.to) searchParams.append('to', params.to);
-    searchParams.append('dimension', params.dimension);
-    searchParams.append('metric', params.metric);
-    if (params.limit !== undefined) searchParams.append('limit', String(params.limit));
-    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
-    if (params.username) searchParams.append('username', params.username);
-    if (params.proxyName) searchParams.append('proxyName', params.proxyName);
-    if (params.inboundId !== undefined) searchParams.append('inboundId', String(params.inboundId));
-    if (params.clientIp) searchParams.append('clientIp', params.clientIp);
-    if (params.status !== undefined) searchParams.append('status', String(params.status));
-    if (params.protocol) searchParams.append('protocol', params.protocol);
-    if (params.routePolicyId !== undefined) searchParams.append('routePolicyId', String(params.routePolicyId));
-    if (params.srcGeoCountry) searchParams.append('srcGeoCountry', params.srcGeoCountry);
-    if (params.srcGeoCity) searchParams.append('srcGeoCity', params.srcGeoCity);
-    if (params.dstGeoCountry) searchParams.append('dstGeoCountry', params.dstGeoCountry);
-    if (params.dstGeoCity) searchParams.append('dstGeoCity', params.dstGeoCity);
-    if (params.host) searchParams.append('host', params.host);
-    if (params.originalTargetHost) searchParams.append('originalTargetHost', params.originalTargetHost);
-    if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
-
-    const endpoint = `/logs/access/aggregate/top?${searchParams.toString()}`;
-    return this.request<TopItem[]>(endpoint);
-  }
-
-  // 日度聚合表的 TopN（支持时间区间，按天汇总后按月范围查询）
-  async getAccessDailyTop(params: { from?: string; to?: string; dimension?: string; metric?: string; limit?: number; userId?: number }): Promise<TopItem[]> {
-    const searchParams = new URLSearchParams();
-    if (params.from) searchParams.append('from', params.from);
-    if (params.to) searchParams.append('to', params.to);
-    if (params.dimension) searchParams.append('dimension', params.dimension);
-    if (params.metric) searchParams.append('metric', params.metric);
-    if (params.limit !== undefined) searchParams.append('limit', String(params.limit));
-    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
-    const endpoint = `/logs/access/aggregate/daily/top?${searchParams.toString()}`;
-    return this.request<TopItem[]>(endpoint);
-  }
-
-  // 分布聚合
-  async getAccessDistribution(params: AccessLogQueryParams & { field: string }): Promise<DistributionBucket[]> {
-    const searchParams = new URLSearchParams();
-    if (params.from) searchParams.append('from', params.from);
-    if (params.to) searchParams.append('to', params.to);
-    searchParams.append('field', params.field);
-    if (params.userId !== undefined) searchParams.append('userId', String(params.userId));
-    if (params.username) searchParams.append('username', params.username);
-    if (params.proxyName) searchParams.append('proxyName', params.proxyName);
-    if (params.inboundId !== undefined) searchParams.append('inboundId', String(params.inboundId));
-    if (params.clientIp) searchParams.append('clientIp', params.clientIp);
-    if (params.status !== undefined) searchParams.append('status', String(params.status));
-    if (params.protocol) searchParams.append('protocol', params.protocol);
-    if (params.routePolicyId !== undefined) searchParams.append('routePolicyId', String(params.routePolicyId));
-    if (params.srcGeoCountry) searchParams.append('srcGeoCountry', params.srcGeoCountry);
-    if (params.srcGeoCity) searchParams.append('srcGeoCity', params.srcGeoCity);
-    if (params.dstGeoCountry) searchParams.append('dstGeoCountry', params.dstGeoCountry);
-    if (params.dstGeoCity) searchParams.append('dstGeoCity', params.dstGeoCity);
-    if (params.host) searchParams.append('host', params.host);
-    if (params.originalTargetHost) searchParams.append('originalTargetHost', params.originalTargetHost);
-    if (params.rewriteTargetHost) searchParams.append('rewriteTargetHost', params.rewriteTargetHost);
-
-    const endpoint = `/logs/access/aggregate/distribution?${searchParams.toString()}`;
-    return this.request<DistributionBucket[]>(endpoint);
-  }
-  
   // 获取所有启用的路由（用于下拉选择）
   async getEnabledRoutes(): Promise<RouteDTO[]> {
     return this.request<RouteDTO[]>('/routes/enabled');
@@ -768,25 +620,6 @@ class ApiService {
     }
     const url = `/user-traffic-stats/monthly${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.request<UserTrafficStats[]>(url);
-  }
-
-  // 流量趋势相关API
-  async getGlobalTrafficTrend(params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
-    const queryParams = new URLSearchParams({
-      workerId: params.workerId,
-      startTime: params.startTime,
-      endTime: params.endTime
-    });
-    return this.request<TimeSeriesPoint[]>(`/logs/traffic/minute/global?${queryParams.toString()}`);
-  }
-
-  async getUserTrafficTrend(userId: number, params: TrafficTrendParams): Promise<TimeSeriesPoint[]> {
-    const queryParams = new URLSearchParams({
-      workerId: params.workerId,
-      startTime: params.startTime,
-      endTime: params.endTime
-    });
-    return this.request<TimeSeriesPoint[]>(`/logs/traffic/minute/user/${userId}?${queryParams.toString()}`);
   }
 
   // WOL相关API

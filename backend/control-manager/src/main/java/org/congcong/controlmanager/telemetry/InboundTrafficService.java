@@ -1,7 +1,6 @@
 package org.congcong.controlmanager.telemetry;
 
 import org.congcong.common.telemetry.TrafficCategory;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
@@ -16,11 +15,11 @@ import java.util.Map;
 /** Monthly payload counters from unique ended sessions, independently of legacy logs. */
 @Service
 public class InboundTrafficService {
-    private final ClickHouseJdbcClient client;
+    private final TelemetryJdbcClient client;
     private final TelemetryStore store;
     private final Clock clock = Clock.systemUTC();
 
-    public InboundTrafficService(ClickHouseJdbcClient client, TelemetryStore store) {
+    public InboundTrafficService(TelemetryJdbcClient client, TelemetryStore store) {
         this.client = client;
         this.store = store;
     }
@@ -40,9 +39,9 @@ public class InboundTrafficService {
         var to = period.plusMonths(1).atDay(1).atStartOfDay(zone).toInstant();
         store.requireQueryAvailable();
         var rows = client.query("SELECT coalesce(traffic_category, 'UNKNOWN') AS category, "
-                + "toString(sum(toUInt128(coalesce(upload_bytes, 0)))) AS upload, "
-                + "toString(sum(toUInt128(coalesce(download_bytes, 0)))) AS download "
-                + "FROM " + TelemetrySchema.SESSIONS.table + " FINAL "
+                + "CAST(SUM(coalesce(upload_bytes, 0)) AS TEXT) AS upload, "
+                + "CAST(SUM(coalesce(download_bytes, 0)) AS TEXT) AS download "
+                + "FROM " + TelemetrySchema.SESSIONS.table + " "
                 + "WHERE worker_id = ? AND inbound_id = ? AND occurred_at >= ? AND occurred_at < ? "
                 + "GROUP BY category", workerId, inboundId, Timestamp.from(from), Timestamp.from(to));
         var categories = new EnumMap<TrafficCategory, Counters>(TrafficCategory.class);
@@ -62,9 +61,9 @@ public class InboundTrafficService {
             upload = upload.add(up);
             download = download.add(down);
         }
-        List<Map<String, Object>> first = client.query("SELECT toString(minOrNull(occurred_at)) AS first_at "
-                + "FROM " + TelemetrySchema.SESSIONS.table + " FINAL WHERE worker_id = ? AND inbound_id = ?", workerId, inboundId);
-        String firstAt = first.isEmpty() || first.get(0).get("first_at") == null ? null : first.get(0).get("first_at").toString();
+        List<Map<String, Object>> first = client.query("SELECT MIN(occurred_at) AS first_at "
+                + "FROM " + TelemetrySchema.SESSIONS.table + " WHERE worker_id = ? AND inbound_id = ?", workerId, inboundId);
+        String firstAt = first.isEmpty() ? null : TelemetryJdbcClient.utcText(first.get(0).get("first_at"));
         return new MonthlyTraffic(inboundId, workerId, period.toString(), zone.getId(), from.toString(), to.toString(),
                 counters(upload, download), categories, firstAt);
     }

@@ -1,7 +1,6 @@
 package org.congcong.controlmanager.telemetry;
 
 import org.congcong.common.telemetry.TrafficCategory;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Timestamp;
@@ -17,7 +16,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class InboundTrafficServiceTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryStore store = mock(TelemetryStore.class);
     private final InboundTrafficService service = new InboundTrafficService(client, store);
 
@@ -33,7 +32,7 @@ class InboundTrafficServiceTest {
                     Map.of("category", "EXTERNAL", "upload", "18446744073709551616", "download", "7"),
                     Map.of("category", "INTERNAL_REWRITE", "upload", "3", "download", "11"),
                     Map.of("category", "UNKNOWN", "upload", "1", "download", "2"));
-            return List.of(Map.of("first_at", "2026-10-02 00:00:00"));
+            return List.of(Map.of("first_at", 1_790_899_200_000_000L));
         });
         var result = service.monthly(42, "home-01", "2026-10", "Asia/Shanghai");
         assertEquals("18446744073709551620", result.traffic().upload());
@@ -42,12 +41,12 @@ class InboundTrafficServiceTest {
         assertEquals("14", result.categories().get(TrafficCategory.INTERNAL_REWRITE).total());
         assertEquals("0", result.categories().get(TrafficCategory.OTHER_INTERNAL).total());
         assertEquals("3", result.categories().get(TrafficCategory.UNKNOWN).total());
-        assertEquals("2026-10-02 00:00:00", result.firstSessionAt());
+        assertEquals("2026-10-02 00:00:00.000000", result.firstSessionAt());
         assertEquals("2026-09-30T16:00:00Z", result.from());
         assertEquals("2026-10-31T16:00:00Z", result.to());
-        assertTrue(queries.stream().allMatch(sql -> sql.contains("telemetry.proxy_session_log_v1 FINAL WHERE worker_id = ? AND inbound_id = ?")));
+        assertTrue(queries.stream().allMatch(sql -> sql.contains("proxy_session_log_v1 WHERE worker_id = ? AND inbound_id = ?")));
         assertTrue(queries.get(0).contains("occurred_at >= ? AND occurred_at < ?"));
-        assertTrue(queries.get(0).contains("toUInt128"));
+        assertTrue(queries.get(0).contains("SUM(coalesce(upload_bytes, 0))"));
         assertEquals(List.of("home-01", 42L, Timestamp.from(Instant.parse(result.from())), Timestamp.from(Instant.parse(result.to()))), parameters.get(0));
         assertEquals(List.of("home-01", 42L), parameters.get(1));
         verify(store).requireQueryAvailable();

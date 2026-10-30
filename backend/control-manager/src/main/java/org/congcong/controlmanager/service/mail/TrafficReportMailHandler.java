@@ -4,12 +4,16 @@ import lombok.RequiredArgsConstructor;
 import org.congcong.controlmanager.dto.TopItem;
 import org.congcong.controlmanager.dto.mail.MailBizTypeRequest;
 import org.congcong.controlmanager.dto.mail.MailSendRequest;
-import org.congcong.controlmanager.service.LogService;
+import org.congcong.controlmanager.telemetry.TelemetryJdbcClient;
+import org.congcong.controlmanager.telemetry.TelemetrySchema;
+import org.congcong.controlmanager.telemetry.TelemetryStore;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,11 +22,11 @@ import java.util.Optional;
 public class TrafficReportMailHandler implements MailBizHandler {
 
     private static final String BIZ_KEY = "ops.traffic_report";
-    private static final String METRIC = "bytes";
     private static final int TOP_LIMIT = 10;
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private final LogService logService;
+    private final TelemetryJdbcClient client;
+    private final TelemetryStore store;
 
     @Override
     public boolean supports(String bizKey) {
@@ -34,18 +38,18 @@ public class TrafficReportMailHandler implements MailBizHandler {
         LocalDate reportDate = LocalDate.now().minusDays(1);
         LocalDateTime from = reportDate.atStartOfDay();
         LocalDateTime to = reportDate.plusDays(1).atStartOfDay().minusSeconds(1);
-        String fromStr = from.toString();
-        String toStr = to.toString();
 
-        List<TopItem> userTop = logService.aggregateDailyTopRange(fromStr, toStr, "users", METRIC, TOP_LIMIT, null);
-        List<TopItem> appTop = logService.aggregateDailyTopRange(fromStr, toStr, "apps", METRIC, TOP_LIMIT, null);
-        List<TopItem> routeTop = logService.aggregateDailyTopRange(fromStr, toStr, "route_policies", METRIC, TOP_LIMIT, null);
+        store.requireQueryAvailable();
+        LocalDateTime reportEnd = reportDate.plusDays(1).atStartOfDay();
+        List<TopItem> userTop = top("coalesce(nullif(username, ''), CAST(user_id AS TEXT), '-')", from, reportEnd);
+        List<TopItem> targetTop = top("coalesce(nullif(logical_target_host, ''), effective_target_host, '-')", from, reportEnd);
+        List<TopItem> routeTop = top("coalesce(nullif(route_name, ''), CAST(route_id AS TEXT), '-')", from, reportEnd);
 
         LocalDateTime todayStart = LocalDate.now().atStartOfDay();
         LocalDateTime now = LocalDateTime.now();
-        long todayTotalBytes = logService.sumBytes(todayStart, now);
+        long todayTotalBytes = sumBytes(todayStart, now);
         LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
-        long monthTotalBytes = logService.sumBytes(monthStart, now);
+        long monthTotalBytes = sumBytes(monthStart, now);
 
         StringBuilder contentBuilder = new StringBuilder();
         contentBuilder.append("<html><body>");
@@ -57,7 +61,7 @@ public class TrafficReportMailHandler implements MailBizHandler {
                 .append(" (系统时区)</p>");
         contentBuilder.append(buildSummary(todayStart, now, todayTotalBytes, monthStart, now, monthTotalBytes));
         contentBuilder.append(buildSection("按用户 Top" + TOP_LIMIT, userTop));
-        contentBuilder.append(buildSection("按应用 Top" + TOP_LIMIT, appTop));
+        contentBuilder.append(buildSection("按目标 Top" + TOP_LIMIT, targetTop));
         contentBuilder.append(buildSection("按路由规则 Top" + TOP_LIMIT, routeTop));
         contentBuilder.append("</body></html>");
 
@@ -67,6 +71,28 @@ public class TrafficReportMailHandler implements MailBizHandler {
         mailSendRequest.setContentType("text/html");
         mailSendRequest.setContent(contentBuilder.toString());
         return mailSendRequest;
+    }
+
+    /** Ended-session payload bytes across all workers, booked at session end time (system time zone). */
+    private List<TopItem> top(String keyExpression, LocalDateTime from, LocalDateTime toExclusive) {
+        var rows = client.query("SELECT " + keyExpression + " AS k, SUM(upload_bytes + download_bytes) AS v FROM "
+                + TelemetrySchema.SESSIONS.table + " WHERE occurred_at >= ? AND occurred_at < ? GROUP BY k ORDER BY v DESC, k LIMIT ?",
+                toInstant(from), toInstant(toExclusive), TOP_LIMIT);
+        List<TopItem> items = new ArrayList<>(rows.size());
+        for (var row : rows) {
+            items.add(new TopItem(String.valueOf(row.get("k")), row.get("v") == null ? 0L : ((Number) row.get("v")).longValue()));
+        }
+        return items;
+    }
+
+    private long sumBytes(LocalDateTime from, LocalDateTime to) {
+        var rows = client.query("SELECT coalesce(SUM(upload_bytes + download_bytes), 0) AS total FROM "
+                + TelemetrySchema.SESSIONS.table + " WHERE occurred_at >= ? AND occurred_at < ?", toInstant(from), toInstant(to));
+        return rows.isEmpty() ? 0L : ((Number) rows.get(0).get("total")).longValue();
+    }
+
+    private static java.time.Instant toInstant(LocalDateTime time) {
+        return time.atZone(ZoneId.systemDefault()).toInstant();
     }
 
     private String buildSection(String title, List<TopItem> items) {

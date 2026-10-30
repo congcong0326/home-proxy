@@ -352,12 +352,13 @@ assert_socks() {
     echo "PASS: SOCKS5 ${label}"
 }
 
-assert_socks_blocked() {
-    if python3 "$FIXTURE_PY" client --proxy-port "$SOCKS_PORT" --target-host blocked.localhost --target-port "$ORIGIN_PORT" \
+assert_socks_refused() {
+    local label="$1" host="$2"
+    if python3 "$FIXTURE_PY" client --proxy-port "$SOCKS_PORT" --target-host "$host" --target-port "$ORIGIN_PORT" \
         --path / --username "$FIXTURE_USER" --password "$FIXTURE_PASSWORD" >/dev/null 2>&1; then
-        fail "SOCKS5 block unexpectedly succeeded"
+        fail "SOCKS5 ${label} unexpectedly succeeded"
     fi
-    echo "PASS: SOCKS5 block"
+    echo "PASS: SOCKS5 ${label}"
 }
 
 assert_transparent() {
@@ -383,10 +384,12 @@ assert_tls_sni() {
 }
 
 run_assertions() {
-    assert_socks direct direct.localhost WORKER_E2E_DIRECT
+    # SOCKS5 is a client-chosen-destination inbound: DIRECT to a name resolving to loopback is refused by
+    # the direct outbound address safety check. Trusted DESTINATION_OVERRIDE and upstream proxies still work.
+    assert_socks_refused 'direct to loopback (address safety)' direct.localhost
     assert_socks proxy proxy.localhost WORKER_E2E_DIRECT
     assert_socks override override.localhost WORKER_E2E_OVERRIDE
-    assert_socks_blocked
+    assert_socks_refused block blocked.localhost
     assert_tls_sni
 
     assert_transparent direct direct.localhost WORKER_E2E_DIRECT

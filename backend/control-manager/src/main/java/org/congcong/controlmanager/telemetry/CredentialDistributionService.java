@@ -1,7 +1,6 @@
 package org.congcong.controlmanager.telemetry;
 
 import org.congcong.common.telemetry.CredentialAuthLogV1;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.springframework.stereotype.Service;
 import lombok.RequiredArgsConstructor;
 import java.math.BigInteger;
@@ -12,7 +11,7 @@ import java.util.*;
 @Service
 @RequiredArgsConstructor
 public class CredentialDistributionService {
-    private final ClickHouseJdbcClient client;
+    private final TelemetryJdbcClient client;
     private final TelemetryStore store;
     private final CredentialGeoAnalysis geo;
 
@@ -59,8 +58,8 @@ public class CredentialDistributionService {
             params.add(request.getClientIp());
         }
         // No TopN or audit-page truncation before geolocation and full-denominator aggregation.
-        var rows = client.query("SELECT coalesce(client_ip,'') AS ip, toString(count()) AS attempts "
-                + "FROM " + TelemetrySchema.AUTH.table + " FINAL WHERE " + where + " GROUP BY ip ORDER BY ip", params.toArray());
+        var rows = client.query("SELECT coalesce(client_ip,'') AS ip, CAST(COUNT(*) AS TEXT) AS attempts "
+                + "FROM " + TelemetrySchema.AUTH.table + " WHERE " + where + " GROUP BY ip ORDER BY ip", params.toArray());
         Map<List<String>, Group> groups = new HashMap<>();
         Group totals = new Group();
         for (var row : rows) {

@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** ClickHouse computes the exact sweep; Java only maps the bounded bucket results. */
+/** SQLite computes the exact sweep; Java only maps the bounded bucket results. */
 public final class ConcurrencyTimeline {
     private static final String QUERY = readQuery();
 
@@ -47,7 +47,7 @@ public final class ConcurrencyTimeline {
 
     private static String readQuery() {
         try {
-            return new ClassPathResource("clickhouse/overview-concurrency.sql").getContentAsString(StandardCharsets.UTF_8);
+            return new ClassPathResource("telemetry/overview-concurrency.sql").getContentAsString(StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

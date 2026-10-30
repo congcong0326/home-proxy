@@ -1,7 +1,6 @@
 package org.congcong.controlmanager.telemetry;
 
 import org.congcong.common.telemetry.*;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -9,7 +8,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class CredentialDistributionServiceTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryStore store = mock(TelemetryStore.class);
     private final CredentialGeoAnalysis geo = mock(CredentialGeoAnalysis.class);
     private final CredentialDistributionService service = new CredentialDistributionService(client, store, geo);
@@ -69,7 +68,7 @@ class CredentialDistributionServiceTest {
     void filtersAuthenticationFactsWithParametersAndNeverSessionTraffic() {
         when(client.query(anyString(), any(Object[].class))).thenAnswer(invocation -> {
             String sql = invocation.getArgument(0);
-            assertTrue(sql.contains("credential_auth_log_v1 FINAL"));
+            assertTrue(sql.contains("FROM credential_auth_log_v1 WHERE"));
             assertTrue(sql.contains("auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"));
             assertFalse(sql.contains("traffic_category")); assertFalse(sql.contains("LIMIT"));
             assertFalse(sql.contains("alice'"));

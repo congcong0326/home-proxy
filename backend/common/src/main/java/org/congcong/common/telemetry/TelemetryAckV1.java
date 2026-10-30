@@ -2,7 +2,7 @@ package org.congcong.common.telemetry;
 
 import lombok.Data;
 
-/** ACK releases the worker batch after manager memory admission, before CK persistence. */
+/** ACK releases the worker batch after manager memory admission, before telemetry database persistence. */
 @Data
 public class TelemetryAckV1 {
     private int protocolVersion = 1;

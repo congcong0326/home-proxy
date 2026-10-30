@@ -29,7 +29,7 @@ import {
   SettingOutlined
 } from '@ant-design/icons';
 import { apiService } from '../services/api';
-import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundTrafficStats, InboundMonthlyTrafficV1 } from '../types/inbound';
+import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateRequest, InboundRouteBinding, InboundMonthlyTrafficV1 } from '../types/inbound';
 import { TrafficCategory } from '../types/observability';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO } from '../types/user';
@@ -118,8 +118,7 @@ const InboundManagement: React.FC = () => {
   const [editingItem, setEditingItem] = useState<InboundConfigDTO | null>(null);
   const [createForm] = Form.useForm<InboundConfigCreateRequest>();
   const [editForm] = Form.useForm<InboundConfigUpdateRequest>();
-  const [trafficSource, setTrafficSource] = useState<'v1' | 'legacy'>('v1');
-  const [trafficMap, setTrafficMap] = useState<Record<number, InboundTrafficStats | InboundMonthlyTrafficV1>>({});
+  const [trafficMap, setTrafficMap] = useState<Record<number, InboundMonthlyTrafficV1>>({});
   const [trafficErrors, setTrafficErrors] = useState<number[]>([]);
   const screens = Grid.useBreakpoint();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
@@ -227,9 +226,7 @@ const InboundManagement: React.FC = () => {
     const fetchTraffic = async () => {
       const results = await Promise.all(state.inbounds.map(async (inbound) => {
         try {
-          const data = trafficSource === 'v1'
-            ? await apiService.getInboundMonthlyTrafficV1(inbound.id, inbound.workerId)
-            : await apiService.getInboundMonthlyTraffic(inbound.id);
+          const data = await apiService.getInboundMonthlyTrafficV1(inbound.id, inbound.workerId);
           return { id: inbound.id, data };
         } catch (e) {
           console.warn('加载入站流量失败', inbound.id, e);
@@ -237,14 +234,14 @@ const InboundManagement: React.FC = () => {
         }
       }));
       if (!current) return;
-      const next: Record<number, InboundTrafficStats | InboundMonthlyTrafficV1> = {};
+      const next: Record<number, InboundMonthlyTrafficV1> = {};
       results.forEach(item => { if (item.data) next[item.id] = item.data; });
       setTrafficMap(next);
       setTrafficErrors(results.filter(item => !item.data).map(item => item.id));
     };
     void fetchTraffic();
     return () => { current = false; };
-  }, [state.inbounds, trafficSource]);
+  }, [state.inbounds]);
 
   const loadUsersAndRoutes = useCallback(async () => {
     try {
@@ -464,7 +461,6 @@ const InboundManagement: React.FC = () => {
       if (trafficErrors.includes(record.id)) return <Typography.Text type="warning">查询失败</Typography.Text>;
       const t = trafficMap[record.id];
       if (!t) return '加载中';
-      if (!('traffic' in t)) return `${formatBytes(t.bytesIn || 0)} / ${formatBytes(t.bytesOut || 0)}`;
       const detail = <div>
         <div>{t.period} · {t.timeZone} · 上行 / 下行</div>
         {(Object.keys(trafficCategoryLabels) as TrafficCategory[]).map(category => <div key={category}>
@@ -611,12 +607,6 @@ const InboundManagement: React.FC = () => {
           </Col>
         </Row>
       </Card>
-
-      <Space style={{ marginBottom: 12 }}>
-        <Typography.Text type="secondary">流量统计</Typography.Text>
-        <Select aria-label="流量统计来源" value={trafficSource} onChange={setTrafficSource} style={{ width: 150 }}
-          options={[{ value: 'v1', label: '新日志' }, { value: 'legacy', label: '旧日志' }]} />
-      </Space>
 
       <Table
         rowKey="id"

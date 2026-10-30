@@ -1,6 +1,5 @@
 package org.congcong.controlmanager.telemetry;
 
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.web.servlet.MockMvc;
@@ -16,7 +15,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 class TelemetryAuditTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryProperties properties = new TelemetryProperties();
     private final CredentialGeoAnalysis geo = mock(CredentialGeoAnalysis.class);
     private final TelemetryStore store = new TelemetryStore(client, properties, geo);
@@ -34,9 +33,9 @@ class TelemetryAuditTest {
     void historicalUnavailableAuthLocationIsRefreshedForPageDetailAndLegacyQueryWithoutWrites() {
         String attempt = UUID.randomUUID().toString();
         String raw = "{\"authAttemptId\":\"" + attempt + "\",\"clientIp\":\"8.8.8.8\"}";
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
-                "raw_json", raw, "received_at", "2026-10-09 00:00:00",
+                "raw_json", raw, "received_at", 1_791_504_000_000_000L,
                 "analysis_json", "{\"geoLookupStatus\":\"DB_UNAVAILABLE\"}")));
         var resolved = new org.congcong.common.telemetry.CredentialAuthAnalysisV1();
         resolved.setGeoLookupStatus("RESOLVED");
@@ -58,7 +57,7 @@ class TelemetryAuditTest {
     @Test
     void geographicDrilldownKeepsExactAccountAndFailureGroupFilters() {
         properties.setQueryEnabled(true);
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         var request = request();
         request.setExactAuthUsername("alice'");
@@ -75,7 +74,7 @@ class TelemetryAuditTest {
     @Test
     void countAndPageShareServerFiltersAndNeverInterpolateUserText() {
         properties.setQueryEnabled(true);
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 123L)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 123L)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         var request = request();
         request.setUsername("' OR 1=1 --");
@@ -95,8 +94,8 @@ class TelemetryAuditTest {
         var params = ArgumentCaptor.forClass(Object[].class);
         verify(client, times(2)).query(sql.capture(), params.capture());
         String countSql = sql.getAllValues().get(0);
-        String countWhere = countSql.substring(countSql.indexOf(" FINAL WHERE ") + " FINAL WHERE ".length());
-        assertTrue(sql.getAllValues().get(1).contains(" FINAL WHERE " + countWhere + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?"));
+        String countWhere = countSql.substring(countSql.indexOf(" WHERE ") + " WHERE ".length());
+        assertTrue(sql.getAllValues().get(1).contains(" WHERE " + countWhere + " ORDER BY occurred_at DESC, record_id LIMIT ? OFFSET ?"));
         assertFalse(sql.getAllValues().get(1).contains(request.getUsername()));
         assertTrue(List.of(params.getAllValues().get(1)).contains(request.getUsername()));
         assertEquals(params.getAllValues().get(0).length + 2, params.getAllValues().get(1).length);
@@ -105,7 +104,7 @@ class TelemetryAuditTest {
     @Test
     void dnsAssociationUsesExplicitParentConnectionAndIsNotAddressCorrelation() {
         properties.setQueryEnabled(true);
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         var request = request();
         request.setConnectionId(UUID.randomUUID().toString());
@@ -121,13 +120,13 @@ class TelemetryAuditTest {
         var request = request();
         request.setUsername("unknown-user");
         request.setAuthMethod("HTTP_BASIC");
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
-                "raw_json", "{\"authDurationUs\":\"9007199254740993\",\"userId\":null}", "received_at", "2026-10-09 00:00:00")));
+                "raw_json", "{\"authDurationUs\":\"9007199254740993\",\"userId\":null}", "received_at", 1_791_504_000_000_000L)));
         var page = store.page(TelemetrySchema.AUTH, request);
         assertEquals("9007199254740993", page.items().get(0).get("authDurationUs"));
         assertNull(page.items().get(0).get("userId"));
-        verify(client, times(2)).query(contains("ifNull(attempted_username,''), ?"), any(Object[].class));
+        verify(client, times(2)).query(contains("instr(lower(coalesce(attempted_username,'')), lower(?)) > 0"), any(Object[].class));
         var detail = store.detail(TelemetrySchema.AUTH, UUID.randomUUID().toString(), request());
         assertEquals("9007199254740993", detail.get("authDurationUs"));
     }
@@ -138,19 +137,19 @@ class TelemetryAuditTest {
         String connection = UUID.randomUUID().toString(), instance = UUID.randomUUID().toString();
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
                 "raw_json", "{\"connectionId\":\"" + connection + "\",\"workerInstanceId\":\"" + instance + "\",\"username\":null,\"userId\":null}",
-                "received_at", "2026-10-09 01:00:00")));
+                "received_at", 1_791_507_600_000_000L)));
         when(client.query(startsWith("SELECT worker_instance_id"), any(Object[].class))).thenReturn(List.of(
                 Map.of("worker_instance_id", instance, "connection_id", connection, "auth_attempt_id", "attempt-1",
-                        "attempted_username", "nonexistent-account", "auth_outcome", "FAILURE", "auth_method", "SOCKS5_PASSWORD", "occurred_at", "2026-10-09 00:59:59"),
+                        "attempted_username", "nonexistent-account", "auth_outcome", "FAILURE", "auth_method", "SOCKS5_PASSWORD", "occurred_at", 1_791_507_599_000_000L),
                 Map.of("worker_instance_id", instance, "connection_id", connection, "auth_attempt_id", "attempt-2",
-                        "attempted_username", "second-account", "auth_outcome", "DENIED", "auth_method", "SOCKS5_PASSWORD", "occurred_at", "2026-10-09 00:59:58")));
+                        "attempted_username", "second-account", "auth_outcome", "DENIED", "auth_method", "SOCKS5_PASSWORD", "occurred_at", 1_791_507_598_000_000L)));
         var detail = store.detail(TelemetrySchema.SESSIONS, connection, request());
         assertNull(detail.get("username"));
         assertNull(detail.get("userId"));
         var attempts = (List<Map<String, Object>>) detail.get("credentialAuthAttempts");
         assertEquals(List.of("nonexistent-account", "second-account"), attempts.stream().map(a -> a.get("attemptedUsername")).toList());
         assertEquals(false, detail.get("credentialAuthAttemptsTruncated"));
-        verify(client).query(contains("(worker_instance_id, connection_id) IN ((?,?))"),
+        verify(client).query(contains("(worker_instance_id, connection_id) IN (VALUES (?,?))"),
                 eq(new Object[]{"home-01", java.sql.Timestamp.from(request().getTo().minusSeconds(31 * 86400L)),
                         java.sql.Timestamp.from(request().getTo()), instance, connection}));
         verify(client, never()).execute(startsWith("INSERT"), any(Object[].class));
@@ -159,7 +158,7 @@ class TelemetryAuditTest {
     @Test
     void attemptedNameSearchIsAppliedToBothCountAndSessionPageWithWorkerAndTimeBounds() {
         properties.setQueryEnabled(true);
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         var request = request();
         request.setUsername("unknown-account");
@@ -168,7 +167,7 @@ class TelemetryAuditTest {
         var params = ArgumentCaptor.forClass(Object[].class);
         verify(client, times(2)).query(sql.capture(), params.capture());
         for (String query : sql.getAllValues()) {
-            assertTrue(query.contains("SELECT worker_instance_id, connection_id FROM telemetry.credential_auth_log_v1 FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"));
+            assertTrue(query.contains("SELECT worker_instance_id, connection_id FROM credential_auth_log_v1 WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"));
             assertFalse(query.contains("unknown-account"));
         }
         assertEquals(2, List.of(params.getAllValues().get(0)).stream().filter("unknown-account"::equals).count());
@@ -197,7 +196,7 @@ class TelemetryAuditTest {
         mvc.perform(get("/api/observability/v1/dns/page").param("workerId", "home-01")
                 .param("from", "2026-10-09T00:00:00Z").param("to", "2026-10-10T00:00:00Z")).andExpect(status().isServiceUnavailable());
         properties.setQueryEnabled(true);
-        when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
+        when(client.query(startsWith("SELECT COUNT(*)"), any(Object[].class))).thenReturn(List.of(Map.of("total", 0)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of());
         mvc.perform(get("/api/observability/v1/dns/page").param("workerId", "home-01")
                 .param("from", "2026-10-09T00:00:00Z").param("to", "2026-10-10T00:00:00Z"))

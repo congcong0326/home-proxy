@@ -10,13 +10,6 @@ export interface UserTrafficStats {
   period?: string;
 }
 
-// 时间序列数据点
-export interface TimeSeriesPoint {
-  ts: string; // LocalDateTime
-  byteIn: number;
-  byteOut: number;
-}
-
 // WOL配置
 export interface WolConfig {
   id: number;
@@ -54,14 +47,6 @@ export interface IpStatusResponse {
 // WOL操作响应
 export interface WolResponse {
   message: string;
-}
-
-// 流量趋势查询参数
-export interface TrafficTrendParams {
-  workerId: string;
-  startTime: string;
-  endTime: string;
-  userId?: number;
 }
 
 // 流量统计查询参数

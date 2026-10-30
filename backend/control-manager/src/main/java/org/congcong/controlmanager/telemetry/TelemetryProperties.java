@@ -16,7 +16,7 @@ public class TelemetryProperties {
     private long flushMaxDelayMs = 120000;
     private int bufferCapacity = 20000;
     private long bufferMaxBytes = 67108864;
-    /** Null disables TTL. Stage A never changes retention on legacy tables. */
+    /** Retention in days per table; null keeps facts forever (see {@link TelemetryStore#purgeExpired()}). */
     private Integer sessionRetentionDays;
     private Integer dnsRetentionDays;
     private Integer authRetentionDays;

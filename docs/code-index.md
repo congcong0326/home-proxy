@@ -24,7 +24,7 @@
 启动入口：
 
 - `ControlManagerApplication`：Spring Boot 主类，启用缓存。
-- `src/main/resources/application.properties`：默认端口、SQLite 数据源（`HOME_PROXY_DATA_DIR`）、Flyway、备份、JWT、ClickHouse、日志落库配置。
+- `src/main/resources/application.properties`：默认端口、SQLite 数据源（`HOME_PROXY_DATA_DIR`）、Flyway、备份、JWT、遥测 SQLite（`observability.sqlite.*`）与日志落库配置。
 - `config/DataSourceConfig`：SQLite 连接池（WAL、`foreign_keys`、`busy_timeout`、`BEGIN IMMEDIATE`）；`persistence/Sqlite*Converter` 把 `LocalDateTime`/`Instant` 存为 UTC 文本；`service/SqliteBackupService` + `controller/DatabaseBackupController` 提供在线备份（`VACUUM INTO`）、定时备份与重启生效的恢复。
 - `config/SelfSignedTlsConfiguration`：启动时生成临时自签名 HTTPS 密钥库；worker 保持 HTTPS 但不校验管理端证书。
 - `src/main/resources/db/migration`：Flyway 脚本；SQLite 单一基线 `V1__baseline.sql`，覆盖管理员、用户、路由、规则集、入站、Worker、WOL、磁盘监控、邮件网关、计划任务等表。后续结构变更以 `V2__*.sql` 递增（SQLite 不能 `ALTER` 约束，改表需重建表）。
@@ -33,7 +33,7 @@
 
 - `AdminController`：`/admin` 登录、当前用户、改密、登出、管理员维护。
 - `UserController`、`RouteController`、`InboundConfigController`：代理核心配置 CRUD。
-- `LogController`、`UserTrafficStatsController`：访问日志查询、明细、TopN、时间序列、用户流量统计。
+- `UserTrafficStatsController`：按用户的日／月流量（读遥测会话表，首页状态面板使用）。
 - `WolController`、`DiskMonitorController`：WOL 配置/唤醒/监控和磁盘状态。
 - `MailGatewayAdminController`、`MailTargetAdminController`、`MailSendLogController`、`InternalMailController`、`SchedulerController`：邮件网关、收件目标、发送日志、内部发送和计划任务。
 
@@ -44,7 +44,7 @@
 - `DataInitializer`：启动时幂等确保 `default` Worker、匿名用户、兜底路由和默认规则集存在。
 - `security`：`SecurityConfig`、`JwtAuthenticationFilter`、`JwtService` 负责 JWT 鉴权；聚合配置、日志上报、内部邮件等接口有显式放行规则。
 - `entity` + `repository`：JPA 实体和仓储；邮件实体在 `entity/mail`，计划任务在 `entity/scheduler`。
-- `logstore` + `clickhouse`：访问日志查询与写入走 `AccessLogStoreFactory`；当前工厂固定返回 `ClickHouseAccessLogStore`。
+- `telemetry/TelemetryDataSourceConfig` + `TelemetryJdbcClient`：独立的遥测 SQLite 文件 `<数据目录>/telemetry.db`（WAL、`busy_timeout`），时间列为 UTC epoch 微秒整数；`TelemetrySchema` 由 V1 DTO 字段生成表与索引，唯一键 `(worker_id, worker_instance_id, record_id)` 代替 ClickHouse 的 `FINAL` 去重。
 
 ## 后端 proxy-worker
 
@@ -113,8 +113,8 @@
 日志与看板链路：
 
 1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
-2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入 ClickHouse 的独立表；诊断事件已删除，旧 Worker 发来的事件与非失败认证记录接收后丢弃；配置与日志均走 WSS，旧 `/api/logs/access`、`/api/logs/auth` 写入端点及 `LogService` 写入路径已移除，`GET /api/logs/**` 仍可查询历史数据。
-3. 新版看板／审计页面查询 `/api/observability/v1`；保留的旧源消费者通过 `LogController`、`UserTrafficStatsController` 读取历史数据；网关监控读取 WSS 心跳落库的 `worker_status`。
+2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入遥测 SQLite 的独立表（`INSERT OR IGNORE`，重发只保留首次）；诊断事件已删除，旧 Worker 发来的事件与非失败认证记录接收后丢弃；配置与日志均走 WSS。旧 `access_log`/`auth_log` 链路（`/api/logs/**`、`LogService`、`logstore`）已整体删除。
+3. 看板／审计页面查询 `/api/observability/v1`；首页状态面板的用户流量（`UserTrafficStatsController`）与流量报表邮件（`TrafficReportMailHandler`）也读会话表；网关监控读取 WSS 心跳落库的 `worker_status`。保留期由 `TelemetryStore.purgeExpired` 每小时分批删除（`observability.*-retention-days`，默认不删）。
 
 认证链路：
 
@@ -180,19 +180,19 @@
 ## 网关观测：访问分布预览
 
 - `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证失败次数、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
-- `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、UInt128 累加、93 天范围、缺失维度计数与节点历史起点；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
+- `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、64 位累加（溢出报错而非回绕）、93 天范围、缺失维度计数与节点历史起点；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
 - [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。
 
 ## 仅上报新版日志与旧页面屏蔽
 
-- `frontend/src/App.tsx`、`pages/ProxyConfig.tsx`：隐藏“访问概览”，旧审计／聚合地址跳转新版；保留旧页面源码、后端 API 与数据。
+- `frontend/src/App.tsx`、`pages/ProxyConfig.tsx`：隐藏“访问概览”，旧审计／聚合地址跳转新版；旧页面源码与后端 API 已在 ClickHouse 移除时删除。
 - `frontend/src/pages/WorkerManagement.tsx`：原“代理网关日志上报”沿用 `logReportingEnabled`，通过聚合配置动态控制 `TelemetryPublisher` 的 V1 四类日志采集／发送；与 `OBSERVABILITY_ENABLED` 部署总开关共同生效。
-- 旧 `AccessLogUtil` 采集与 HTTP 日志上报已删除；`CONFIG_POLL` 帧中的 `accessLogs`/`authLogs` 字段仅为兼容旧 worker 保留（`@Deprecated`），控制端忽略；旧表与历史数据保留。
+- 旧 `AccessLogUtil` 采集与 HTTP 日志上报已删除；`CONFIG_POLL` 帧中的 `accessLogs`/`authLogs` 字段仅为兼容旧 worker 保留（`@Deprecated`），控制端忽略。
 - [配置与生效边界](testing/gateway-observability-stage-a.md#仅上报新版日志)：关闭暂停新版待确认批次，重新开启继续发送；恢复旧采集需回退 Worker 版本。
 
 ## 管理端日志攒批与认证 GeoIP
 
-- `control-manager/telemetry/TelemetryStore`：整批内存接收即 ACK，无 CK ingest 查重；四类队列独立满 1000 条或最早等待 120 秒 flush，失败保留，正常关闭尽力 flush。
+- `control-manager/telemetry/TelemetryStore`：整批内存接收即 ACK，落库时由唯一键去重；四类队列独立满 1000 条或最早等待 120 秒 flush，失败保留，正常关闭尽力 flush。
 - `TelemetryProperties`／Compose：管理端队列总条数、字节预算和 flush 条数／等待时间；`TelemetryController` 的 status 返回管理端队列状态。
 - `CredentialGeoAnalysis`：缺失数据库每分钟重试，认证位置优先中文；`TelemetryStore` 查询时刷新历史 DB_UNAVAILABLE 分析。mmdb 放 `data/geoip/GeoLite2-City.mmdb`，不提交数据库。
 - 语义与边界见 [阶段 A 的管理端内存 ACK](testing/gateway-observability-stage-a.md#管理端内存-ack-与批量写入2026-10-09)。

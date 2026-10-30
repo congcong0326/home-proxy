@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Retained-data V1 protocol probe: durable ACK, replay, conflict and worker binding.
+"""Retained-data V1 protocol probe: memory ACK, replay, conflict and worker binding.
+
+ACK means the batch was admitted to the controller's memory queue; facts reach the telemetry
+database at the next flush (up to observability.flush-max-delay-ms). The probe keeps the WSS
+connection alive with CONFIG_POLL while it waits. Re-sent facts, including same-ID facts with
+different content, are ignored at write time so the first stored copy wins.
 
 Synthetic fixtures are explicitly named separately from real proxy facts. No table
 cleanup is performed. The fixture worker is disabled after the probe.
@@ -73,6 +78,23 @@ def get_type(connection, kind):
             return value
 
 
+def flush_timeout(api):
+    buffer = api.request('/api/observability/v1/status?workerId=' + WORKER)['managerBuffer']
+    return buffer['flushMaxDelayMs'] / 1000 + 60
+
+
+def wait_alive(connection, label, fn, timeout):
+    """Polls fn while sending CONFIG_POLL often enough to stay inside the controller heartbeat timeout."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        send(connection, {'type': 'CONFIG_POLL', 'workerId': WORKER})
+        value = fn()
+        if value:
+            return value
+        time.sleep(2)
+    raise AssertionError(label + ': timed out')
+
+
 def main():
     api = e2e.Api()
     token = 'hpw_' + uuid.uuid4().hex
@@ -124,35 +146,43 @@ def main():
                     query = urllib.parse.urlencode({'workerId': WORKER, 'from': e2e.iso(now - timedelta(seconds=2)), 'to': e2e.iso(now + timedelta(minutes=2)), 'connectionId': identity})
                     def rows():
                         return api.request('/api/observability/v1/sessions?' + query)
+
+                    def drained():
+                        return api.request('/api/observability/v1/status?workerId=' + WORKER)['managerBuffer']['tables']['sessions'] == 0
+                    timeout = flush_timeout(api)
                     send(connection, envelope)
                     ack = get_type(connection, 'TELEMETRY_ACK')['telemetryAck']
                     assert ack['persisted'] and ack['batchId'] == batch['batchId'], ack
-                    first = rows()
+                    first = wait_alive(connection, 'first fact stored', rows, timeout)
                     assert len(first) == 1 and first[0]['workerId'] == WORKER
                     assert first[0]['uploadBytes'] == '9007199254740993'
                     send(connection, envelope)  # simulates ACK loss; IDs and payload remain unchanged
                     assert get_type(connection, 'TELEMETRY_ACK')['telemetryAck']['persisted']
+                    wait_alive(connection, 'replay flushed', drained, timeout)
                     replayed = rows()
                     assert len(replayed) == 1 and replayed[0]['receivedAt'] == first[0]['receivedAt']
                     assert replayed[0]['uploadBytes'] == first[0]['uploadBytes']
-                    # Inject a second identical physical row to exercise FINAL independently
-                    # of the ingest replay shortcut. Both rows are retained; no cleanup.
-                    duplicate_sql = ("INSERT INTO telemetry.proxy_session_log_v1 SELECT * FROM telemetry.proxy_session_log_v1 FINAL "
-                                     "WHERE worker_id = 'telemetry-a-protocol-probe' AND record_id = '" + identity + "'")
-                    subprocess.run(['docker', 'exec', os.environ.get('E2E_CLICKHOUSE_CONTAINER', 'home-proxy-clickhouse'),
-                        'sh', '-c', 'exec clickhouse-client --password "$CLICKHOUSE_PASSWORD" --query "$1"', 'sh', duplicate_sql],
-                        check=True, capture_output=True, text=True)
+                    # The unique fact key must make a second physical copy impossible, independently
+                    # of the ingest replay shortcut. Nothing is deleted.
+                    duplicate_sql = ("INSERT OR IGNORE INTO proxy_session_log_v1 SELECT * FROM proxy_session_log_v1 "
+                                     "WHERE worker_id = 'telemetry-a-protocol-probe' AND record_id = '" + identity + "'; SELECT changes();")
+                    inserted = subprocess.run(['docker', 'exec', os.environ.get('E2E_CONTROL_CONTAINER', 'home-proxy-control-manager'),
+                        'sqlite3', '/data/telemetry.db', duplicate_sql], check=True, capture_output=True, text=True).stdout.strip()
+                    assert inserted == '0', inserted
                     duplicated = rows()
                     assert len(duplicated) == 1 and duplicated[0]['uploadBytes'] == first[0]['uploadBytes']
+                    # Same ID, different content: admitted to memory, then ignored at write time.
                     fact['uploadBytes'] = '0'
                     send(connection, envelope)
-                    rejected = get_type(connection, 'TELEMETRY_ACK')['telemetryAck']
-                    assert rejected['persisted'] is False, rejected
-                    assert rows()[0]['uploadBytes'] == first[0]['uploadBytes']
-                    print('PASS: durable ACK, identical replay deduplication, first received_at, physical duplicate FINAL query, same-ID conflict rejection, authenticated worker binding, large UInt64 strings')
+                    assert get_type(connection, 'TELEMETRY_ACK')['telemetryAck']['persisted']
+                    wait_alive(connection, 'conflict flushed', drained, timeout)
+                    conflicted = rows()
+                    assert len(conflicted) == 1 and conflicted[0]['uploadBytes'] == first[0]['uploadBytes']
+                    assert conflicted[0]['receivedAt'] == first[0]['receivedAt']
+                    print('PASS: memory ACK then flush, identical replay deduplication, first received_at, unique fact key rejects physical duplicates, same-ID conflict keeps first fact, authenticated worker binding, large UInt64 strings')
                     Path('/tmp/gateway-observability-protocol-probe.json').write_text(json.dumps({'workerId': WORKER, 'recordId': identity,
                         'batchId': batch['batchId'], 'receivedAt': first[0]['receivedAt'], 'uploadBytes': first[0]['uploadBytes'],
-                        'replayUniqueRows': len(replayed), 'duplicateInsertUniqueRows': len(duplicated), 'conflictRejected': True, 'tablesPreserved': True}, indent=2) + '\n')
+                        'replayUniqueRows': len(replayed), 'duplicateInsertUniqueRows': len(duplicated), 'conflictKeepsFirstFact': True, 'tablesPreserved': True}, indent=2) + '\n')
             finally:
                 if registered:
                     api.request('/api/workers/' + WORKER, dict(metadata, enabled=False), 'PUT')

@@ -316,7 +316,6 @@ start_targets() {
 setup_control_plane() {
     export E2E_CONTROL_IMAGE="$CONTROL_IMAGE"
     export E2E_CONTROL_PORT="$CONTROL_PORT"
-    export E2E_CLICKHOUSE_PASSWORD="e2e_clickhouse_${RUN_ID}"
     export E2E_JWT_SECRET="e2e_jwt_$(openssl rand -hex 24)"
 
     COMPOSE_STARTED=1
@@ -459,6 +458,20 @@ run_assertions() {
     packets="$(sed -En 's/^\[([0-9]+):[0-9]+\].*/\1/p' <<<"$counters" | awk '{ sum += $1 } END { print sum + 0 }')"
     (( packets > 0 )) || fail "TPROXY rules were not hit"
     echo "PASS: TPROXY rules received ${packets} packets"
+    wait_until "telemetry SQLite tables contain session and DNS facts" telemetry_tables_written
+    echo "PASS: telemetry SQLite stored $(telemetry_count proxy_session_log_v1) sessions and $(telemetry_count dns_query_log_v1) DNS queries"
+}
+
+telemetry_count() {
+    docker compose --project-name "$PROJECT" --file "$COMPOSE_FILE" exec -T control-manager \
+        sqlite3 -readonly /data/telemetry.db "SELECT COUNT(*) FROM $1 WHERE worker_id = '${WORKER_ID}'"
+}
+
+telemetry_tables_written() {
+    local sessions dns
+    sessions="$(telemetry_count proxy_session_log_v1)" || return 1
+    dns="$(telemetry_count dns_query_log_v1)" || return 1
+    [[ "$sessions" -gt 0 && "$dns" -gt 0 ]]
 }
 
 main() {

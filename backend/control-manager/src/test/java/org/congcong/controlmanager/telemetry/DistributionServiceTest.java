@@ -1,6 +1,5 @@
 package org.congcong.controlmanager.telemetry;
 
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.junit.jupiter.api.Test;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -10,7 +9,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DistributionServiceTest {
-    private final ClickHouseJdbcClient client = mock(ClickHouseJdbcClient.class);
+    private final TelemetryJdbcClient client = mock(TelemetryJdbcClient.class);
     private final TelemetryStore store = mock(TelemetryStore.class);
     private final DistributionService service = new DistributionService(client, store);
 
@@ -29,7 +28,7 @@ class DistributionServiceTest {
         when(client.query(anyString(), any(Object[].class))).thenAnswer(invocation -> {
             queries.add(invocation.getArgument(0));
             params.add(Arrays.asList((Object[]) invocation.getRawArguments()[1]));
-            if (queries.size() == 2) return List.of(Map.of("first_at", "2026-10-01 01:00:00"));
+            if (queries.size() == 2) return List.of(Map.of("first_at", 1_790_816_400_000_000L));
             var row = new HashMap<String, Object>();
             row.put("keys_json", "[\"42\",\"alice\"]");
             row.put("connections", "3"); row.put("upload", "18446744073709551620"); row.put("download", "20");
@@ -51,8 +50,9 @@ class DistributionServiceTest {
         assertEquals("2", result.missingConnections());
         assertEquals(List.of("42", "alice"), result.items().get(0).keys());
         assertEquals("[from,to)", result.timeBoundary());
-        assertTrue(queries.get(0).contains("FINAL WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"));
-        assertTrue(queries.get(0).contains("toUInt128"));
+        assertTrue(queries.get(0).contains("FROM proxy_session_log_v1 WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ?"));
+        assertTrue(queries.get(0).contains("SUM(coalesce(upload_bytes,0))"));
+        assertEquals("2026-10-01 01:00:00.000000", result.firstSessionAt());
         assertTrue(queries.get(0).contains("OVER ()"));
         assertFalse(queries.get(0).contains(request.getUsername()));
         assertEquals(List.of("home-01", Timestamp.from(request.getFrom()), Timestamp.from(request.getTo()),

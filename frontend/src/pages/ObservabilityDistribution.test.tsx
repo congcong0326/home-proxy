@@ -8,7 +8,7 @@ jest.setTimeout(15000);
 
 jest.mock('echarts-for-react', () => ({ __esModule: true, default: ({ option }: { option: { series: { data: { name: string }[] }[] } }) => <div data-testid="distribution-chart">{option.series[0].data.map(item => item.name).join(', ')}</div> }));
 jest.mock('../services/api', () => {
-  const service = { queryTelemetryPage: jest.fn(), getWorkers: jest.fn(), getObservabilityDistribution: jest.fn(), getAccessDailyTop: jest.fn() };
+  const service = { queryTelemetryPage: jest.fn(), getWorkers: jest.fn(), getObservabilityDistribution: jest.fn() };
   return { __esModule: true, default: service, apiService: service };
 });
 const data = (): DistributionData => ({
@@ -34,7 +34,6 @@ it('uses full denominators, exact counters and the remainder in the chart', asyn
   expect(apiService.getObservabilityDistribution).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL', dimension: 'users', metric: 'connections' }));
   expect(screen.getByTitle('18,446,744,073,709,551,660 B')).toHaveTextContent('16 EB');
   expect(screen.getByTestId('distribution-chart')).toHaveTextContent('其余项目');
-  expect(apiService.getAccessDailyTop).not.toHaveBeenCalled();
   expect(distributionPercent('18446744073709551620', '36893488147419103240')).toBe('50.00');
 });
 it('submits source filters, supports classification and rejects invalid ranges', async () => {
@@ -70,7 +69,6 @@ it('shows query failure without fabricated zero totals or legacy fallback', asyn
   render(<ObservabilityDistribution />);
   expect(await screen.findByRole('alert')).toHaveTextContent('新版查询未启用');
   expect(screen.queryByText('0 B')).not.toBeInTheDocument();
-  expect(apiService.getAccessDailyTop).not.toHaveBeenCalled();
 });
 
 it('groups location labels without discarding partial geography', () => {

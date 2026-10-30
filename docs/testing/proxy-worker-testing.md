@@ -24,7 +24,7 @@
 
 `make e2e-direct-outbound-safety` 是独立的 Linux/Docker E2E，不需要 root、iptables 或现有控制面。它构建当前镜像后启动临时 ClickHouse、control-manager（SQLite） 和 host-network worker，再通过控制面发布 SOCKS5、HTTP CONNECT、Shadowsocks、TLS SNI TCP 入站。用例验证私网字面量的 SOCKS5 规则禁止状态、HTTP 403、Shadowsocks/TLS SNI 关闭、可信 `DESTINATION_OVERRIDE` 到本地目标的放行，以及 ClickHouse 中的 `PRIVATE_ADDRESS_BLOCKED` 审计记录；运行结束会清理容器、卷和临时凭据。Shadowsocks 客户端使用 Python `cryptography` 的 AES-GCM 实现；可用 `E2E_BUILD=0` 复用已构建镜像。
 
-`make e2e-worker-proxy-setup` 只需在研发/测试控制面执行一次。它在固定的 `home-01` 节点上创建两条入站：`TP_PROXY` 和 `SOCKS5`，并绑定直连、阻断、SOCKS5 出站、目标重写四类路由；默认凭据是 `worker-e2e / worker-e2e-pass`，可通过 `E2E_*` 环境变量覆盖。常规发布前回归只执行 `make e2e-worker-proxy`，该命令复用正在运行的 control-manager 和 worker，不修改管理配置，只启动临时 HTTP 目标和 SOCKS5 上游并验证两条入站的请求结果。透明代理测试使用独立 network namespace、veth、TPROXY 和策略路由，结束后清理所有临时网络资源。
+`make e2e-worker-proxy-setup` 只需在研发/测试控制面执行一次。它在固定的 `home-01` 节点上创建 `TP_PROXY`、`SOCKS5`、`TLS_SNI_TCP` 三条入站，并绑定直连、阻断、SOCKS5 出站、目标重写四类路由（SOCKS5 直连到解析为环回地址的目标会被直连出站地址安全检查拒绝，用例断言为拒绝；透明代理直连不受此检查）；默认凭据是 `worker-e2e / worker-e2e-pass`，可通过 `E2E_*` 环境变量覆盖。常规发布前回归只执行 `make e2e-worker-proxy`，该命令复用正在运行的 control-manager 和 worker，不修改管理配置，只启动临时 HTTP 目标和 SOCKS5 上游并验证两条入站的请求结果。透明代理测试使用独立 network namespace、veth、TPROXY 和策略路由，结束后清理所有临时网络资源。
 
 ## 集成测试覆盖
 

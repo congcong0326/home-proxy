@@ -1,31 +1,6 @@
 name: home-proxy-control
 
 services:
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.8
-    container_name: home-proxy-clickhouse
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "3"
-    environment:
-      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    volumes:
-      - clickhouse-data:/var/lib/clickhouse
-      - clickhouse-logs:/var/log/clickhouse-server
-    healthcheck:
-      test: ["CMD-SHELL", "clickhouse-client --host 127.0.0.1 --user \"$$CLICKHOUSE_USER\" --password \"$$CLICKHOUSE_PASSWORD\" --query 'SELECT 1'"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 30s
-    networks: [home-proxy-db]
-
   control-manager:
     image: home-proxy-control-manager:latest
     build:
@@ -33,8 +8,6 @@ services:
       dockerfile: deploy/docker/Dockerfile.control-manager
     container_name: home-proxy-control-manager
     restart: unless-stopped
-    depends_on:
-      clickhouse: { condition: service_healthy }
     environment:
       SERVER_PORT: 8443
       # Worker WSS endpoints use locally generated certificates without IP SANs.
@@ -44,16 +17,12 @@ services:
       HOME_PROXY_BACKUP_ENABLED: ${HOME_PROXY_BACKUP_ENABLED:-true}
       HOME_PROXY_BACKUP_CRON: ${HOME_PROXY_BACKUP_CRON:-0 30 3 * * *}
       HOME_PROXY_BACKUP_RETENTION: ${HOME_PROXY_BACKUP_RETENTION:-7}
-      CLICKHOUSE_URL: jdbc:ch://clickhouse:8123/${CLICKHOUSE_DB:-default}
-      CLICKHOUSE_USERNAME: ${CLICKHOUSE_USER:-default}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-congcong}
       OBSERVABILITY_INGEST_ENABLED: ${OBSERVABILITY_INGEST_ENABLED:-true}
       OBSERVABILITY_QUERY_ENABLED: ${OBSERVABILITY_QUERY_ENABLED:-true}
       OBSERVABILITY_FLUSH_BATCH_SIZE: ${OBSERVABILITY_FLUSH_BATCH_SIZE:-1000}
       OBSERVABILITY_FLUSH_MAX_DELAY_MS: ${OBSERVABILITY_FLUSH_MAX_DELAY_MS:-120000}
       OBSERVABILITY_BUFFER_CAPACITY: ${OBSERVABILITY_BUFFER_CAPACITY:-20000}
       OBSERVABILITY_BUFFER_MAX_BYTES: ${OBSERVABILITY_BUFFER_MAX_BYTES:-67108864}
-      LOGS_PERSISTENCE: ${LOGS_PERSISTENCE:-clickhouse}
       ADMIN_AUTH_JWT_SECRET: ${ADMIN_AUTH_JWT_SECRET:-dev_only_change_me_home_proxy_jwt_secret}
       DISK_MONITOR_PUSH_TOKEN: ${DISK_MONITOR_PUSH_TOKEN:-}
       DISK_MONITOR_RETENTION_DAYS: ${DISK_MONITOR_RETENTION_DAYS:-7}
@@ -67,8 +36,6 @@ services:
 
 volumes:
   control-data:
-  clickhouse-data:
-  clickhouse-logs:
 
 networks:
   home-proxy-db:

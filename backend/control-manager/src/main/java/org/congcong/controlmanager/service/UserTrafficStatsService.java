@@ -1,11 +1,12 @@
 package org.congcong.controlmanager.service;
 
 import lombok.extern.slf4j.Slf4j;
-import org.congcong.controlmanager.clickhouse.ClickHouseJdbcClient;
 import org.congcong.controlmanager.dto.UserTrafficStatsDTO;
+import org.congcong.controlmanager.telemetry.TelemetryJdbcClient;
+import org.congcong.controlmanager.telemetry.TelemetrySchema;
+import org.congcong.controlmanager.telemetry.TelemetryStore;
 import org.springframework.stereotype.Service;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -16,16 +17,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 用户流量统计服务
+ * 用户流量统计服务：按已结束会话（遥测会话表）的结束时间入账，上传为 byteIn、下载为 byteOut。
  */
 @Slf4j
 @Service
 public class UserTrafficStatsService {
 
-    private final ClickHouseJdbcClient client;
+    private static final String SQL = "SELECT user_id, MAX(username) AS username, SUM(upload_bytes) AS byte_in, "
+            + "SUM(download_bytes) AS byte_out FROM " + TelemetrySchema.SESSIONS.table
+            + " WHERE worker_id = ? AND occurred_at >= ? AND occurred_at < ? "
+            + "GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
 
-    public UserTrafficStatsService(ClickHouseJdbcClient client) {
+    private final TelemetryJdbcClient client;
+    private final TelemetryStore store;
+
+    public UserTrafficStatsService(TelemetryJdbcClient client, TelemetryStore store) {
         this.client = client;
+        this.store = store;
     }
 
     /** 获取用户当日流量统计，按总流量倒序 */
@@ -36,10 +44,8 @@ public class UserTrafficStatsService {
         LocalDateTime start = date.atStartOfDay();
         LocalDateTime end = date.plusDays(1).atStartOfDay();
         String period = date.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        String sql = "SELECT user_id, any(username) AS username, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-                "FROM default.access_log WHERE worker_id = ? AND ts >= ? AND ts < ? " +
-                "GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
-        return mapRows(client.query(sql, normalizeWorkerId(workerId), toTs(start), toTs(end)), period);
+        store.requireQueryAvailable();
+        return mapRows(client.query(SQL, normalizeWorkerId(workerId), toInstant(start), toInstant(end)), period);
     }
 
     /** 获取用户本月流量统计，按总流量倒序 */
@@ -50,10 +56,8 @@ public class UserTrafficStatsService {
         LocalDateTime start = yearMonth.atDay(1).atStartOfDay();
         LocalDateTime end = yearMonth.plusMonths(1).atDay(1).atStartOfDay();
         String period = yearMonth.format(DateTimeFormatter.ofPattern("yyyy-MM"));
-        String sql = "SELECT user_id, any(username) AS username, sum(bytes_in) AS byte_in, sum(bytes_out) AS byte_out " +
-                "FROM default.access_log WHERE worker_id = ? AND ts >= ? AND ts < ? " +
-                "GROUP BY user_id ORDER BY (byte_in + byte_out) DESC";
-        return mapRows(client.query(sql, normalizeWorkerId(workerId), toTs(start), toTs(end)), period);
+        store.requireQueryAvailable();
+        return mapRows(client.query(SQL, normalizeWorkerId(workerId), toInstant(start), toInstant(end)), period);
     }
 
     private String normalizeWorkerId(String workerId) {
@@ -72,8 +76,8 @@ public class UserTrafficStatsService {
         return list;
     }
 
-    private Timestamp toTs(LocalDateTime t) {
-        return Timestamp.from(t.atZone(ZoneId.systemDefault()).toInstant());
+    private java.time.Instant toInstant(LocalDateTime t) {
+        return t.atZone(ZoneId.systemDefault()).toInstant();
     }
 
     private Long toLong(Object o) {

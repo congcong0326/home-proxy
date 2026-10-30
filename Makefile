@@ -12,7 +12,6 @@ CONTROL_IMAGE ?= home-proxy-control-manager:latest
 WORKER_IMAGE ?= home-proxy-worker:latest
 WORKER_BUILD_ID ?= image-build
 WORKER_BUILD_CONTROL_MANAGER_HOST_IP ?= 127.0.0.1
-CLICKHOUSE_IMAGE ?= clickhouse/clickhouse-server:24.8
 MVN ?= mvn
 NPM ?= npm
 MAVEN_REPO ?= $(CURDIR)/.m2/repository
@@ -134,9 +133,8 @@ docker-reset-control:
 docker-save: docker-build
 	docker save -o $(DOCKER_IMAGE_TAR) $(CONTROL_IMAGE) $(WORKER_IMAGE)
 
-docker-save-offline: docker-build
-	docker pull $(CLICKHOUSE_IMAGE)
-	docker save -o $(DOCKER_IMAGE_TAR) $(CONTROL_IMAGE) $(WORKER_IMAGE) $(CLICKHOUSE_IMAGE)
+# The control plane no longer depends on third-party images; kept as an alias for existing runbooks.
+docker-save-offline: docker-save
 
 .PHONY: e2e-udp-kernel e2e-udp-rules e2e-xray-udp-flow
 e2e-udp-kernel:
