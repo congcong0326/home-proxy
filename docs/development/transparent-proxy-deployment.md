@@ -78,6 +78,8 @@ ss -lntp | grep 10808
 | `MARK` | `1` | TPROXY 使用的 fwmark |
 | `TABLE_ID` | `100` | 被标记流量使用的策略路由表 |
 | `ENABLE_TPROXY` | `1` | `1` 表示 TCP 走透明代理，`0` 表示只做普通 NAT 转发 |
+| `ENABLE_UDP_TPROXY` | `0` | `1` 时接管 LAN 发往 Fake IP 地址池的 UDP（除 53）；要求 `ENABLE_TPROXY=1` |
+| `UDP_TPROXY_443` | `1` | UDP 引流开启时，`1` 包含地址池 QUIC，`0` 让 UDP/443 继续走 REJECT |
 | `ENABLE_PROXY_443` | `1` | `1` 表示 HTTPS 也走透明代理，`0` 表示 443 直连 |
 | `ENABLE_DNS_UDP53` | `0` | 是否把 LAN 的 UDP/53 劫持到本机 DNS |
 | `REJECT_UDP_443` | `1` | `1` 表示拒绝 LAN 的 UDP/443（QUIC），客户端立即回落 TCP 并经透明代理；`0` 表示 QUIC 绕过代理直接转发 |
@@ -150,7 +152,7 @@ ss -lntp | grep 10808
 - 其余 TCP 用 `TPROXY --on-port ${TPORT}` 交给 NasProxy worker。
 - 为 LAN 到 WAN 增加 `MASQUERADE`，并放行基础 FORWARD。
 - 可选把 LAN 的 UDP/53 重定向到本机 DNS。
-- 透明代理只接管 TCP。默认在 FORWARD 的 LAN 放行规则之前拒绝 LAN 的 UDP/443，并拒绝 LAN 和本机发往 Fake IP 地址池的 UDP；使用 `REJECT --reject-with icmp-port-unreachable`，客户端无需等待 QUIC 超时即可回落 TCP。其余 UDP（如游戏、语音）仍直接 NAT 转发，不经过代理。
+- 默认只引流 TCP。开启 `ENABLE_UDP_TPROXY=1` 后，发往 Fake IP 地址池的 LAN UDP（除 53）进入 worker；只有 DIRECT 路由转发，其他策略静默丢弃。未接管的地址池 UDP、其余 LAN UDP/443 仍按原 FORWARD 规则拒绝；其余 UDP 仍直接 NAT 转发。本机发往 Fake IP 的 UDP 仍由 OUTPUT 拒绝。
 
 脚本只清理自己使用的路由表和链，不要为了排查随手执行 `ip rule flush`，那会把系统默认策略路由也删掉。
 
@@ -199,3 +201,21 @@ DNS 行为不符合预期：
 - 控制面端口不要直接暴露公网，确实要远程访问时优先走 VPN、内网穿透白名单或反向代理认证。
 - 公网 SOCKS/HTTP 入站必须配置认证，不要做开放代理。
 - 修改防火墙前留一个已经登录的 SSH 会话，确认新登录方式可用后再断开旧会话。
+
+## UDP 透明代理（一期）
+
+worker 的 `TP_PROXY` 入站在相同地址和端口额外监听 UDP，只支持 Linux epoll 和 IPv4 入站。容器需要 `network_mode: host` 和 `cap_add: [NET_ADMIN]`，以创建 `IP_TRANSPARENT` 监听及回包 socket。UDP 监听启动失败只记录错误，TCP 继续服务，可用 `ss -lunp | grep 10808` 核对。
+
+修改脚本的 LAN/WAN 参数后，在网关 root 下启用：
+
+```bash
+ENABLE_UDP_TPROXY=1 UDP_TPROXY_443=1 bash backend/tproxy_netty.sh
+```
+
+客户端需要使用同一 worker 的 Fake IP DNS。worker 从假地址反查域名、识别设备并选路；只有 DIRECT 转发，域名经 DNS 入站的实时配置视图解析真实 IP。不会把不支持的代理路由绕过为直连。地址池外 UDP 不会进入该链，UDP/53 也不由此开关接管。被接管的包进入 INPUT，不经过 FORWARD；如果部署设置了 INPUT 默认 DROP，需要放行 LAN 发往透明监听的流量。
+
+开启 QUIC 后，直连域名可用 HTTP/3；代理域名的 QUIC 被静默丢弃，浏览器可能先等待或竞速再回落 TCP。要让地址池 QUIC 继续收到 ICMP 立即回落，设 `UDP_TPROXY_443=0` 并重新执行脚本。无需改 `REJECT_UDP_443` 或 `REJECT_FAKE_IP_UDP`。
+
+资源参数仅通过 JVM 系统属性调整，例如容器环境变量 `JAVA_OPTS=-Dproxyworker.udp.idleTimeoutSeconds=60 -Dproxyworker.udp.maxSessions=4096`。完整默认值、计数口径和验证命令见 [UDP 一期实施与验证](../testing/udp-transparent-relay-phase1.md)。新配置用于新会话；已有会话保持接受时的路由/DNS 快照，空闲或监听关闭后释放。
+
+回滚引流：`ENABLE_UDP_TPROXY=0 bash backend/tproxy_netty.sh`。脚本会清除 UDP 链和入口跳转，恢复原 UDP 拒绝/NAT 行为；TCP 引流按原配置继续运行。

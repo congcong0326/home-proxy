@@ -7,23 +7,18 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.congcong.common.dto.ProxyContext;
-import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.*;
-import org.congcong.common.util.geo.*;
-import org.congcong.proxyworker.config.FindRoutes;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.config.RouteConfig;
 import org.congcong.proxyworker.dns.DnsRouteSelector;
 import org.congcong.proxyworker.context.ProxyContextResolver;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
-import org.congcong.proxyworker.rules.RuleSetRegistry;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.security.DestinationAddressPolicy;
 import org.congcong.proxyworker.security.PrivateDestinationBlockedException;
 import org.congcong.proxyworker.util.ProxyContextFillUtil;
 
 import java.net.InetAddress;
-import java.util.*;
 
 @ChannelHandler.Sharable
 @Slf4j
@@ -63,20 +58,19 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
                     : proxyTunnelRequest.getUser() == null ? null : proxyTunnelRequest.getUser().getId();
             String targetHost = proxyTunnelRequest.getTargetHost();
             RouteConfig matchedRoute;
+            boolean telemetryFallback;
             if (proxyTunnelRequest.getProtocolType() == ProtocolType.DNS_SERVER) {
                 String clientIp = proxyContext.getClientIp();
                 matchedRoute = DnsRouteSelector.select(inboundConfig, clientIp, targetHost).route();
+                telemetryFallback = matchedRoute == null;
             } else {
-                List<RouteConfig> routes = FindRoutes.find(routingUserId, inboundConfig);
-                boolean hostIsIp = isIp(targetHost);
-                matchedRoute = selectMatchedRoute(routes, targetHost, hostIsIp, proxyTunnelRequest);
+                RouteSelector.Selection selection = new RouteSelector().select(proxyTunnelRequest, inboundConfig, routingUserId);
+                matchedRoute = selection.route();
+                telemetryFallback = selection.fallback();
             }
-            boolean telemetryFallback = matchedRoute == null;
             if (matchedRoute == null) {
                 matchedRoute = fallbackRoute(inboundConfig, channelHandlerContext, proxyTunnelRequest);
-                if (matchedRoute == null) {
-                    return;
-                }
+                if (matchedRoute == null) return;
             }
             ProxyContextFillUtil.proxyContextRouteFill(matchedRoute, proxyContext);
             proxyTunnelRequest.setRouteConfig(matchedRoute);
@@ -95,103 +89,6 @@ public class RouterService extends SimpleChannelInboundHandler<ProxyTunnelReques
             TelemetryHooks.endStage(channelHandlerContext.channel(), org.congcong.proxyworker.telemetry.SessionObservation.Stage.ROUTE_SELECTION);
         }
         channelHandlerContext.fireChannelRead(proxyTunnelRequest);
-    }
-
-    private RouteConfig selectMatchedRoute(List<RouteConfig> routes, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
-        for (RouteConfig route : routes) {
-            if (routeMatches(route, targetHost, hostIsIp, proxyTunnelRequest)) {
-                return route;
-            }
-        }
-        return null;
-    }
-
-    private boolean routeMatches(RouteConfig route, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
-        int telemetryRuleIndex = 0;
-        for (RouteRule rule : route.getRules()) {
-            if (ruleMatches(route, rule, targetHost, hostIsIp, proxyTunnelRequest)) {
-                proxyTunnelRequest.setTelemetryMatchedRuleId(proxyTunnelRequest.getInboundConfig().getConfigVersion()
-                        + ":" + route.getId() + ":" + telemetryRuleIndex);
-                proxyTunnelRequest.setTelemetryMatchedRuleSet(rule.getConditionType() == RouteConditionType.RULE_SET ? rule.getValue() : null);
-                return true;
-            }
-            telemetryRuleIndex++;
-        }
-        return false;
-    }
-
-    private boolean ruleMatches(RouteConfig route, RouteRule rule, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
-        RouteConditionType conditionType = rule.getConditionType();
-        String value = rule.getValue();
-        MatchOp op = rule.getOp();
-        return switch (conditionType) {
-            case GEO -> matchesGeoRoute(route, value, op, targetHost, hostIsIp, proxyTunnelRequest);
-            case DOMAIN -> matchesDomainRoute(route, value, op, targetHost);
-            case AD_BLOCK -> false;
-            case RULE_SET -> matchesRuleSetRoute(value, op, targetHost, hostIsIp);
-        };
-    }
-
-    private boolean matchesGeoRoute(RouteConfig route, String expectedCountry, MatchOp op, String targetHost, boolean hostIsIp, ProxyTunnelRequest proxyTunnelRequest) {
-        String geoTarget = geoLookupTarget(proxyTunnelRequest, targetHost, hostIsIp);
-        if (geoTarget == null) {
-            return false;
-        }
-        ensureLocationResolved(proxyTunnelRequest, geoTarget);
-        if (!proxyTunnelRequest.isLocationResolveSuccess()) {
-            return false;
-        }
-        String country = proxyTunnelRequest.getCountry();
-        boolean matchCondition = Objects.equals(country, expectedCountry);
-        boolean matched = (op == MatchOp.IN) == matchCondition;
-        if (matched) {
-            log.debug("地理 {} {} 路由策略命中 {}", op, expectedCountry, targetHost);
-        }
-        return matched;
-    }
-
-    private void ensureLocationResolved(ProxyTunnelRequest proxyTunnelRequest, String targetIp) {
-        if (proxyTunnelRequest.isLocationResolveSuccess()) {
-            return;
-        }
-        boolean foreign = GeoIPUtil.getInstance().isForeign(targetIp, null);
-        proxyTunnelRequest.setCountry(foreign ? "NOT CN" : "CN");
-        proxyTunnelRequest.setLocationResolveSuccess(true);
-    }
-
-    private boolean matchesDomainRoute(RouteConfig route, String ruleValue, MatchOp op, String targetHost) {
-        boolean matched = (op == MatchOp.IN) == DomainMatcher.matches(targetHost, ruleValue);
-        if (matched) {
-            log.debug("域名路由 {} 策略命中 {}", ruleValue, targetHost);
-        }
-        return matched;
-    }
-
-    private boolean matchesRuleSetRoute(String ruleSetKey, MatchOp op, String targetHost, boolean hostIsIp) {
-        if (hostIsIp) {
-            return false;
-        }
-        boolean match = RuleSetRegistry.match(ruleSetKey, targetHost);
-        boolean matched = (op == MatchOp.IN) == match;
-        if (matched) {
-            log.debug("规则集 {} 策略命中 {}", ruleSetKey, targetHost);
-        }
-        return matched;
-    }
-
-    private String geoLookupTarget(ProxyTunnelRequest proxyTunnelRequest, String targetHost, boolean hostIsIp) {
-        if (hostIsIp) {
-            return targetHost;
-        }
-        String targetIp = proxyTunnelRequest.getTargetIp();
-        if (isIp(targetIp)) {
-            return targetIp;
-        }
-        return null;
-    }
-
-    private boolean isIp(String value) {
-        return DestinationAddressPolicy.parseLiteral(value).isPresent();
     }
 
     /**

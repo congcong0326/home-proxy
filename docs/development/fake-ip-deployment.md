@@ -1,8 +1,8 @@
 # Fake IP 部署与验证
 
-Fake IP 首期只支持同一 worker 上的 UDP DNS A 查询和 TCP 透明代理。先在同一 worker 创建并启用一个 `TP_PROXY` 入站和一个 `DNS_SERVER` 入站，再打开 DNS 入站的 `fakeIpEnabled`。DNS 入站的兜底路由必须指向真实 UDP DNS 或 DoT 上游；所有 DNS 上游地址必须是 IP 字面量。启用后，普通域名的 A 查询返回 `198.18.0.0/15` 地址，TTL 为 1 秒；适用域名的 AAAA 查询返回空答案。因此 IPv6 专用站点可能无法访问。
+Fake IP 支持同一 worker 上的 UDP DNS A 查询、TCP 透明代理，以及可选的 UDP DIRECT 透明转发。先在同一 worker 创建并启用一个 `TP_PROXY` 入站和一个 `DNS_SERVER` 入站，再打开 DNS 入站的 `fakeIpEnabled`。DNS 入站的兜底路由必须指向真实 UDP DNS 或 DoT 上游；所有 DNS 上游地址必须是 IP 字面量。启用后，普通域名的 A 查询返回 `198.18.0.0/15` 地址，TTL 为 1 秒；适用域名的 AAAA 查询返回空答案。因此 IPv6 专用站点可能无法访问。
 
-将客户端的 UDP/53 请求送到该 worker 的 DNS 入站，并将整个 `198.18.0.0/15` 地址池的 TCP 流量送到该 worker 的透明代理。`backend/tproxy_netty.sh` 中 `ENABLE_DNS_UDP53=0` 是默认值；可根据部署将其设为 `1`，或通过 DHCP 指定 worker DNS。确认透明代理监听已启动、策略路由能接收整个地址池，再允许客户端使用 Fake IP DNS。DNS over TCP、DoH、DoT 和 QUIC 不在首期范围。`backend/tproxy_netty.sh` 默认 `REJECT_UDP_443=1`、`REJECT_FAKE_IP_UDP=1`：拒绝 LAN 的 UDP/443 以及 LAN 和本机发往地址池的 UDP，客户端收到 ICMP 端口不可达后立即回落 TCP；关闭后发往 Fake IP 的 UDP 会经默认路由发往公网并静默超时。
+将客户端的 UDP/53 请求送到该 worker 的 DNS 入站，并将整个 `198.18.0.0/15` 地址池的 TCP 流量送到该 worker 的透明代理。`backend/tproxy_netty.sh` 中 `ENABLE_DNS_UDP53=0` 是默认值；可根据部署将其设为 `1`，或通过 DHCP 指定 worker DNS。确认透明代理监听已启动、策略路由能接收整个地址池，再允许客户端使用 Fake IP DNS。DNS 入站的 TCP、DoH、DoT 不在此部署范围；QUIC 可通过下述 UDP 引流开关启用。`backend/tproxy_netty.sh` 默认 `REJECT_UDP_443=1`、`REJECT_FAKE_IP_UDP=1`：拒绝 LAN 的 UDP/443 以及 LAN 和本机发往地址池的 UDP，客户端收到 ICMP 端口不可达后立即回落 TCP；关闭后发往 Fake IP 的 UDP 会经默认路由发往公网并静默超时。
 
 主路由本机的 DNS 如果也指向 Fake IP DNS，本机 curl、host 网络的 DDNS Go 等程序同样需要引流。`backend/tproxy_netty.sh` 默认启用 `ENABLE_LOCAL_FAKE_IP=1`：只对本机目标为 `198.18.0.0/15` 的 TCP 在 mangle OUTPUT 打标，经现有策略路由回送 `lo`，再在 PREROUTING 交给透明代理。源地址为 Fake IP 的回包不会再次打标，worker 连接真实上游的流量不受影响。该路径覆盖所有 TCP 端口，不使用 LAN 的端口白名单或 `ENABLE_PROXY_443` 开关。需要关闭时设为 `0` 并重新执行脚本；重复执行会清理旧规则。Docker bridge 网络的流量不会经过宿主机 OUTPUT，需要另行配置容器入口引流。
 
@@ -15,3 +15,11 @@ DNS 查询名与 Fake IP 主机名分别校验。A/AAAA 查询允许下划线、
 DNS 单次请求的名称校验失败会返回 `FORMERR`，其他同步处理错误返回 `SERVFAIL`；无法解码的报文会被丢弃，不关闭共享 UDP 监听。这些错误会记录日志，并非静默处理。监听运行状态同时检查 socket 是否存活。真实 DNS 上游复用前会检查绑定的本地地址及网卡；出站地址失效、写入失败或连续两次查询超时后会淘汰旧连接、结束待处理查询，并由后续查询重新连接。单次查询超时为 5 秒；检测到 WAN 地址已移除时，会在发送新查询前重建连接。可在日志中查找 `DNS 请求处理失败`、`丢弃处理失败的 DNS 请求` 和 `重建失效 DNS 上游连接` 来区分请求错误和上游连接故障。
 
 本地联动验证可运行 `make e2e-fake-ip-transparent`（也可使用 `make e2e-transparent`）。脚本启动临时管理端、worker、DNS 上游和透明代理网络命名空间，覆盖 HTTP/TLS、域名路由、DNS 缓存与故障、设备身份、日志指标、配置刷新和重启恢复；完整场景与报告见 [E2E 测试说明](../testing/fake-ip-transparent-e2e.md)。另运行 `make e2e-worker-proxy` 和 `make e2e-direct-outbound-safety` 检查现有代理和目的地址防护场景。
+
+## 可选 UDP DIRECT 转发
+
+开启 `ENABLE_UDP_TPROXY=1`（要求 `ENABLE_TPROXY=1`）并重新执行 `backend/tproxy_netty.sh`，LAN 发往地址池的 UDP（除 53）会交给同端口的 worker UDP 监听。`UDP_TPROXY_443=1` 默认允许地址池 QUIC 进入 worker；设为 `0` 时继续由 FORWARD 拒绝 UDP/443。默认关闭 UDP 引流，原拒绝行为保持不变。
+
+只有 DIRECT 路由支持 UDP；BLOCK、代理出站、目标重写和 DNS_REWRITING 均丢弃，不回 ICMP。回包源地址保持客户端所用的 Fake IP 和端口。映射丢失时 UDP 无法像 TCP 一样嗅探 Host/SNI，会进入短期拒绝缓存；客户端需要重新查询 DNS。每个 `(客户端IP:端口, 原目标IP:端口)` 独立会话，同一原目标共享透明回包 socket。
+
+本机 UDP、IPv6、代理出站 UDP 和日志事实均不在一期范围。回滚用 `ENABLE_UDP_TPROXY=0` 重跑脚本。资源限制、netns 实验及 E2E 见 [UDP 一期实施与验证](../testing/udp-transparent-relay-phase1.md)。

@@ -6,12 +6,10 @@ import org.congcong.proxyworker.telemetry.TelemetryHooks;
 import org.congcong.proxyworker.telemetry.SessionObservation.Stage;
 import io.netty.channel.*;
 import io.netty.util.concurrent.Promise;
-import io.netty.handler.codec.dns.DnsRecordType;
 import org.congcong.proxyworker.dns.DnsQueryContext;
-import org.congcong.proxyworker.dns.DnsQueryService;
 import org.congcong.proxyworker.dns.DnsResult;
 import org.congcong.proxyworker.dns.FakeIpRegistry;
-import org.congcong.proxyworker.dns.QueryMode;
+import org.congcong.proxyworker.dns.OutboundAddressQuery;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.proxyworker.outbound.AbstractOutboundConnector;
@@ -25,7 +23,6 @@ import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 
 public class DirectOutboundConnector extends AbstractOutboundConnector {
 
@@ -68,7 +65,7 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
                 && peer.getAddress() != null) clientIp = peer.getAddress().getHostAddress();
         DnsQueryContext context = new DnsQueryContext(clientIp, dnsInbound, dnsInbound.getConfigVersion());
         TelemetryHooks.beginStage(inbound, Stage.DNS);
-        CompletableFuture<DnsResult> dns = queryAddresses(host, context, inbound);
+        CompletableFuture<DnsResult> dns = OutboundAddressQuery.queryAddresses(host, context, inbound.eventLoop());
         inbound.closeFuture().addListener(closed -> {
             dns.cancel(false);
             overall.tryFailure(new IllegalStateException("inbound closed during DNS lookup"));
@@ -113,38 +110,6 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
             }
         }));
         return overall;
-    }
-
-    private CompletableFuture<DnsResult> queryAddresses(String host, DnsQueryContext context, Channel inbound) {
-        DnsQueryService service = DnsQueryService.getInstance();
-        CompletableFuture<DnsResult> result = new CompletableFuture<>();
-        CompletableFuture<DnsResult> first = service.query(host, DnsRecordType.A, QueryMode.OUTBOUND_REAL,
-                context, inbound.eventLoop());
-        AtomicReference<CompletableFuture<DnsResult>> active = new AtomicReference<>(first);
-        // Cancelling a thenCompose stage does not cancel its source. Propagate inbound closure
-        // to the active subscription so abandoned DNS work cannot populate the answer cache.
-        result.whenComplete((ignored, failure) -> {
-            if (result.isCancelled()) active.get().cancel(false);
-        });
-        first.whenComplete((answer, failure) -> {
-            if (result.isCancelled()) return;
-            if (failure != null) {
-                result.completeExceptionally(failure);
-            } else if (answer.code() == io.netty.handler.codec.dns.DnsResponseCode.NOERROR
-                    && answer.addresses().isEmpty()) {
-                CompletableFuture<DnsResult> next = service.query(host, DnsRecordType.AAAA,
-                        QueryMode.OUTBOUND_REAL, context, inbound.eventLoop());
-                active.set(next);
-                if (result.isCancelled()) next.cancel(false);
-                else next.whenComplete((retried, retryFailure) -> {
-                    if (retryFailure == null) result.complete(retried);
-                    else result.completeExceptionally(retryFailure);
-                });
-            } else {
-                result.complete(answer);
-            }
-        });
-        return result;
     }
 
     private ChannelFuture connectTcp(Channel inboundChannel, ProxyTunnelRequest request,

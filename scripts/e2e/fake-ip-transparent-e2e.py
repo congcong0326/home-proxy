@@ -162,6 +162,12 @@ def serve(config):
             except OSError:
                 pass
 
+    class UdpEcho(socketserver.BaseRequestHandler):
+        def handle(self):
+            payload, server = self.request
+            record(config, 'udp-echo', size=len(payload))
+            server.sendto(payload, self.client_address)
+
     class Socks(socketserver.BaseRequestHandler):
         def handle(self):
             self.request.settimeout(10)
@@ -188,6 +194,7 @@ def serve(config):
                TcpServer(('127.0.0.1', config['upstream']), DnsTcp),
                TcpServer((config['origin'], config['greeting']), Greeting),
                TcpServer((config['origin'], config['echo']), Echo),
+               UdpServer((config['origin'], config['echo']), UdpEcho),
                TcpServer(('127.0.0.1', config['socks']), Socks)]
     try:
         for server in servers:
@@ -229,6 +236,29 @@ def probe(config, args):
     action = args['action']
     if action == 'dns':
         return dns_query(config, args['domain'], args.get('qtype', 1))
+    if action == 'udp':
+        peer = (args['ip'], args.get('port', config['echo']))
+        with contextlib.ExitStack() as stack:
+            clients = [stack.enter_context(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+                       for _ in range(args.get('clients', 1))]
+            for index, client in enumerate(clients):
+                client.settimeout(1)
+                client.connect(peer)
+                payload = bytes([index + 1]) * args.get('size', 3000)
+                client.send(payload)
+                expected = args.get('expected', 'echo')
+                try:
+                    data, source = client.recvfrom(65535)
+                    check(expected == 'echo' and data == payload and source == peer,
+                          'UDP echo/source mismatch: ' + repr((len(data), source)))
+                except ConnectionRefusedError:
+                    check(expected == 'icmp', 'unexpected UDP ICMP rejection')
+                except socket.timeout:
+                    check(expected == 'drop', 'UDP timed out instead of ' + expected)
+                else:
+                    check(expected == 'echo', 'rejected UDP received an echo')
+            time.sleep(args.get('hold', 0))
+        return {'clients': len(clients)}
     fake, port = args['ip'], args.get('port', config['http'])
     started = time.monotonic()
     with socket.create_connection((fake, port), timeout=9) as raw:
@@ -426,38 +456,35 @@ class Suite:
         payload['inboundRouteBindings'] = [{'userIds': [user], 'routeIds': [dns_block, rewrite]}]
         self.dns = self.apply('/api/inbounds/' + str(self.dns['id']), payload)
 
+    def telemetry(self, kind):
+        from datetime import datetime, timezone
+        params = {'workerId': self.config['worker'], 'limit': 200,
+                  'from': datetime.fromtimestamp(self.started - 5, timezone.utc).isoformat(),
+                  'to': datetime.now(timezone.utc).isoformat()}
+        return self.api('/api/observability/v1/' + kind + '?' + urllib.parse.urlencode(params))
+
     def audit_visible(self):
-        rows = self.api('/api/logs/access?' + urllib.parse.urlencode({
-            'workerId': self.config['worker'], 'clientIp': self.config['client'], 'pageSize': 200,
-            'sort': 'ts,desc'}))['items']
+        # Legacy access collection is permanently disabled. Assert the current TCP facts.
+        rows = self.telemetry('sessions')
         for expected in self.audit:
-            candidates = [row for row in rows if row.get('originalTargetHost') == expected['domain']]
-            detail = None
-            for row in candidates:
-                ident = row['requestId']
-                if ident not in self.audit_details:
-                    self.audit_details[ident] = self.api('/api/logs/access/' + urllib.parse.quote(ident, safe=''))
-                candidate = self.audit_details[ident]
-                if candidate.get('clientPort') == expected['sourcePort']:
-                    detail = candidate
-                    break
-            if detail is None:
+            candidates = [row for row in rows if row.get('logicalTargetHost') == expected['domain']
+                          and row.get('clientPort') == expected['sourcePort']]
+            if not candidates:
                 return False
-            check(detail['status'] == expected['status'], 'audit status: ' + repr(detail))
-            check(detail['originalTargetIP'] == expected['ip'] and detail['originalTargetPort'] == expected['port'],
+            detail = candidates[0]
+            check(detail['connectOutcome'] == ('CONNECTED' if expected['status'] == 200 else 'FAILED'),
+                  'audit connect outcome: ' + repr(detail))
+            check(detail['originalDstIp'] == expected['ip'] and detail['originalDstPort'] == expected['port'],
                   'audit original destination: ' + repr(detail))
-            check(detail['logicalTargetSource'] == expected['source'], 'audit target source: ' + repr(detail))
-            final_ip_matches = (detail.get('finalConnectionIp') in (None, '') if expected['finalIp'] is None
-                                else detail.get('finalConnectionIp') == expected['finalIp'])
-            check(final_ip_matches and detail['configVersion'] == expected['version'],
+            source = 'FAKE_IP_MAPPING' if expected['source'] == 'FAKE_IP' else expected['source']
+            check(detail['targetSource'] == source, 'audit target source: ' + repr(detail))
+            check(detail.get('outboundPeerIp') == expected['finalIp'] and detail['configVersion'] == expected['version'],
                   'audit final IP/config version: ' + repr(detail))
             if expected['status'] != 200:
-                check(detail['errorCode'] and detail['errorMsg'], 'failure audit lacks reason')
+                check(detail.get('errorCode') and detail.get('failureStage'), 'failure audit lacks reason')
             if expected['route']:
-                check(detail['routePolicyId'] == expected['route'], 'audit TCP route mismatch')
-            if expected['finalIp'] == self.config['origin']:
-                check(detail['dnsRouteId'] == self.dns_route, 'audit real DNS route mismatch')
-            expected['requestId'] = detail['requestId']
+                check(str(detail['routeId']) == str(expected['route']), 'audit TCP route mismatch')
+            expected['requestId'] = detail['connectionId']
         return True
 
     def run(self):
@@ -665,18 +692,19 @@ class Suite:
             check(len(self.events(domain=domain)) == before, 'OUTBOUND_REAL did not use device rewrite')
 
             def visible():
-                rows = self.api('/api/logs/access?' + urllib.parse.urlencode({
-                    'workerId': c['worker'], 'clientIp': c['client'], 'originalTargetHost': domain,
-                    'pageSize': 100}))['items']
-                for row in rows:
-                    if row['userId'] != user['id'] or row['routePolicyId'] != tcp_route:
-                        continue
-                    detail = self.api('/api/logs/access/' + urllib.parse.quote(row['requestId'], safe=''))
-                    if detail['clientPort'] == result['sourcePort']:
-                        check(detail['dnsRouteId'] == dns_route and detail['status'] == 200,
-                              'device TCP real DNS identity differs from client DNS identity')
-                        return True
-                return False
+                sessions = [row for row in self.telemetry('sessions')
+                            if row.get('logicalTargetHost') == domain and row.get('clientPort') == result['sourcePort']]
+                dns_rows = [row for row in self.telemetry('dns') if (row.get('qname') or '').rstrip('.') == domain
+                            and str(row.get('userId')) == str(user['id'])]
+                if not sessions or not dns_rows:
+                    return False
+                detail = sessions[0]
+                check(str(detail['userId']) == str(user['id']) and str(detail['routeId']) == str(tcp_route)
+                      and detail['connectOutcome'] == 'CONNECTED', 'device TCP routing identity mismatch')
+                check(any(str(row.get('dnsRouteId')) == str(dns_route) for row in dns_rows),
+                      'device client DNS route mismatch')
+                # TCP real DNS has no V1 route-id field; fixture absence above proves the same rewrite view.
+                return True
             self.wait('device-specific DNS/TCP audit', visible)
             self.tp = self.apply('/api/inbounds/' + str(self.tp['id']), old_tp)
             self.dns = self.apply('/api/inbounds/' + str(self.dns['id']), old_dns)
@@ -767,9 +795,73 @@ class Suite:
             return False
 
 
+class UdpSuite(Suite):
+    def sockets(self, expression):
+        output = subprocess.check_output(['ss', '-H', '-uan', expression], text=True)
+        return len(output.strip().splitlines()) if output.strip() else 0
+
+    def fd_count(self):
+        pid = subprocess.check_output(['docker', 'inspect', '-f', '{{.State.Pid}}', self.config['container']], text=True).strip()
+        return len(list(Path('/proc', pid, 'fd').iterdir()))
+
+    def run(self):
+        c = self.config
+        domain = 'udp-direct' + SUFFIX
+        fake = self.fake(domain)
+        direct = f'src {fake} and sport = :{c["echo"]}'
+        outbound = f'dst {c["origin"]} and dport = :{c["echo"]}'
+        # Warm DNS transport and lazy JVM descriptors before taking the fd baseline.
+        self.client('udp', ip=fake)
+        self.wait('UDP warmup idle cleanup', lambda: self.sockets(direct) == 0, timeout=10)
+        baseline = self.fd_count()
+        def pair():
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(self.client, 'udp', ip=fake, clients=2, hold=2)
+                self.wait('one shared reply socket and two connected UDP sessions',
+                          lambda: self.sockets(direct) == 1 and self.sockets(outbound) == 2, timeout=5)
+                future.result()
+        self.case('UDP two client ports, 3000-byte echo, original Fake IP source, one shared reply socket', pair)
+        self.wait('UDP idle sessions and reply sockets zero',
+                  lambda: self.sockets(direct) == 0 and self.sockets(outbound) == 0, timeout=10)
+        check(self.fd_count() <= baseline, f'UDP fd leak: baseline={baseline}, after={self.fd_count()}')
+        print('PASS: UDP idle sockets zero and fd returned to baseline', baseline, flush=True)
+        # Configure a real proxy route. It must be dropped before DNS or upstream proxy work.
+        proxy = self.route('udp-proxy', 'OUTBOUND_PROXY', outboundProxyType='SOCKS5',
+                           outboundProxyHost='127.0.0.1', outboundProxyPort=c['socks'])
+        rows = self.api('/api/inbounds?pageSize=200')['items']
+        tp = next(row for row in rows if row['workerId'] == c['worker'] and row['protocol'] == 'TP_PROXY')
+        payload = self.inbound_payload(tp)
+        payload['inboundRouteBindings'][0]['routeIds'].insert(0, proxy)
+        self.apply('/api/inbounds/' + str(tp['id']), payload)
+        proxy_fake = self.fake('udp-proxy' + SUFFIX)
+        self.case('UDP OUTBOUND_PROXY route dropped', lambda: self.client('udp', ip=proxy_fake, expected='drop'))
+        check(not self.events(domain='udp-proxy' + SUFFIX), 'UDP rejected proxy route performed real DNS')
+        self.case('UDP unknown Fake IP dropped', lambda: self.client('udp', ip='198.19.255.254', expected='drop'))
+        # Toggle the harness jump off: the unchanged FORWARD REJECT must send ICMP.
+        rule = ['iptables', '-t', 'mangle', '-D', 'PREROUTING', '-i', c['hostIf'], '-p', 'udp',
+                '-d', '198.18.0.0/15', '-m', 'comment', '--comment', c['ruleComment'], '-j',
+                'TPROXY', '--on-ip', '0.0.0.0', '--on-port', str(c['tport']), '--tproxy-mark', c['mark'] + '/' + c['mark']]
+        subprocess.run(rule, check=True)
+        try:
+            self.case('UDP switch off returns ICMP port unreachable', lambda: self.client('udp', ip=fake, expected='icmp'))
+        finally:
+            rule[3] = '-A'
+            subprocess.run(rule, check=True)
+        # Capture internal counters on graceful shutdown without adding a metrics API.
+        subprocess.run(['docker', 'restart', c['container']], check=True, stdout=subprocess.DEVNULL)
+        logs = subprocess.check_output(['docker', 'logs', c['container']], text=True, stderr=subprocess.STDOUT)
+        summaries = [line for line in logs.splitlines() if 'UDP relay closed' in line]
+        check(summaries, 'missing UDP close counters')
+        summary = summaries[-1]
+        for field in ('drop_fake_ip_miss=1', 'drop_route_unsupported=1', 'reply_sockets=0', 'sessions_ready=0'):
+            check(field in summary, 'UDP counter missing: ' + field + ': ' + summary)
+        print('PASS: UDP internal counters:', summary, flush=True)
+        self.wait('restarted worker after UDP probes', lambda: self.status().get('online') and self.status().get('applySuccess'))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action', choices=('serve', 'client', 'run'))
+    parser.add_argument('action', choices=('serve', 'client', 'run', 'udp-run'))
     parser.add_argument('config', type=Path)
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
@@ -777,6 +869,8 @@ def main():
         serve(config)
     elif args.action == 'client':
         print(json.dumps(probe(config, json.load(sys.stdin))))
+    elif args.action == 'udp-run':
+        UdpSuite(config, args.config).run()
     else:
         Suite(config, args.config).run()
 

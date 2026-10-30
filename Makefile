@@ -139,3 +139,13 @@ docker-save-offline: docker-build
 	docker pull $(MYSQL_IMAGE)
 	docker pull $(CLICKHOUSE_IMAGE)
 	docker save -o $(DOCKER_IMAGE_TAR) $(CONTROL_IMAGE) $(WORKER_IMAGE) $(MYSQL_IMAGE) $(CLICKHOUSE_IMAGE)
+
+.PHONY: e2e-udp-kernel e2e-udp-rules e2e-xray-udp-flow
+e2e-udp-kernel:
+	bash scripts/e2e/udp-original-destination-netns.sh
+
+e2e-udp-rules:
+	python3 scripts/e2e/udp-tproxy-rules-netns.py
+
+e2e-xray-udp-flow:
+	python3 scripts/e2e/xray-vless-udp-flow-probe.py

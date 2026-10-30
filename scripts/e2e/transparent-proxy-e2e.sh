@@ -64,6 +64,8 @@ TLS_RULE_ADDED=0
 POLICY_RULE_ADDED=0
 POLICY_ROUTE_ADDED=0
 FAKE_RULE_ADDED=0
+UDP_RULE_ADDED=0
+UDP_REJECT_ADDED=0
 DNS_UPSTREAM_PID=""
 
 fail() {
@@ -111,6 +113,14 @@ cleanup() {
     if (( OVERRIDE_STARTED )); then docker rm -f "$OVERRIDE_CONTAINER" >/dev/null 2>&1; fi
     if [[ -n "$DNS_UPSTREAM_PID" ]]; then kill "$DNS_UPSTREAM_PID" >/dev/null 2>&1; wait "$DNS_UPSTREAM_PID" >/dev/null 2>&1; fi
 
+    if (( UDP_RULE_ADDED )); then
+        run_privileged iptables -t mangle -D PREROUTING -i "$HOST_IF" -p udp -d 198.18.0.0/15 \
+            -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK" >/dev/null 2>&1
+    fi
+    if (( UDP_REJECT_ADDED )); then
+        run_privileged iptables -D FORWARD -i "$HOST_IF" -p udp -d 198.18.0.0/15 \
+            -m comment --comment "$RULE_COMMENT" -j REJECT --reject-with icmp-port-unreachable >/dev/null 2>&1
+    fi
     if (( FAKE_RULE_ADDED )); then
         run_privileged iptables -t mangle -D PREROUTING -i "$HOST_IF" -p tcp -d 198.18.0.0/15 \
             -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK" >/dev/null 2>&1
@@ -329,12 +339,14 @@ start_dns_upstream() {
         --argjson dns "$DNS_PORT" --argjson upstream "$DNS_UPSTREAM_PORT" \
         --argjson http "$HTTP_ORIGIN_PORT" --argjson overrideHttp "$HTTP_OVERRIDE_PORT" --argjson tls "$TLS_ORIGIN_PORT" \
         --argjson greeting "$GREETING_PORT" --argjson echo "$ECHO_PORT" --argjson socks "$SOCKS_PORT" \
+        --arg hostIf "$HOST_IF" --arg ruleComment "$RULE_COMMENT" --arg mark "$MARK" --argjson tport "$TPORT" \
         --arg namespace "$CLIENT_NS" --arg container "$WORKER_CONTAINER" \
         --arg worker "$WORKER_ID" --arg control "$CONTROL_BASE" \
         --arg events "$TEMP_DIR/fixture-events.jsonl" --arg report "$TEMP_DIR/fake-ip-report.json" \
         '{origin:$origin,override:$override,gateway:$gateway,client:$client,dns:$dns,upstream:$upstream,
           http:$http,overrideHttp:$overrideHttp,tls:$tls,greeting:$greeting,echo:$echo,socks:$socks,namespace:$namespace,
-          container:$container,worker:$worker,control:$control,events:$events,report:$report}' \
+          container:$container,worker:$worker,control:$control,events:$events,report:$report,
+          hostIf:$hostIf,ruleComment:$ruleComment,mark:$mark,tport:$tport}' \
         > "$TEMP_DIR/fake-ip-config.json"
     python3 "$ROOT_DIR/scripts/e2e/fake-ip-transparent-e2e.py" serve "$TEMP_DIR/fake-ip-config.json" \
         > "$TEMP_DIR/dns-upstream.log" 2>&1 &
@@ -377,6 +389,7 @@ create_runtime_config() {
 
     docker run -d --rm --name "$WORKER_CONTAINER" --network host --cap-add NET_ADMIN \
         -v "$TEMP_DIR/worker-token:/run/secrets/worker-token:ro" \
+        -e JAVA_OPTS="-Dproxyworker.udp.idleTimeoutSeconds=3" \
         -e CONTROL_MANAGER_URL="$CONTROL_BASE" \
         -e WORKER_ID="$WORKER_ID" \
         -e WORKER_MANAGEMENT_ENABLED=true \
@@ -416,6 +429,12 @@ setup_network() {
     run_privileged iptables -t mangle -A PREROUTING -i "$HOST_IF" -p tcp -d 198.18.0.0/15 \
         -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK"
     FAKE_RULE_ADDED=1
+    run_privileged iptables -t mangle -A PREROUTING -i "$HOST_IF" -p udp -d 198.18.0.0/15 \
+        -m comment --comment "$RULE_COMMENT" -j TPROXY --on-ip 0.0.0.0 --on-port "$TPORT" --tproxy-mark "$MARK/$MARK"
+    UDP_RULE_ADDED=1
+    run_privileged iptables -I FORWARD 1 -i "$HOST_IF" -p udp -d 198.18.0.0/15 \
+        -m comment --comment "$RULE_COMMENT" -j REJECT --reject-with icmp-port-unreachable
+    UDP_REJECT_ADDED=1
     run_privileged ip rule add priority "$RULE_PRIORITY" fwmark "$MARK/$MARK" lookup "$ROUTE_TABLE"
     POLICY_RULE_ADDED=1
     run_privileged ip route add local 0.0.0.0/0 dev lo table "$ROUTE_TABLE"
@@ -432,6 +451,8 @@ run_assertions() {
     assert_blocked 'TLS SNI block' client_curl --resolve "blocked-tls.tproxy-e2e.test:${TLS_ORIGIN_PORT}:${ORIGIN_IP}" "https://blocked-tls.tproxy-e2e.test:${TLS_ORIGIN_PORT}/"
 
     (umask 077; printf '%s' "$ADMIN_TOKEN" > "$TEMP_DIR/admin-token")
+    run_privileged python3 "$ROOT_DIR/scripts/e2e/fake-ip-transparent-e2e.py" \
+        udp-run "$TEMP_DIR/fake-ip-config.json"
     run_privileged python3 "$ROOT_DIR/scripts/e2e/fake-ip-transparent-e2e.py" \
         run "$TEMP_DIR/fake-ip-config.json"
 

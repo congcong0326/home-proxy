@@ -102,3 +102,18 @@ docker compose -f /root/docker/docker-compose.yml up -d --no-deps --no-build --f
 - SOCKS5 over TLS：绑定临时 worker 端口，完成真实 TLS 握手、认证并发起 CONNECT。
 - DNS UDP 转发：绑定本地 UDP DNS worker 和假上游，然后验证并发查询 id 映射。
 - DoT 上游：模拟 TLS DNS 上游，并验证带长度前缀的 DNS 请求/响应流程。
+
+## UDP 透明转发一期
+
+`RouteSelectorTest` 验证抽取后的规则顺序、DOMAIN/GEO/RULE_SET、AD_BLOCK 不匹配、兜底和 telemetry；`OutboundAddressQueryTest` 验证 A/AAAA 顺序和两阶段取消。`UdpSessionManagerTest` 使用假 connector/回包池覆盖缓冲、拒绝、容量、LRU、配置快照、条件删除、引用计数、写失败和 ByteBuf 释放。
+
+`DirectUdpOutboundConnectorIT` 用真实 epoll 和本地 UDP echo 验证 IP/域名直连、3000 字节、DNS 池内污染拒绝与 idle 清理。`TransparentUdpServerIT` 验证同端口 TCP/UDP 启停、刷新、epoll 关闭和 UDP 绑定失败时 TCP 保持可用。透明 UDP 不做公网限制，与 TCP `TP_PROXY` 保持一致，因此这里允许 loopback DIRECT。
+
+```bash
+make e2e-udp-kernel       # root，独立 netns 验证 recipient、透明回包及 rp_filter
+make e2e-udp-rules        # root，独立 netns 重复应用真实部署脚本并切换 UDP/QUIC
+make e2e-transparent     # 独立控制端/worker，包含 UDP DIRECT、拒绝、大报文、fd 回收、ICMP 回滚
+make e2e-xray-udp-flow   # 需要本地 Xray，核对二期 UDP flow 前置条件
+```
+
+详细断言、结果和 HTTP/3 手工检查见 [UDP 一期实施与验证](udp-transparent-relay-phase1.md)。原透明 E2E 的 TCP 审计使用 V1 sessions/DNS，避免依赖已停用采集的旧 access 日志；TCP 真实 DNS 视图通过 fixture 查询记录及设备重写验证，V1 session 没有旧 `dnsRouteId` 字段。

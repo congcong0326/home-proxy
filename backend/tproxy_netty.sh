@@ -17,6 +17,9 @@ TPORT=10808                  # netty/tpproxy 监听端口 (127.0.0.1:TPORT)
 ENABLE_TPROXY=1              # 1 = TCP 走 TPROXY -> 本机 ${TPORT}
                              # 0 = 不做 TPROXY，TCP 直接按路由/NAT 转发
 
+ENABLE_UDP_TPROXY=${ENABLE_UDP_TPROXY:-0} # 1 = LAN 发往 Fake IP 的 UDP（除 53）走透明代理
+UDP_TPROXY_443=${UDP_TPROXY_443:-1}       # 0 = 地址池 UDP/443 仍走 FORWARD REJECT
+
 ENABLE_PROXY_443=1           # 0 = 443 不代理（直连），1 = 443 走代理
 
 ENABLE_LOCAL_FAKE_IP=1       # 1 = 本机访问 Fake IP 的 TCP 也走透明代理
@@ -36,6 +39,11 @@ CHAIN_LAN="nas_proxy"        # 代理 LAN 设备的链名
 BYPASS_TCP_PORTS="18081"
 
 
+
+if [ "${ENABLE_UDP_TPROXY}" -eq 1 ] && [ "${ENABLE_TPROXY}" -ne 1 ]; then
+  echo "[!] ENABLE_UDP_TPROXY=1 需要 ENABLE_TPROXY=1" >&2
+  exit 1
+fi
 
 echo "[*] 等待 $WAN_IF 出现并获取 IP..."
 
@@ -101,6 +109,11 @@ while iptables -t mangle -D PREROUTING \
   -m comment --comment "${CHAIN_LAN}_local_fake_ip" \
   -j TPROXY --on-ip 127.0.0.1 --on-port "${TPORT}" \
   --tproxy-mark "${MARK}/${MARK}" 2>/dev/null; do :; done
+
+while iptables -t mangle -D PREROUTING -i "${LAN_IF}" -s "${LAN_CIDR}" -p udp -d "${FAKE_IP_CIDR}" \
+  -m comment --comment "${CHAIN_LAN}_udp" -j "${CHAIN_LAN}_udp" 2>/dev/null; do :; done
+iptables -t mangle -F "${CHAIN_LAN}_udp" 2>/dev/null || true
+iptables -t mangle -X "${CHAIN_LAN}_udp" 2>/dev/null || true
 
 iptables -t mangle -D PREROUTING -i ${LAN_IF} -s ${LAN_CIDR} -p tcp -j ${CHAIN_LAN} 2>/dev/null || true
 iptables -t mangle -F ${CHAIN_LAN} 2>/dev/null || true
@@ -194,6 +207,18 @@ else
   echo "[*] ENABLE_TPROXY=0，不创建 TPROXY 规则"
 fi
 
+if [ "${ENABLE_UDP_TPROXY}" -eq 1 ]; then
+  iptables -t mangle -N "${CHAIN_LAN}_udp"
+  iptables -t mangle -A "${CHAIN_LAN}_udp" -p udp --dport 53 -j RETURN
+  if [ "${UDP_TPROXY_443}" -eq 0 ]; then
+    iptables -t mangle -A "${CHAIN_LAN}_udp" -p udp --dport 443 -j RETURN
+  fi
+  iptables -t mangle -A "${CHAIN_LAN}_udp" -p udp \
+    -j TPROXY --on-port "${TPORT}" --tproxy-mark "${MARK}/${MARK}"
+  iptables -t mangle -A PREROUTING -i "${LAN_IF}" -s "${LAN_CIDR}" -p udp -d "${FAKE_IP_CIDR}" \
+    -m comment --comment "${CHAIN_LAN}_udp" -j "${CHAIN_LAN}_udp"
+fi
+
 ############################
 # 6. NAT & FORWARD
 ############################
@@ -212,7 +237,7 @@ fi
 iptables -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -A FORWARD -i ${LAN_IF} -s ${LAN_CIDR} -j ACCEPT
 
-# 透明代理只接管 TCP，UDP 拒绝规则必须插在 LAN ACCEPT 之前；
+# 未被 TPROXY 接管的 UDP 拒绝规则必须插在 LAN ACCEPT 之前；
 # 用 REJECT 回 ICMP 端口不可达，客户端无需等待 QUIC 超时即可回落 TCP。
 if [ "${REJECT_UDP_443}" -eq 1 ]; then
   echo "[*] 拒绝 LAN 的 UDP/443（QUIC）"
@@ -277,3 +302,6 @@ echo " REJECT_UDP_443   = ${REJECT_UDP_443}"
 echo " REJECT_FAKE_IP_UDP = ${REJECT_FAKE_IP_UDP}"
 echo " BYPASS_TCP_PORTS = ${BYPASS_TCP_PORTS}"
 echo " CHAIN_LAN        = ${CHAIN_LAN}"
+
+echo " ENABLE_UDP_TPROXY = ${ENABLE_UDP_TPROXY}"
+echo " UDP_TPROXY_443   = ${UDP_TPROXY_443}"

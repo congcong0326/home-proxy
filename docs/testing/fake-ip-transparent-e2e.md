@@ -50,12 +50,12 @@ make e2e-fake-ip-transparent E2E_BUILD=0 E2E_KEEP_ARTIFACTS=1
 | OUTBOUND_REAL 选路 | 客户端已经持有 Fake IP 时，将真实 DNS 策略改为 BLOCK/重写；TCP DIRECT 遵循新策略，不绕过 DNS 规则 |
 | 设备身份 | 为测试客户端 IP 配置专属用户、TCP 路由与 DNS 重写；客户端 DNS 与旧 Fake IP 的 OUTBOUND_REAL 都按同一设备选路；审计核对 userId、TCP 路由和 DNS 路由 |
 | API 配置校验 | 多 DNS、多透明入口、移除同 worker 透明入口、错误协议开关、GEO、无真实转发兜底、域名上游、池内上游、自指 DNS 均拒绝；运行快照与正常访问不受影响 |
-| 日志落库 | 按客户端端口关联本轮成功/失败请求，查询 API 明细；校验状态、Fake IP/原始端口、恢复域名/来源、TCP 路由、真实 DNS 路由、最终 IP、配置版本及失败原因 |
+| 日志落库 | 按客户端端口关联本轮成功/失败请求，查询 API 明细；校验状态、Fake IP/原始端口、恢复域名/来源、TCP 路由、最终 IP、配置版本及失败原因；V1 session 不含真实 DNS 路由字段，客户端 DNS 路由及 fixture 另行核对 |
 | 心跳指标 | 观察分配、反查未命中、缓存命中、真实 DNS 超时、截断、池内地址拒绝计数 |
 | 开关关闭 | DNS 恢复真实 A/AAAA；旧映射继续访问；未映射地址仍只能恢复 Host 或明确关闭 |
 | worker 重启 | 开关保持关闭，重启隔离 worker，避免新发放掩盖映射丢失；旧地址无 Host/空首包关闭，Host/SNI 回退成功；重新开启后重新查询与访问成功 |
 
-连接拒绝要求 EOF 或 reset，socket timeout 一律判为失败。缓存与并发断言使用 fixture 的真实 UDP/TCP 查询次数，不能仅根据客户端拿到 HTTP 200 判断缓存正确。真实 DNS 不依赖公网、宿主机系统 resolver 或外部服务。TCP BLOCK 沿用现有不记录访问日志的策略，其断言核对连接关闭与上游查询；失败审计核对真实解析失败的请求。
+连接拒绝要求 EOF 或 reset，socket timeout 一律判为失败。缓存与并发断言使用 fixture 的真实 UDP/TCP 查询次数，不能仅根据客户端拿到 HTTP 200 判断缓存正确。真实 DNS 不依赖公网、宿主机系统 resolver 或外部服务。TCP BLOCK 的功能断言核对连接关闭与上游查询；失败审计核对真实解析失败的请求。
 
 ## 报告与排障
 
@@ -70,4 +70,6 @@ make e2e-fake-ip-transparent E2E_BUILD=0 E2E_KEEP_ARTIFACTS=1
 
 ## 覆盖边界
 
-本套 E2E 验证 IPv4 Fake IP、UDP DNS、TCP 透明代理与 UDP 截断后的真实 TCP DNS 重试。DNS 监听端的 TCP、DoH、QUIC/UDP 透明转发、IPv6 Fake IP 不在首期范围。真实上游 DoT、多设备同时解析不同视图、完整 32,768 条 LRU 淘汰与负载压力需要另做对应专项；本套并发检查只验证 12 路同域名请求的正确性。
+本套 E2E 验证 IPv4 Fake IP、UDP DNS、TCP 透明代理与 UDP 截断后的真实 TCP DNS 重试。DNS 监听端的 TCP、DoH、IPv6 Fake IP 不在本套范围；UDP DIRECT 已扩展，具体见 [UDP 一期验证](udp-transparent-relay-phase1.md)。真实上游 DoT、多设备同时解析不同视图、完整 32,768 条 LRU 淘汰与负载压力需要另做对应专项；本套并发检查只验证 12 路同域名请求的正确性。
+
+UDP 扩展验证原始回包源地址、两个客户端共享 socket、3000 字节报文、代理/未知地址拒绝、空闲后 socket/fd 回收和开关关闭后 ICMP；资源计数在 worker 正常关闭时读取内部汇总日志，不接入 V1 事实或心跳。测试用管理端的 V1 flush 延迟为 1 秒，生产默认值不变。

@@ -51,6 +51,7 @@ public abstract class AbstractProxyServer {
             throw new IllegalArgumentException("Inbound config is required");
         }
         runtimeConfig.updateAndGet(current -> new RuntimeConfigSnapshot(newConfig, current.dnsInboundConfig()));
+        onRuntimeConfigUpdated();
     }
 
     public final void updateRuntimeConfig(InboundConfig newConfig, InboundConfig dnsConfig) {
@@ -58,6 +59,11 @@ public abstract class AbstractProxyServer {
             throw new IllegalArgumentException("Inbound config is required");
         }
         runtimeConfig.set(new RuntimeConfigSnapshot(newConfig, dnsConfig));
+        onRuntimeConfigUpdated();
+    }
+
+    /** Called after each in-place snapshot update; the listener itself is not restarted. */
+    protected void onRuntimeConfigUpdated() {
     }
 
     protected abstract void doStart() throws InterruptedException;

@@ -7,15 +7,13 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.DefaultChannelPromise;
-import io.netty.handler.codec.dns.DnsRecordType;
 import io.netty.handler.codec.dns.DnsResponseCode;
 import io.netty.util.concurrent.Promise;
 import org.congcong.proxyworker.config.InboundConfig;
 import org.congcong.proxyworker.dns.DnsQueryContext;
-import org.congcong.proxyworker.dns.DnsQueryService;
 import org.congcong.proxyworker.dns.DnsResult;
 import org.congcong.proxyworker.dns.FakeIpRegistry;
-import org.congcong.proxyworker.dns.QueryMode;
+import org.congcong.proxyworker.dns.OutboundAddressQuery;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.server.tunnel.ProxyTunnelRequest;
 import org.congcong.proxyworker.security.ProxySafetyCounters;
@@ -23,7 +21,6 @@ import org.congcong.proxyworker.security.ProxySafetyCounters;
 import java.net.InetSocketAddress;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
 /** Resolves configured proxy endpoints through the worker DNS view before TCP connect. */
@@ -54,7 +51,7 @@ public final class OutboundEndpointResolver {
         DnsQueryContext context = new DnsQueryContext(clientIp, dns.get(), dns.get().getConfigVersion());
         DeferredFuture overall = new DeferredFuture(inbound);
         TelemetryHooks.beginStage(inbound, Stage.DNS);
-        CompletableFuture<DnsResult> lookup = queryAddresses(host, context, inbound);
+        CompletableFuture<DnsResult> lookup = OutboundAddressQuery.queryAddresses(host, context, inbound.eventLoop());
         ChannelFutureListener cancelOnClose = closed -> {
             lookup.cancel(false);
             overall.tryFailure(new IllegalStateException("inbound closed during proxy endpoint lookup"));
@@ -92,35 +89,6 @@ public final class OutboundEndpointResolver {
             }
         }));
         return overall;
-    }
-
-    private static CompletableFuture<DnsResult> queryAddresses(String host, DnsQueryContext context, Channel inbound) {
-        DnsQueryService service = DnsQueryService.getInstance();
-        CompletableFuture<DnsResult> lookup = new CompletableFuture<>();
-        CompletableFuture<DnsResult> first = service.query(host, DnsRecordType.A, QueryMode.OUTBOUND_REAL,
-                context, inbound.eventLoop());
-        AtomicReference<CompletableFuture<DnsResult>> active = new AtomicReference<>(first);
-        lookup.whenComplete((ignored, failure) -> {
-            if (lookup.isCancelled()) active.get().cancel(false);
-        });
-        first.whenComplete((answer, failure) -> {
-            if (lookup.isCancelled()) return;
-            if (failure != null) {
-                lookup.completeExceptionally(failure);
-            } else if (answer.code() == DnsResponseCode.NOERROR && answer.addresses().isEmpty()) {
-                CompletableFuture<DnsResult> next = service.query(host, DnsRecordType.AAAA, QueryMode.OUTBOUND_REAL,
-                        context, inbound.eventLoop());
-                active.set(next);
-                if (lookup.isCancelled()) next.cancel(false);
-                else next.whenComplete((retried, retryFailure) -> {
-                    if (retryFailure == null) lookup.complete(retried);
-                    else lookup.completeExceptionally(retryFailure);
-                });
-            } else {
-                lookup.complete(answer);
-            }
-        });
-        return lookup;
     }
 
     private static final class DeferredFuture extends DefaultChannelPromise {

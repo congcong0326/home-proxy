@@ -198,3 +198,12 @@
 - `TelemetryProperties`／Compose：管理端队列总条数、字节预算和 flush 条数／等待时间；`TelemetryController` 的 status 返回管理端队列状态。
 - `CredentialGeoAnalysis`：缺失数据库每分钟重试，认证位置优先中文；`TelemetryStore` 查询时刷新历史 DB_UNAVAILABLE 分析。mmdb 放 `data/geoip/GeoLite2-City.mmdb`，不提交数据库。
 - 语义与边界见 [阶段 A 的管理端内存 ACK](testing/gateway-observability-stage-a.md#管理端内存-ack-与批量写入2026-10-09)。
+
+## UDP 透明转发一期
+
+- `proxy-worker/router/RouteSelector`：从 TCP handler 提取的无 channel 路由匹配，TCP/UDP 共用；DNS 入站继续使用 `DnsRouteSelector`。
+- `proxy-worker/dns/OutboundAddressQuery`：不依赖入站 channel 的 A → 空答案再 AAAA 查询，保留取消传播，供 TCP direct、代理端点与 UDP 共用。
+- `proxy-worker/udp`：`TransparentUdpServer` 使用 TCP 服务的原子运行时快照 supplier；`UdpSessionManager` 管理单 loop 会话/LRU/拒绝缓存，`ReplySocketPool` 按原目标引用计数；`DirectUdpOutboundConnector` 仅 DIRECT，通过真实 DNS 视图解析并拒绝池内出站地址。
+- `server/impl/TransparentProxyServer`：先启动 TCP 再启动 UDP，关闭顺序相反，UDP 启动失败不影响 TCP。
+- `backend/tproxy_netty.sh`：`ENABLE_UDP_TPROXY` / `UDP_TPROXY_443`，默认关闭 UDP 引流；不增加 DTO、管理台字段或日志事实。
+- [实施与验证](testing/udp-transparent-relay-phase1.md)：内核 probe、规则重复执行、回环集成、完整 TCP/UDP E2E 和 Xray UDP flow 前置验证。
