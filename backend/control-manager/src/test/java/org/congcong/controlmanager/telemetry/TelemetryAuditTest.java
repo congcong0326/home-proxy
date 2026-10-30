@@ -37,11 +37,10 @@ class TelemetryAuditTest {
         when(client.query(startsWith("SELECT count()"), any(Object[].class))).thenReturn(List.of(Map.of("total", 1)));
         when(client.query(startsWith("SELECT raw_json"), any(Object[].class))).thenReturn(List.of(Map.of(
                 "raw_json", raw, "received_at", "2026-10-09 00:00:00",
-                "analysis_json", "{\"geoLookupStatus\":\"DB_UNAVAILABLE\",\"riskTags\":[\"LOCATION_UNKNOWN\"]}")));
+                "analysis_json", "{\"geoLookupStatus\":\"DB_UNAVAILABLE\"}")));
         var resolved = new org.congcong.common.telemetry.CredentialAuthAnalysisV1();
         resolved.setGeoLookupStatus("RESOLVED");
         resolved.setSourceCountry("美国");
-        resolved.setRiskTags(List.of());
         when(geo.analyze(any())).thenReturn(resolved);
         var page = store.page(TelemetrySchema.AUTH, request());
         var detail = store.detail(TelemetrySchema.AUTH, attempt, request());
@@ -50,7 +49,6 @@ class TelemetryAuditTest {
             var analysis = (Map<?, ?>) row.get("analysis");
             assertEquals("RESOLVED", analysis.get("geoLookupStatus"));
             assertEquals("美国", analysis.get("sourceCountry"));
-            assertEquals(List.of(), analysis.get("riskTags"));
             assertEquals("8.8.8.8", row.get("clientIp"));
         }
         verify(client, never()).execute(startsWith("INSERT"), any(Object[].class));
@@ -66,10 +64,11 @@ class TelemetryAuditTest {
         request.setExactAuthUsername("alice'");
         request.setAuthOutcomeGroup("FAILURE");
         store.page(TelemetrySchema.AUTH, request);
-        verify(client, times(2)).query(contains("(attempted_username = ? OR verified_username = ? OR username = ?) AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"), any(Object[].class));
+        verify(client, times(2)).query(contains("(attempted_username = ? OR username = ?) AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"), any(Object[].class));
         request.setAuthOutcomeGroup("invalid");
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
         request.setAuthOutcomeGroup("SUCCESS");
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
     }
 
@@ -180,16 +179,16 @@ class TelemetryAuditTest {
         properties.setQueryEnabled(true);
         var request = request();
         request.setOffset(10001);
-        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
         request.setOffset(0);
         request.setLimit(201);
-        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
         request.setLimit(50);
         request.setTarget("domain.test");
-        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
         request.setTarget(null);
         request.setTo(request.getFrom().plusSeconds(31 * 86400L + 1));
-        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.EVENTS, request));
+        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
         verifyNoInteractions(client);
     }
 
@@ -203,9 +202,9 @@ class TelemetryAuditTest {
         mvc.perform(get("/api/observability/v1/dns/page").param("workerId", "home-01")
                 .param("from", "2026-10-09T00:00:00Z").param("to", "2026-10-10T00:00:00Z"))
                 .andExpect(status().isOk()).andExpect(jsonPath("total").value("0")).andExpect(jsonPath("items").isEmpty());
-        mvc.perform(get("/api/observability/v1/events/" + UUID.randomUUID()).param("workerId", "home-01")
+        mvc.perform(get("/api/observability/v1/dns/" + UUID.randomUUID()).param("workerId", "home-01")
                 .param("from", "2026-10-09T00:00:00Z").param("to", "2026-10-10T00:00:00Z")).andExpect(status().isNotFound());
-        mvc.perform(get("/api/observability/v1/events/page").param("workerId", "home-01")
+        mvc.perform(get("/api/observability/v1/dns/page").param("workerId", "home-01")
                 .param("from", "2026-10-09T00:00:00Z").param("to", "2026-10-10T00:00:00Z").param("limit", "201")).andExpect(status().isBadRequest());
     }
 }

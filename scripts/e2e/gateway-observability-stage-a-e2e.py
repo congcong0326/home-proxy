@@ -206,9 +206,8 @@ def run(api, legacy_only=False):
         def rows(kind):
             return [row for row in api.request('/api/observability/v1/' + kind + '?' + urllib.parse.urlencode(query)) if (row.get('inboundName') or '').startswith(PREFIX) or (kind == 'dns' and row.get('qname', '').rstrip('.') == 'stage-a.telemetry.test')]
         sessions = wait('all connection summaries persisted', lambda: (lambda data: data if len(data) >= 11 else None)(rows('sessions')))
-        auth = wait('all credential attempts persisted', lambda: (lambda data: data if len(data) >= 11 else None)(rows('credential-auth')))
+        auth = wait('all failed credential attempts persisted', lambda: (lambda data: data if {'FAILURE', 'DENIED', 'MALFORMED'} <= {row['authOutcome'] for row in data} else None)(rows('credential-auth')))
         dns = wait('A/AAAA query facts persisted', lambda: (lambda data: data if len(data) >= 2 else None)(rows('dns')))
-        events = wait('connect events persisted', lambda: rows('events'))
         assert len({row['recordId'] for row in sessions}) == len(sessions)
         for host, category in [('private', 'INTERNAL_REWRITE'), ('public', 'EXTERNAL'), ('unknown', 'UNKNOWN')]:
             matched = [row for row in sessions if row.get('logicalTargetHost') == host + '.telemetry.test' and row['inboundProtocol'] == 'SOCKS5']
@@ -222,29 +221,23 @@ def run(api, legacy_only=False):
             assert row['recordId'] == row['connectionId']
         assert any(row['connectOutcome'] == 'BLOCKED' and row['uploadBytes'] == '0' for row in sessions)
         outcomes = {row['authOutcome'] for row in auth}
-        assert {'SUCCESS', 'FAILURE', 'DENIED', 'CHALLENGE', 'MALFORMED'} <= outcomes, outcomes
+        assert {'FAILURE', 'DENIED', 'MALFORMED'} <= outcomes, outcomes
+        assert not outcomes & {'SUCCESS', 'CHALLENGE', 'CANCELLED'}, 'only failed authentication is reported'
         for row in auth:
             assert row['workerId'] == WORKER
             assert row['analysis']['geoLookupStatus'] == 'PRIVATE', row
             assert row['analysis']['sourceCountry'] is None
-            if row['authOutcome'] != 'SUCCESS':
-                assert row['verifiedUsername'] is None and row['userId'] is None
+            assert row['userId'] is None and 'verifiedUsername' not in row
             assert PASSWORD not in json.dumps(row) and 'deliberately-invalid' not in json.dumps(row)
-        no_tunnel = [row for row in auth if row['authOutcome'] == 'SUCCESS' and not next(s for s in sessions if s['connectionId'] == row['connectionId'])['logicalTargetHost']]
-        assert no_tunnel, 'successful credential check without a target must be retained'
+        # A successful check is not reported, but still identifies the user on the connection summary.
+        assert any(row['identitySource'] == 'ACCOUNT_AUTH' and row.get('username') for row in sessions)
         assert any(row['qtype'] == 'A' and row['answerMode'] == 'FAKE_IP' and row['answerIps'] for row in dns)
         assert any(row['qtype'] == 'AAAA' and row['emptyAnswerReason'] == 'IPV6_SUPPRESSED' and row['rcode'] == 0 for row in dns)
         assert all(row['responseSent'] is True for row in dns)
         assert all(row['inboundProtocol'] == 'DNS_SERVER' and row['transport'] == 'UDP' for row in dns)
-        assert any(row['eventType'] == 'CONNECT_RESULT' and row['outcome'] == 'CONNECTED' for row in events)
-        for event in events:
-            session = next(row for row in sessions if row['connectionId'] == event['connectionId'])
-            for field in ['inboundId', 'inboundName', 'inboundProtocol', 'clientIp', 'clientPort',
-                          'clientIpSource', 'transportPeerIp', 'transportPeerPort', 'username', 'userId', 'identitySource']:
-                assert event.get(field) == session.get(field), ('event context mismatch', field, event['recordId'])
-        report = {'workerId': WORKER, 'from': iso(from_time), 'to': query['to'], 'counts': {kind: len(data) for kind, data in [('sessions', sessions), ('credential-auth', auth), ('dns', dns), ('events', events)]},
+        report = {'workerId': WORKER, 'from': iso(from_time), 'to': query['to'], 'counts': {kind: len(data) for kind, data in [('sessions', sessions), ('credential-auth', auth), ('dns', dns)]},
                   'controlledPayloadBytesPerDirection': len(PAYLOAD), 'tablesPreserved': True, 'bufferMode': 'MEMORY', 'restartRecoverySupported': False,
-                  'dnsProtocolCollected': True, 'eventContextCollected': True,
+                  'dnsProtocolCollected': True,
                   'sessionSamples': [{k: row.get(k) for k in ['connectionId', 'logicalTargetHost', 'connectOutcome', 'sessionOutcome', 'trafficCategory', 'selectedTargetIp', 'uploadBytes', 'downloadBytes']} for row in sessions if row.get('logicalTargetHost')]}
         path = Path(os.environ.get('E2E_REPORT', '/tmp/gateway-observability-stage-a-e2e.json'))
         path.write_text(json.dumps(report, indent=2) + '\n')

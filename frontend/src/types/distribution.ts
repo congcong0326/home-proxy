@@ -11,7 +11,6 @@ export interface DistributionQuery {
   limit: number;
   trafficCategory: TrafficCategory | 'ALL';
   connectOutcome: ConnectOutcome | 'ALL';
-  authOutcome?: 'ALL' | 'SUCCESS' | 'FAILURE';
   username?: string;
   clientIp?: string;
 }
@@ -23,9 +22,6 @@ export interface DistributionCounters {
 }
 export interface AuthenticationCounts {
   attempts: string;
-  success: string;
-  failure: string;
-  other: string;
 }
 export interface DistributionItem {
   keys: string[];

@@ -31,7 +31,7 @@ public class HttpProxyOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
-                        TelemetryHooks.outbound(ch, inboundChannel, true, false, "SUCCESS");
+                        TelemetryHooks.outbound(ch, inboundChannel, true, false);
                         ch.pipeline().addLast(
                                 new HttpClientCodec(),
                                 new HttpObjectAggregator(1024 * 8),

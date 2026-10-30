@@ -114,7 +114,7 @@ class OutboundTimingTest {
             inbound = new Bootstrap().group(group).channel(NioSocketChannel.class)
                     .handler(new ChannelInboundHandlerAdapter()).register().sync().channel();
             Channel owner = inbound;
-            SessionObservation state = new SessionObservation(ignored -> { }, true);
+            SessionObservation state = new SessionObservation(ignored -> { });
             owner.attr(AttributeKey.<SessionObservation>valueOf("telemetrySessionV1")).set(state);
             int port = server.getLocalPort();
             RouteConfig route = switch (kind) {
@@ -135,7 +135,7 @@ class OutboundTimingTest {
             var relay = owner.eventLoop().<Channel>newPromise();
             var connection = owner.eventLoop().submit(() -> {
                 TelemetryHooks.beginConnect(owner);
-                TelemetryHooks.routing(owner, request, true);
+                TelemetryHooks.routing(owner, request);
                 relay.addListener(done -> {
                     if (done.isSuccess()) TelemetryHooks.connected(owner, (Channel) done.getNow(), request);
                     else TelemetryHooks.connectFailed(owner, done.cause());
@@ -153,7 +153,6 @@ class OutboundTimingTest {
             if (kind.equals("direct")) assertNull(state.summary().getProxyHandshakeDurationUs());
             else {
                 assertNotNull(state.summary().getProxyHandshakeDurationUs());
-                assertEquals(reject ? "FAILED" : kind.equals("ss") ? "LOCAL_REQUEST_SENT" : "SUCCESS", state.summary().getProxyHandshakeOutcome());
             }
             assertEquals(reject ? ConnectOutcome.FAILED : ConnectOutcome.CONNECTED, state.summary().getConnectOutcome());
             outbound.close().sync();

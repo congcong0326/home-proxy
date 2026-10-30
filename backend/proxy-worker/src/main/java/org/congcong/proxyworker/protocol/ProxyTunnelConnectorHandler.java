@@ -170,7 +170,6 @@ public class ProxyTunnelConnectorHandler extends SimpleChannelInboundHandler<Pro
     }
 
     protected void setRelay(Channel inboundChannel, Channel outboundChannel) {
-        TelemetryHooks.relayStarted(inboundChannel);
         inboundChannel.pipeline().addLast(new RelayHandler(outboundChannel, true));
         outboundChannel.pipeline().addLast(new RelayHandler(inboundChannel, false));
     }

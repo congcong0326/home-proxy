@@ -45,7 +45,7 @@ public class ShadowSocksOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
-                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false, "LOCAL_REQUEST_SENT");
+                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false);
                         if (ShadowSocks2022Support.isEnabled(outboundProxyEncAlgo)) {
                             ShadowSocks2022ClientSession session = new ShadowSocks2022ClientSession();
                             var requestCryptoProcessor = CryptoProcessorFactory.createProcessor(outboundProxyEncAlgo, outboundProxyPassword);

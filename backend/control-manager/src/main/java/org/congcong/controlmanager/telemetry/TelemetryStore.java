@@ -96,10 +96,8 @@ public class TelemetryStore implements ApplicationRunner {
     private synchronized void initialize() {
         if (ready) return;
         client.execute("CREATE DATABASE IF NOT EXISTS telemetry");
-        Integer[] retention = {properties.getSessionRetentionDays(), properties.getDnsRetentionDays(),
-                properties.getEventRetentionDays(), properties.getAuthRetentionDays()};
         for (TelemetrySchema schema : TelemetrySchema.values()) {
-            Integer days = retention[schema.ordinal()];
+            Integer days = schema.retentionDays(properties);
             if (days != null && days <= 0) throw new IllegalArgumentException("Retention must be positive");
             client.execute(schema.ddl() + (days == null ? "" : " TTL occurred_at + INTERVAL " + days + " DAY"));
         }
@@ -109,17 +107,23 @@ public class TelemetryStore implements ApplicationRunner {
     /** ACK means the complete batch is frozen in manager memory, not yet stored in CK. */
     public TelemetryAckV1 ingest(String authenticatedWorkerId, TelemetryBatchV1 batch) throws Exception {
         if (!properties.isIngestEnabled()) throw new IllegalStateException("INGEST_DISABLED");
+        // Older workers still send removed events and non-failure auth records: size limits apply to the
+        // original batch, then those facts are accepted and discarded so the worker can release the batch.
+        int received = batch.recordCount() + batch.getEvents().size();
         if (batch.getProtocolVersion() != 1 || batch.getBatchId() == null
-                || !batch.getBatchId().matches("[a-fA-F0-9-]{36}") || batch.recordCount() < 1
-                || batch.recordCount() > properties.getMaxBatchRecords()
+                || !batch.getBatchId().matches("[a-fA-F0-9-]{36}") || received < 1
+                || received > properties.getMaxBatchRecords()
                 || mapper.writeValueAsBytes(batch).length > properties.getMaxBatchBytes()) {
             throw new IllegalArgumentException("INVALID_BATCH");
         }
+        List<CredentialAuthLogV1> failedAuth = batch.getCredentialAuth().stream()
+                .filter(auth -> auth.getAuthOutcome() != null && auth.getAuthOutcome().isFailure()).toList();
+        int discarded = batch.getEvents().size() + batch.getCredentialAuth().size() - failedAuth.size();
+        if (discarded > 0) log.debug("Discarded {} legacy telemetry records from batch {}", discarded, batch.getBatchId());
         Map<TelemetrySchema, List<? extends TelemetryRecordV1>> groups = new LinkedHashMap<>();
         groups.put(TelemetrySchema.SESSIONS, batch.getSessions());
         groups.put(TelemetrySchema.DNS, batch.getDnsQueries());
-        groups.put(TelemetrySchema.EVENTS, batch.getEvents());
-        groups.put(TelemetrySchema.AUTH, batch.getCredentialAuth());
+        groups.put(TelemetrySchema.AUTH, failedAuth);
         List<Pending> pending = new ArrayList<>();
         Instant receivedAt = Instant.now();
         long queuedAt = nanoTime.getAsLong();
@@ -138,6 +142,7 @@ public class TelemetryStore implements ApplicationRunner {
                 bytes += sizeBytes;
             }
         }
+        if (pending.isEmpty()) return ack(batch);
         synchronized (bufferLock) {
             if (stopping) throw new IllegalStateException("MANAGER_STOPPING");
             if (pending.size() > properties.getBufferCapacity() - bufferedRecords
@@ -149,6 +154,10 @@ public class TelemetryStore implements ApplicationRunner {
             bufferedRecords += pending.size();
             bufferedBytes += bytes;
         }
+        return ack(batch);
+    }
+
+    private static TelemetryAckV1 ack(TelemetryBatchV1 batch) {
         TelemetryAckV1 ack = new TelemetryAckV1();
         ack.setBatchId(batch.getBatchId());
         ack.setPersisted(true);
@@ -177,7 +186,6 @@ public class TelemetryStore implements ApplicationRunner {
 
         if (record instanceof SessionLogV1 session && !record.getRecordId().equals(session.getConnectionId())) throw new IllegalArgumentException("INVALID_SESSION_ID");
         if (record instanceof DnsQueryLogV1 dns && !record.getRecordId().equals(dns.getQueryId())) throw new IllegalArgumentException("INVALID_QUERY_ID");
-        if (record instanceof ProxyEventLogV1 event && !record.getRecordId().equals(event.getEventId())) throw new IllegalArgumentException("INVALID_EVENT_ID");
         if (record instanceof CredentialAuthLogV1 auth && !record.getRecordId().equals(auth.getAuthAttemptId())) throw new IllegalArgumentException("INVALID_AUTH_ID");
         for (var field : TelemetrySchema.values()) {
             if (!field.model.isInstance(record)) continue;
@@ -389,8 +397,8 @@ public class TelemetryStore implements ApplicationRunner {
             params.addAll(List.of(request.getUsername(), request.getWorkerId(),
                     Timestamp.from(request.getTo().minus(java.time.Duration.ofDays(31))), Timestamp.from(request.getTo()), request.getUsername()));
         } else addFilter(where, params, request.getUsername(), schema == TelemetrySchema.AUTH
-                ? "(positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(verified_username,''), ?) > 0)"
-                : "positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0", schema == TelemetrySchema.AUTH ? 3 : 1);
+                ? "(positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0 OR positionCaseInsensitiveUTF8(ifNull(attempted_username,''), ?) > 0)"
+                : "positionCaseInsensitiveUTF8(ifNull(username,''), ?) > 0", schema == TelemetrySchema.AUTH ? 2 : 1);
         addFilter(where, params, request.getClientIp(), "client_ip = ?", 1);
         addFilter(where, params, request.getProtocol(), "inbound_protocol = ?", 1);
         String outcome = schema == TelemetrySchema.SESSIONS ? "session_outcome" : schema == TelemetrySchema.AUTH ? "auth_outcome" : "outcome";
@@ -403,20 +411,16 @@ public class TelemetryStore implements ApplicationRunner {
         } else if (schema == TelemetrySchema.DNS) {
             addFilter(where, params, request.getTarget(), "positionCaseInsensitiveUTF8(ifNull(qname,''), ?) > 0", 1);
             addFilter(where, params, request.getQtype(), "qtype = ?", 1);
-        } else if (schema == TelemetrySchema.EVENTS) {
-            addFilter(where, params, request.getEventType(), "event_type = ?", 1);
         } else {
             addFilter(where, params, request.getAuthMethod(), "auth_method = ?", 1);
-            addFilter(where, params, request.getExactAuthUsername(), "(attempted_username = ? OR verified_username = ? OR username = ?)", 3);
+            addFilter(where, params, request.getExactAuthUsername(), "(attempted_username = ? OR username = ?)", 2);
             if (has(request.getAuthOutcomeGroup())) {
-                if ("SUCCESS".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome = 'SUCCESS'");
-                else if ("FAILURE".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
+                if ("FAILURE".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
                 else throw new IllegalArgumentException("Invalid authentication result group");
             }
         }
         if (schema != TelemetrySchema.SESSIONS && (has(request.getRoute()) || has(request.getTrafficCategory()) || has(request.getConnectOutcome()))
                 || schema != TelemetrySchema.DNS && has(request.getQtype())
-                || schema != TelemetrySchema.EVENTS && has(request.getEventType())
                 || schema != TelemetrySchema.AUTH && (has(request.getAuthMethod()) || has(request.getAuthOutcomeGroup()) || has(request.getExactAuthUsername()))
                 || schema != TelemetrySchema.DNS && schema != TelemetrySchema.SESSIONS && has(request.getTarget())) {
             throw new IllegalArgumentException("Filter unsupported for this record type");

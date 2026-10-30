@@ -12,7 +12,6 @@ export interface OverviewQuery {
   trafficResult: ResultFilter;
   connectionResult: ResultFilter;
   dnsResult: ResultFilter;
-  authResult: ResultFilter;
   dnsOrigin: 'CLIENT' | 'PROXY_RESOLVE' | 'ALL';
 }
 export interface OverviewPoint {

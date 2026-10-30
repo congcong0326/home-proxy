@@ -70,8 +70,8 @@ test('fetches stable ID details and related facts without inheriting list filter
   fireEvent.click(await screen.findByRole('button', { name: /查\s*看/ }));
   await screen.findByText('关联日志');
   expect(api.getTelemetryDetail).toHaveBeenCalledWith('sessions', record.recordId, expect.objectContaining({ workerId: 'home-01' }));
-  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenCalledWith('events', expect.objectContaining({ connectionId: record.connectionId })));
-  const associated = api.queryTelemetryPage.mock.calls.find(([type, query]) => type === 'events' && query.connectionId)?.[1] as TelemetryQuery;
+  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenCalledWith('dns', expect.objectContaining({ connectionId: record.connectionId })));
+  const associated = api.queryTelemetryPage.mock.calls.find(([type, query]) => type === 'dns' && query.connectionId)?.[1] as TelemetryQuery;
   expect(associated.username).toBeUndefined();
   const drawer = screen.getByRole('dialog');
   expect(within(drawer).getByText('8 PB')).toHaveAttribute('title', '9,007,199,254,740,993 B');
@@ -79,13 +79,13 @@ test('fetches stable ID details and related facts without inheriting list filter
   expect(within(drawer).getAllByText('未测量／未采集').length).toBeGreaterThan(0);
 });
 
-test('keeps four units independent and lets credential failures open without a destination', async () => {
+test('keeps three units independent and lets credential failures open without a destination', async () => {
   const auth = { ...record, recordId: 'auth-record', attemptedUsername: 'unknown-account', authOutcome: 'FAILURE', authMethod: 'HTTP_BASIC', analysis: null } as AuditRecordV1;
   api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'credential-auth' ? [auth] : [], total: type === 'credential-auth' ? '1' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   api.getTelemetryDetail.mockResolvedValue(auth);
   render(<ObservabilityLogAudit />);
   await screen.findByText('暂无日志');
-  for (const [label, type] of [['DNS 查询', 'dns'], ['诊断事件', 'events'], ['认证审计', 'credential-auth']]) {
+  for (const [label, type] of [['DNS 查询', 'dns'], ['认证审计', 'credential-auth']]) {
     fireEvent.click(screen.getByRole('tab', { name: label }));
     await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith(type, expect.objectContaining({ workerId: 'home-01', offset: 0 })));
   }
@@ -102,46 +102,11 @@ test('shows query disabled without displaying collection diagnostics', async () 
   expect(api.queryTelemetryPage).not.toHaveBeenCalled();
 });
 
-test('translates diagnostic events in lists and details, keeps unknown codes, and sends original filter values', async () => {
-  const event = { ...record, sessionOutcome: undefined, recordId: 'connect-event', eventType: 'CONNECT_RESULT', stage: 'CHANNEL_SETUP', outcome: 'CONNECTED' } as AuditRecordV1;
-  const unknown = { ...record, sessionOutcome: undefined, recordId: 'future-event', eventType: 'FUTURE_EVENT', stage: 'FUTURE_STAGE', outcome: 'FUTURE_OUTCOME' } as AuditRecordV1;
-  api.queryTelemetryPage.mockImplementation(async type => ({ items: type === 'events' ? [event, unknown] : [], total: type === 'events' ? '2' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
-  api.getTelemetryDetail.mockResolvedValue(event);
-  render(<ObservabilityLogAudit />);
-  fireEvent.click(screen.getByRole('tab', { name: '诊断事件' }));
-  const setup = await screen.findByText('通道建立');
-  const row = setup.closest('tr')!;
-  expect(within(row).getByText('alice')).toBeInTheDocument();
-  expect(within(row).getByText('192.168.1.2')).toBeInTheDocument();
-  expect(within(row).getByText('SOCKS5协议')).toHaveAttribute('title', 'SOCKS5');
-  expect(within(row).getByText('建连结果')).toHaveAttribute('title', 'CONNECT_RESULT');
-  expect(within(row).getByText('通道已建立')).toHaveAttribute('title', 'CONNECTED');
-  expect(screen.getByText('FUTURE_EVENT')).toBeInTheDocument();
-  expect(screen.getByText('FUTURE_STAGE')).toBeInTheDocument();
-  expect(screen.getByText('FUTURE_OUTCOME')).toBeInTheDocument();
-
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: '事件类型' }));
-  fireEvent.click(await screen.findByText('首次错误'));
-  fireEvent.mouseDown(screen.getByRole('combobox', { name: '结果' }));
-  fireEvent.click(await screen.findByText('发生错误'));
-  fireEvent.click(screen.getByRole('button', { name: '查 询' }));
-  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith('events', expect.objectContaining({ eventType: 'FIRST_ERROR', outcome: 'ERROR' })));
-
-  const detailRow = (await screen.findByText('通道建立')).closest('tr')!;
-  fireEvent.click(within(detailRow).getByRole('button', { name: /查\s*看/ }));
-  const drawer = await screen.findByRole('dialog');
-  await within(drawer).findByText('通道建立');
-  expect(within(drawer).getByText('建连结果')).toHaveAttribute('title', 'CONNECT_RESULT');
-  expect(within(drawer).getByText('通道已建立')).toHaveAttribute('title', 'CONNECTED');
-});
-
 const filterCases = [
   { type: 'sessions', tab: '连接记录', resultField: 'sessionOutcome', result: 'ERROR_END', resultLabel: '异常结束', protocol: 'TP_PROXY', protocolLabel: '透明代理',
     extra: [{ name: '建连结果', field: 'connectOutcome', code: 'FAILED', label: '建连失败' }, { name: '流量分类', field: 'trafficCategory', code: 'INTERNAL_REWRITE', label: '内网访问（目标重写）' }] },
   { type: 'dns', tab: 'DNS 查询', resultField: 'outcome', result: 'ANSWERED', resultLabel: '已应答', protocol: 'DNS_SERVER', protocolLabel: 'DNS 服务',
     extra: [{ name: '查询类型', field: 'qtype', code: 'AAAA', label: 'IPv6 地址（AAAA）' }] },
-  { type: 'events', tab: '诊断事件', resultField: 'outcome', result: 'ERROR', resultLabel: '发生错误', protocol: 'SOCKS5', protocolLabel: 'SOCKS5协议',
-    extra: [{ name: '事件类型', field: 'eventType', code: 'FIRST_ERROR', label: '首次错误' }] },
   { type: 'credential-auth', tab: '认证审计', resultField: 'authOutcome', result: 'FAILURE', resultLabel: '认证失败', protocol: 'HTTPS_CONNECT', protocolLabel: 'HTTPS CONNECT协议',
     extra: [{ name: '认证方式', field: 'authMethod', code: 'HTTP_BASIC', label: 'HTTP Basic 认证' }] },
 ];
@@ -158,7 +123,7 @@ async function chooseAuditOption(name: string, label: string) {
 
 test.each(filterCases)('$tab uses translated dropdowns and submits raw enum values; reset clears them', async item => {
   const sample = { ...record, recordId: `${item.type}-record`, inboundProtocol: item.protocol, [item.resultField]: item.result,
-    qname: 'example.test', stage: 'AUTH', ...Object.fromEntries(item.extra.map(field => [field.field, field.code])) } as AuditRecordV1;
+    qname: 'example.test', stage: 'AUTH', ...Object.fromEntries(item.extra.map(field => [field.field, field.code])) } as unknown as AuditRecordV1;
   api.queryTelemetryPage.mockImplementation(async type => ({ items: type === item.type ? [sample] : [], total: type === item.type ? '1' : '0', limit: 20, offset: 0, maxOffset: 10000, timeBoundary: '[from,to)' }));
   api.getTelemetryDetail.mockResolvedValue(sample);
   render(<ObservabilityLogAudit />);
@@ -237,19 +202,44 @@ test('query errors are distinct from an empty result and can be retried', async 
   await screen.findByText('8 PB');
 });
 
-test('shows measured stage timings, protocol applicability and the actual proxy confirmation boundary', async () => {
-  const measured = { ...record, clientHandshakeDurationUs: '1200', routeSelectionDurationUs: '25',
-    outboundTcpDurationUs: '840', proxyHandshakeDurationUs: '600', proxyHandshakeOutcome: 'LOCAL_REQUEST_SENT',
-    outboundMode: 'OUTBOUND_PROXY', outboundProtocol: 'SHADOW_SOCKS',
-    uploadBackpressureDurationUs: '0', downloadBackpressureDurationUs: '0' } as AuditRecordV1;
+test('keeps stage timings in a collapsed panel and shows only protocol-applicable values', async () => {
+  const measured = { ...record, clientHandshakeDurationUs: '1200', outboundTcpDurationUs: '840', proxyHandshakeDurationUs: '600',
+    lastActivityAt: '2026-10-09T01:02:03Z', routeAction: 'OUTBOUND_PROXY', outboundProtocol: 'SHADOW_SOCKS' } as AuditRecordV1;
   api.getTelemetryDetail.mockResolvedValue(measured);
   render(<ObservabilityLogAudit />);
   fireEvent.click(await screen.findByRole('button', { name: /查\s*看/ }));
   const drawer = await screen.findByRole('dialog');
+  await within(drawer).findByText('阶段耗时');
+  expect(within(drawer).queryByText('1.200 ms（1,200 µs）')).not.toBeInTheDocument();
+  for (const label of ['接收时间', '通道就绪时间', '结束时间', '末次活动', '连接寿命', '通道建立耗时']) expect(within(drawer).getByText(label)).toBeInTheDocument();
+  fireEvent.click(within(drawer).getByText('阶段耗时'));
   await within(drawer).findByText('1.200 ms（1,200 µs）');
   expect(within(drawer).getByText('0.840 ms（840 µs）')).toBeInTheDocument();
-  expect(within(drawer).getByText('本地请求已发送')).toBeInTheDocument();
   expect(within(drawer).getByText('不适用（客户端直接提供目标）')).toBeInTheDocument();
   expect(within(drawer).getByText('不适用（此出站不执行 TLS）')).toBeInTheDocument();
-  expect(within(drawer).queryByText('限流等待')).not.toBeInTheDocument();
+  for (const removed of ['路由选择', '上传背压', '下载背压', '代理握手结果', '关闭原因', '配置版本', '规则集版本', '来源依据']) expect(within(drawer).queryByText(removed)).not.toBeInTheDocument();
+});
+
+test('merges failure stage and error code into one sentence', async () => {
+  const failed = { ...record, sessionOutcome: 'ERROR_END', connectOutcome: 'FAILED', failureStage: 'OUTBOUND_CONNECT', errorCode: 'CONNECT_FAILED' } as AuditRecordV1;
+  api.getTelemetryDetail.mockResolvedValue(failed);
+  render(<ObservabilityLogAudit />);
+  fireEvent.click(await screen.findByRole('button', { name: /查\s*看/ }));
+  const drawer = await screen.findByRole('dialog');
+  expect(await within(drawer).findByText('出站建连失败：出站连接失败（CONNECT_FAILED）')).toBeInTheDocument();
+  expect(within(drawer).queryByText('失败阶段')).not.toBeInTheDocument();
+});
+
+test('authentication result filter only offers failure outcomes', async () => {
+  render(<ObservabilityLogAudit />);
+  fireEvent.click(screen.getByRole('tab', { name: '认证审计' }));
+  await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith('credential-auth', expect.anything()));
+  fireEvent.mouseDown(screen.getByRole('combobox', { name: '结果' }));
+  const dropdown = await waitFor(() => {
+    const element = document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden)');
+    expect(element).not.toBeNull();
+    return element as HTMLElement;
+  });
+  for (const label of ['认证失败', '认证拒绝', '认证格式错误', '认证异常']) expect(within(dropdown).getByText(label)).toBeInTheDocument();
+  for (const label of ['认证通过', '请求提供凭据', '认证取消']) expect(within(dropdown).queryByText(label)).not.toBeInTheDocument();
 });

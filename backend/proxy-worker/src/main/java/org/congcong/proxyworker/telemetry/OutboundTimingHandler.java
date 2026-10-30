@@ -9,13 +9,11 @@ public final class OutboundTimingHandler extends ChannelDuplexHandler {
     private final Channel inbound;
     private final boolean proxy;
     private final boolean tls;
-    private final String readyOutcome;
 
-    public OutboundTimingHandler(Channel inbound, boolean proxy, boolean tls, String readyOutcome) {
+    public OutboundTimingHandler(Channel inbound, boolean proxy, boolean tls) {
         this.inbound = inbound;
         this.proxy = proxy;
         this.tls = tls;
-        this.readyOutcome = readyOutcome;
     }
 
     @Override
@@ -36,9 +34,5 @@ public final class OutboundTimingHandler extends ChannelDuplexHandler {
     public void tlsComplete() {
         TelemetryHooks.endStage(inbound, OUTBOUND_TLS);
         if (proxy) TelemetryHooks.beginStage(inbound, PROXY_HANDSHAKE);
-    }
-
-    public String readyOutcome() {
-        return readyOutcome;
     }
 }

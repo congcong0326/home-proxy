@@ -27,12 +27,8 @@ public final class DnsObservation {
         record.setInboundId(request.getInboundConfig().getId());
         record.setInboundName(request.getInboundConfig().getName());
         record.setInboundProtocol(request.getInboundConfig().getProtocol().name());
-        record.setConfigVersion(request.getInboundConfig().getConfigVersion());
         record.setClientIp(dns.getClient().getAddress().getHostAddress());
         record.setClientPort(dns.getClient().getPort());
-        record.setTransportPeerIp(record.getClientIp());
-        record.setTransportPeerPort(record.getClientPort());
-        record.setClientIpSource("TRANSPORT_PEER");
         record.setCacheStatus("UNKNOWN");
         if (request.getUser() != null) {
             record.setUserId(request.getUser().getId());

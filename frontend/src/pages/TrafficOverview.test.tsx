@@ -18,7 +18,7 @@ const data = (total = '1024'): OverviewData => ({
   concurrency: { available: true, series: [], average: '1.30', peak: '3' }, live: { available: false, reason: 'UNSUPPORTED' },
   connections: { series: [], totals: { SUCCESS: '4', FAILURE: '2' }, total: '6' },
   dns: { series: [], totals: { SUCCESS: '10', FAILURE: '2', BLOCKED: '1' }, total: '13' },
-  auth: { series: [], totals: { SUCCESS: '3', FAILURE: '1', CHALLENGE: '1' }, total: '5' },
+  auth: { series: [], totals: { FAILURE: '4' }, total: '4' },
 });
 beforeEach(() => {
   jest.clearAllMocks();
@@ -55,13 +55,12 @@ it('applies independent DNS/auth and traffic filters and submitted source constr
   await screen.findByText('1 KB');
   fireEvent.click(screen.getByRole('button', { name: '内网' }));
   fireEvent.change(screen.getByLabelText('DNS 结果'), { target: { value: 'FAILURE' } });
-  fireEvent.change(screen.getByLabelText('认证结果'), { target: { value: 'SUCCESS' } });
   fireEvent.change(screen.getByLabelText('用户／账号'), { target: { value: 'failed-account' } });
   fireEvent.change(screen.getByLabelText('来源 IP'), { target: { value: '192.168.1.2' } });
   await waitFor(() => expect(screen.getByRole('button', { name: /查询 \/ 刷新/ })).not.toBeDisabled());
   fireEvent.click(screen.getByRole('button', { name: /查询 \/ 刷新/ }));
   await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenLastCalledWith(expect.objectContaining({
-    trafficCategory: 'INTERNAL_REWRITE', trafficResult: 'ALL', dnsResult: 'FAILURE', authResult: 'SUCCESS', username: 'failed-account', clientIp: '192.168.1.2',
+    trafficCategory: 'INTERNAL_REWRITE', trafficResult: 'ALL', dnsResult: 'FAILURE', username: 'failed-account', clientIp: '192.168.1.2',
   })));
 });
 it('ignores late responses after changing node', async () => {
@@ -99,5 +98,6 @@ it('keeps other statistics and connection attempts visible when historical concu
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(panel).toHaveTextContent('建连记录 6');
   expect(screen.getByText('DNS 查询趋势').closest('section')).toHaveTextContent('成功 10');
-  expect(screen.getByText('认证尝试趋势').closest('section')).toHaveTextContent('成功 3');
+  expect(screen.getByText('认证失败趋势').closest('section')).toHaveTextContent('失败 4');
+  expect(screen.queryByLabelText('认证结果')).not.toBeInTheDocument();
 });

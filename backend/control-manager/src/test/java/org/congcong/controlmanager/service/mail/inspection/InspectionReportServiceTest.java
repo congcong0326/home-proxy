@@ -16,7 +16,6 @@ class InspectionReportServiceTest {
     void usesRolling24HoursAcrossDstAndKeepsOtherSectionsWhenAQueryFails() {
         var disks = mock(DiskInspectionService.class);
         var network = mock(NetworkInspectionService.class);
-        var auth = mock(AuthLocationInspectionService.class);
         var workers = mock(ProxyWorkerRepository.class);
         var statuses = mock(WorkerStatusRepository.class);
         var telemetry = mock(TelemetryStore.class);
@@ -36,13 +35,12 @@ class InspectionReportServiceTest {
         when(network.traffic(List.of("default"), from, to, zone)).thenThrow(new IllegalStateException("CK_UNAVAILABLE"));
         when(network.connections(List.of("default"), from, to, zone)).thenReturn(new InspectionSection("连接", List.of(), List.of("有效")));
         when(network.dns(List.of("default"), from, to, zone)).thenReturn(new InspectionSection("DNS", List.of(), List.of("有效")));
-        when(auth.inspect(List.of("default"), from, to, zone)).thenReturn(new InspectionSection("认证", List.of(), List.of("有效")));
-        var service = new InspectionReportService(disks, network, auth, workers, statuses, telemetry, properties, Clock.fixed(to, zone));
+        var service = new InspectionReportService(disks, network, workers, statuses, telemetry, properties, Clock.fixed(to, zone));
         var report = service.build();
         assertEquals(Duration.ofHours(24), Duration.between(report.from(), report.to()));
-        assertEquals(7, report.sections().size());
+        assertEquals(6, report.sections().size());
         assertTrue(report.sections().get(2).notes().get(0).contains("无法判断"));
-        assertEquals("认证", report.sections().get(5).title());
+        assertEquals("日志采集与数据覆盖", report.sections().get(5).title());
         verify(network).connections(List.of("default"), from, to, zone);
     }
 

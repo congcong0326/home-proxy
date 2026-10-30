@@ -38,7 +38,6 @@ const assert = require('node:assert/strict');
     await page.getByLabel('连接指标', { exact: true }).selectOption('attempts');
     await changed(() => page.getByLabel('建连结果', { exact: true }).selectOption('FAILURE'));
     await changed(() => page.getByLabel('DNS 结果', { exact: true }).selectOption('FAILURE'));
-    await changed(() => page.getByLabel('认证结果', { exact: true }).selectOption('FAILURE'));
     assert(Object.keys(lastData.auth.totals).every(k => k === 'FAILURE'));
     await page.screenshot({ path: path.join(output, 'failure-filters.png'), fullPage: true });
     // Verify failures can be attributed to attempted accounts and real source IPs.

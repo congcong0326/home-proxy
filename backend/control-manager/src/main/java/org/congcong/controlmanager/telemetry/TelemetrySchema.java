@@ -11,7 +11,6 @@ import java.util.List;
 public enum TelemetrySchema {
     SESSIONS("sessions", "proxy_session_log_v1", SessionLogV1.class),
     DNS("dns", "dns_query_log_v1", DnsQueryLogV1.class),
-    EVENTS("events", "proxy_event_log_v1", ProxyEventLogV1.class),
     AUTH("credential-auth", "credential_auth_log_v1", CredentialAuthLogV1.class);
 
     public final String path;
@@ -21,6 +20,13 @@ public enum TelemetrySchema {
         this.path = path;
         this.table = "telemetry." + table;
         this.model = model;
+    }
+    public Integer retentionDays(TelemetryProperties properties) {
+        return switch (this) {
+            case SESSIONS -> properties.getSessionRetentionDays();
+            case DNS -> properties.getDnsRetentionDays();
+            case AUTH -> properties.getAuthRetentionDays();
+        };
     }
     public static TelemetrySchema fromPath(String path) {
         for (TelemetrySchema schema : values()) if (schema.path.equals(path)) return schema;

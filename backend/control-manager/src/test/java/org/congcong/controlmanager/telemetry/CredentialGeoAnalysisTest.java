@@ -40,7 +40,6 @@ class CredentialGeoAnalysisTest {
         assertEquals("加利福尼亚州", analysis.getSourceRegion());
         assertEquals("山景城", analysis.getSourceCity());
         assertEquals("2026-10-07T00:00:00Z", analysis.getGeoDatabaseVersion());
-        assertTrue(analysis.getRiskTags().isEmpty());
         record.setAuthAttemptId("another-attempt");
         assertEquals("another-attempt", geo.analyze(record).getAuthAttemptId());
         verify(reader, times(1)).city(any(InetAddress.class));
@@ -52,7 +51,6 @@ class CredentialGeoAnalysisTest {
     void privateAndInvalidAddressesDoNotBecomeFakePublicLocations() {
         var geo = new CredentialGeoAnalysis(() -> null, () -> 0);
         assertEquals("PRIVATE", geo.analyze(record("192.168.1.2")).getGeoLookupStatus());
-        assertTrue(geo.analyze(record("192.168.1.2")).getRiskTags().isEmpty());
         assertNull(geo.analyze(record("192.168.1.2")).getSourceCountry());
         assertEquals("UNKNOWN", geo.analyze(record("example.com")).getGeoLookupStatus());
     }

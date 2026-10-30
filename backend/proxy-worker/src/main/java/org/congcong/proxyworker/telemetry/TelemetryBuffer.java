@@ -29,7 +29,7 @@ public final class TelemetryBuffer {
 
     public boolean offer(TelemetryRecordV1 record) throws IOException {
         if (!(record instanceof SessionLogV1 || record instanceof DnsQueryLogV1
-                || record instanceof ProxyEventLogV1 || record instanceof CredentialAuthLogV1)) return false;
+                || record instanceof CredentialAuthLogV1)) return false;
         // Freeze before handing the fact to another thread; callers may reuse/mutate their DTO.
         byte[] json = mapper.writeValueAsBytes(record);
         synchronized (this) {
@@ -47,11 +47,9 @@ public final class TelemetryBuffer {
             batch.setBatchId(UUID.randomUUID().toString());
             var sessions = new ArrayList<SessionLogV1>();
             var dns = new ArrayList<DnsQueryLogV1>();
-            var events = new ArrayList<ProxyEventLogV1>();
             var auth = new ArrayList<CredentialAuthLogV1>();
             batch.setSessions(sessions);
             batch.setDnsQueries(dns);
-            batch.setEvents(events);
             batch.setCredentialAuth(auth);
             long recordBytes = 0;
             int wireBytes = 1024;
@@ -61,7 +59,6 @@ public final class TelemetryBuffer {
                 TelemetryRecordV1 fact = mapper.readValue(next.json, next.type);
                 if (fact instanceof SessionLogV1 value) sessions.add(value);
                 else if (fact instanceof DnsQueryLogV1 value) dns.add(value);
-                else if (fact instanceof ProxyEventLogV1 value) events.add(value);
                 else if (fact instanceof CredentialAuthLogV1 value) auth.add(value);
                 queue.removeFirst();
                 wireBytes += next.json.length + 64;

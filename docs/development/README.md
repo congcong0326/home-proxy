@@ -15,5 +15,7 @@ Use it for architecture decisions, protocol design notes, and multi-step feature
 - [TLS SNI 四层 TCP 入站设计](tls-sni-tcp-inbound-design.md)
 - [UDP 代理整体规划](udp-proxy-roadmap.md)
 - [一期 UDP 透明代理转发内核设计](udp-transparent-relay-phase1-design.md)
+- [Worker 遗留 HTTP 调用与旧日志链路清理设计](worker-legacy-http-removal-design.md)
+- [日志类型与字段精简设计](telemetry-field-slimming-design.md)：ClickHouse 清理脚本 `scripts/clickhouse/telemetry-slimming-cleanup.sql` 仅手工执行、不可回滚，需所有 Worker 升级后再运行。
 
 - [网关观测阶段 A 实施与验证](../testing/gateway-observability-stage-a.md)：独立 V1 事实、内存缓冲/ACK 上报和保留数据 E2E，现有日志与页面继续走旧链路。

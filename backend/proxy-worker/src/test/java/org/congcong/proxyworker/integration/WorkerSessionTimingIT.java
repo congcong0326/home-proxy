@@ -75,16 +75,11 @@ class WorkerSessionTimingIT {
             SessionLogV1 record = summary.get(5, TimeUnit.SECONDS);
             assertNotNull(record.getClientHandshakeDurationUs());
             if (invalidCredentials) {
-                assertNull(record.getRouteSelectionDurationUs());
                 assertNull(record.getDnsDurationUs());
                 assertNull(record.getOutboundTcpDurationUs());
-                assertNull(record.getUploadBackpressureDurationUs());
             } else {
-                assertNotNull(record.getRouteSelectionDurationUs());
                 assertNotNull(record.getDnsDurationUs());
                 assertNotNull(record.getOutboundTcpDurationUs());
-                assertNotNull(record.getUploadBackpressureDurationUs());
-                assertNotNull(record.getDownloadBackpressureDurationUs());
                 assertTrue(record.getUploadBytes() > 0);
                 assertTrue(record.getDownloadBytes() > 0);
             }

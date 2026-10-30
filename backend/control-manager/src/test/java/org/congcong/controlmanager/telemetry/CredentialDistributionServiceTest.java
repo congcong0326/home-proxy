@@ -20,8 +20,8 @@ class CredentialDistributionServiceTest {
         query.setMetric("authentications");
         return query;
     }
-    private Map<String, Object> row(String ip, String count, String success, String failure) {
-        return Map.of("ip", ip, "attempts", count, "success", success, "failure", failure);
+    private Map<String, Object> row(String ip, String count) {
+        return Map.of("ip", ip, "attempts", count);
     }
     private CredentialAuthAnalysisV1 location(String country, String region, String city, String status) {
         var value = new CredentialAuthAnalysisV1();
@@ -35,8 +35,8 @@ class CredentialDistributionServiceTest {
     @Test
     void mergesTriplesNormalizesMissingFieldsAndIncludesEveryAttemptBeforeTopN() {
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of(
-                row("1.1.1.1", "18446744073709551620", "2", "3"), row("1.0.0.1", "5", "4", "1"),
-                row("8.8.8.8", "4", "1", "2"), row("10.0.0.1", "2", "2", "0"), row("9.9.9.9", "3", "0", "3")));
+                row("1.1.1.1", "18446744073709551620"), row("1.0.0.1", "5"),
+                row("8.8.8.8", "4"), row("10.0.0.1", "2"), row("9.9.9.9", "3")));
         when(geo.analyze(any())).thenAnswer(invocation -> {
             String ip = ((CredentialAuthLogV1) invocation.getArgument(0)).getClientIp();
             return switch (ip) {
@@ -55,7 +55,7 @@ class CredentialDistributionServiceTest {
         assertEquals("4", result.groups());
         assertEquals(List.of("中国", "", ""), result.items().get(0).keys());
         assertEquals("18446744073709551625", result.items().get(0).value());
-        assertEquals("6", result.items().get(0).auth().success());
+        assertEquals("18446744073709551625", result.items().get(0).auth().attempts());
         assertEquals(2, result.items().get(0).sources().size());
         query.setLimit(10);
         result = service.aggregate(query);
@@ -74,20 +74,16 @@ class CredentialDistributionServiceTest {
             assertFalse(sql.contains("traffic_category")); assertFalse(sql.contains("LIMIT"));
             assertFalse(sql.contains("alice'"));
             var params = Arrays.asList((Object[]) invocation.getRawArguments()[1]);
-            assertEquals(List.of("alice'", "alice'", "alice'", "8.8.8.8"), params.subList(3, 7));
+            assertEquals(List.of("alice'", "alice'", "8.8.8.8"), params.subList(3, 6));
             return List.of();
         });
         var query = query();
-        query.setAuthOutcome("FAILURE");
         query.setUsername("alice'");
         query.setClientIp("8.8.8.8");
         var result = service.aggregate(query);
         assertEquals("0", result.totalValue());
         assertTrue(result.items().isEmpty());
         query.setMetric("bytes");
-        assertThrows(IllegalArgumentException.class, () -> service.aggregate(query));
-        query.setMetric("authentications");
-        query.setAuthOutcome("FAILED");
         assertThrows(IllegalArgumentException.class, () -> service.aggregate(query));
     }
 }

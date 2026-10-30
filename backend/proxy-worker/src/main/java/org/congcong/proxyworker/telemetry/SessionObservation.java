@@ -12,28 +12,23 @@ public final class SessionObservation {
     final SessionLogV1 summary = new SessionLogV1();
     private final Consumer<TelemetryRecordV1> sink;
     public enum Stage {
-        CLIENT_HANDSHAKE, TARGET_RECOVERY, ROUTE_SELECTION, DNS, OUTBOUND_TCP, OUTBOUND_TLS, PROXY_HANDSHAKE,
-        UPLOAD_BACKPRESSURE, DOWNLOAD_BACKPRESSURE
+        CLIENT_HANDSHAKE, TARGET_RECOVERY, DNS, OUTBOUND_TCP, OUTBOUND_TLS, PROXY_HANDSHAKE
     }
     private final LongSupplier clock;
     private final long startedNanos;
     private final EnumMap<Stage, Long> activeStages = new EnumMap<>(Stage.class);
     private long connectNanos;
-    private long sequence;
     private int pendingWrites;
     private boolean closing;
     private boolean finished;
-    private boolean connectResultEmitted;
-    private final boolean eventsEnabled;
 
-    public SessionObservation(Consumer<TelemetryRecordV1> sink, boolean eventsEnabled) {
-        this(sink, eventsEnabled, System::nanoTime);
+    public SessionObservation(Consumer<TelemetryRecordV1> sink) {
+        this(sink, System::nanoTime);
     }
-    SessionObservation(Consumer<TelemetryRecordV1> sink, boolean eventsEnabled, LongSupplier clock) {
+    SessionObservation(Consumer<TelemetryRecordV1> sink, LongSupplier clock) {
         this.clock = clock;
         this.startedNanos = clock.getAsLong();
         this.sink = sink;
-        this.eventsEnabled = eventsEnabled;
         summary.setConnectionId(UUID.randomUUID().toString());
         summary.setRecordId(summary.getConnectionId());
         summary.setStartedAt(Instant.now());
@@ -42,7 +37,6 @@ public final class SessionObservation {
         summary.setIdentitySource(IdentitySource.UNKNOWN);
         summary.setUploadBytes(0L);
         summary.setDownloadBytes(0L);
-        summary.setCloseInitiator("UNKNOWN");
     }
 
     public SessionLogV1 summary() {
@@ -64,24 +58,15 @@ public final class SessionObservation {
         switch (stage) {
             case CLIENT_HANDSHAKE -> summary.setClientHandshakeDurationUs(add(summary.getClientHandshakeDurationUs(), us));
             case TARGET_RECOVERY -> summary.setTargetRecoveryDurationUs(add(summary.getTargetRecoveryDurationUs(), us));
-            case ROUTE_SELECTION -> summary.setRouteSelectionDurationUs(add(summary.getRouteSelectionDurationUs(), us));
             case DNS -> summary.setDnsDurationUs(add(summary.getDnsDurationUs(), us));
             case OUTBOUND_TCP -> summary.setOutboundTcpDurationUs(add(summary.getOutboundTcpDurationUs(), us));
             case OUTBOUND_TLS -> summary.setOutboundTlsDurationUs(add(summary.getOutboundTlsDurationUs(), us));
             case PROXY_HANDSHAKE -> summary.setProxyHandshakeDurationUs(add(summary.getProxyHandshakeDurationUs(), us));
-            case UPLOAD_BACKPRESSURE -> summary.setUploadBackpressureDurationUs(add(summary.getUploadBackpressureDurationUs(), us));
-            case DOWNLOAD_BACKPRESSURE -> summary.setDownloadBackpressureDurationUs(add(summary.getDownloadBackpressureDurationUs(), us));
         }
     }
 
     private static long add(Long value, long us) {
         return (value == null ? 0 : value) + us;
-    }
-
-    public void relayStarted() {
-        if (finished) return;
-        if (summary.getUploadBackpressureDurationUs() == null) summary.setUploadBackpressureDurationUs(0L);
-        if (summary.getDownloadBackpressureDurationUs() == null) summary.setDownloadBackpressureDurationUs(0L);
     }
 
     public void beginConnect() {
@@ -96,7 +81,6 @@ public final class SessionObservation {
         EstablishedConnectionRegistry.getInstance().connected(summary);
         summary.setChannelSetupDurationUs(Math.max(0, (clock.getAsLong() - connectNanos) / 1000));
         if (summary.getErrorCode() == null) summary.setSessionOutcome(SessionOutcome.NORMAL_END);
-        connectResult();
     }
     public void connectFailed(String stage, String code, boolean blocked) {
         if (finished) return;
@@ -105,15 +89,7 @@ public final class SessionObservation {
         summary.setConnectOutcome(blocked ? ConnectOutcome.BLOCKED : ConnectOutcome.FAILED);
         summary.setSessionOutcome(blocked ? SessionOutcome.BLOCKED : SessionOutcome.ERROR_END);
         if (connectNanos != 0) summary.setChannelSetupDurationUs(Math.max(0, (clock.getAsLong() - connectNanos) / 1000));
-        if (summary.getProxyHandshakeDurationUs() != null) summary.setProxyHandshakeOutcome("FAILED");
         error(stage, code);
-        connectResult();
-    }
-    private void connectResult() {
-        if (!connectResultEmitted) {
-            connectResultEmitted = true;
-            event("CONNECT_RESULT", "CHANNEL_SETUP", summary.getConnectOutcome().name(), summary.getErrorCode());
-        }
     }
     public void error(String stage, String code) {
         if (finished) return;
@@ -123,39 +99,8 @@ public final class SessionObservation {
             summary.setFailureStage(stage);
             if (summary.getSessionOutcome() != SessionOutcome.BLOCKED) summary.setSessionOutcome(SessionOutcome.ERROR_END);
             // Free-form exception messages are deliberately omitted: they may contain credentials.
-            event("FIRST_ERROR", stage, "ERROR", code);
         }
     }
-    public void event(String type, String stage, String outcome, String code) {
-        if (!eventsEnabled || finished) return;
-        ProxyEventLogV1 event = new ProxyEventLogV1();
-        event.setRecordId(UUID.randomUUID().toString());
-        event.setEventId(event.getRecordId());
-        event.setConnectionId(summary.getConnectionId());
-        event.setOccurredAt(Instant.now());
-        event.setInboundId(summary.getInboundId());
-        event.setInboundName(summary.getInboundName());
-        event.setInboundProtocol(summary.getInboundProtocol());
-        event.setConfigVersion(summary.getConfigVersion());
-        event.setRuleSetVersion(summary.getRuleSetVersion());
-        event.setUserId(summary.getUserId());
-        event.setUsername(summary.getUsername());
-        event.setIdentitySource(summary.getIdentitySource());
-        event.setClientIp(summary.getClientIp());
-        event.setClientPort(summary.getClientPort());
-        event.setClientIpSource(summary.getClientIpSource());
-        event.setTransportPeerIp(summary.getTransportPeerIp());
-        event.setTransportPeerPort(summary.getTransportPeerPort());
-        event.setEventSequence(++sequence);
-        event.setEventType(type);
-        event.setStage(stage);
-        event.setOutcome(outcome);
-        event.setErrorCode(code);
-        if ("CONNECT_RESULT".equals(type)) event.setDurationUs(summary.getChannelSetupDurationUs());
-        if ("TARGET_RECOVERY_RESULT".equals(type)) event.setDurationUs(summary.getTargetRecoveryDurationUs());
-        sink.accept(event);
-    }
-
     public void writeStarted() {
         if (!finished) pendingWrites++;
     }
@@ -166,10 +111,8 @@ public final class SessionObservation {
             Instant now = Instant.now();
             if (upload) {
                 summary.setUploadBytes(summary.getUploadBytes() + bytes);
-                if (summary.getFirstUploadAt() == null) summary.setFirstUploadAt(now);
             } else {
                 summary.setDownloadBytes(summary.getDownloadBytes() + bytes);
-                if (summary.getFirstDownloadAt() == null) summary.setFirstDownloadAt(now);
             }
             summary.setLastActivityAt(now);
         } else if (!success) error("RELAY", "WRITE_ERROR");
@@ -182,9 +125,6 @@ public final class SessionObservation {
         EstablishedConnectionRegistry.getInstance().closed(summary.getConnectionId());
         long now = clock.getAsLong();
         for (Stage stage : Stage.values()) end(stage, now);
-        if (summary.getProxyHandshakeDurationUs() != null && summary.getProxyHandshakeOutcome() == null) {
-            summary.setProxyHandshakeOutcome("CANCELLED");
-        }
         finishIfReady();
     }
     private void finishIfReady() {
@@ -194,12 +134,10 @@ public final class SessionObservation {
         }
         long now = clock.getAsLong();
         for (Stage stage : Stage.values()) end(stage, now);
-        summary.setCloseReason(summary.getErrorCode() == null ? "CHANNEL_CLOSED" : summary.getErrorCode());
         summary.setEndedAt(Instant.now());
         summary.setOccurredAt(summary.getEndedAt());
         summary.setSessionDurationUs(Math.max(0, (clock.getAsLong() - startedNanos) / 1000));
         TrafficClassifierV1.classify(summary);
-        if (summary.getErrorCode() != null) event("ERROR_SUMMARY", summary.getFailureStage(), summary.getSessionOutcome().name(), summary.getErrorCode());
         finished = true;
         sink.accept(summary);
     }

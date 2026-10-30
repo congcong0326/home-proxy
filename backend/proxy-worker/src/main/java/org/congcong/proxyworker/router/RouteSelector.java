@@ -34,8 +34,7 @@ public final class RouteSelector {
         int telemetryRuleIndex = 0;
         for (RouteRule rule : route.getRules()) {
             if (ruleMatches(route, rule, targetHost, hostIsIp, proxyTunnelRequest)) {
-                proxyTunnelRequest.setTelemetryMatchedRuleId(proxyTunnelRequest.getInboundConfig().getConfigVersion()
-                        + ":" + route.getId() + ":" + telemetryRuleIndex);
+                proxyTunnelRequest.setTelemetryMatchedRuleId(route.getId() + ":" + telemetryRuleIndex);
                 proxyTunnelRequest.setTelemetryMatchedRuleSet(rule.getConditionType() == RouteConditionType.RULE_SET ? rule.getValue() : null);
                 return true;
             }

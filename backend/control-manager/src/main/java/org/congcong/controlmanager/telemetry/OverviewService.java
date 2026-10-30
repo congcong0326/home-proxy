@@ -28,9 +28,9 @@ public class OverviewService {
     private static final String DNS_STATUS = "multiIf(outcome = 'BLOCKED', 'BLOCKED', outcome = 'CANCELLED', 'CANCELLED', "
             + "outcome = 'ERROR' OR (query_origin = 'CLIENT' AND response_sent = false), 'FAILURE', "
             + "outcome = 'ANSWERED' AND (query_origin = 'PROXY_RESOLVE' OR response_sent = true), 'SUCCESS', 'UNKNOWN')";
-    private static final String AUTH_STATUS = "multiIf(auth_outcome = 'SUCCESS', 'SUCCESS', "
-            + "auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR'), 'FAILURE', "
-            + "auth_outcome = 'CHALLENGE', 'CHALLENGE', auth_outcome = 'CANCELLED', 'CANCELLED', 'UNKNOWN')";
+    /** Only failed attempts are reported; legacy SUCCESS/CHALLENGE/CANCELLED rows are excluded by the filter. */
+    static final String AUTH_FAILURE_FILTER = "auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')";
+    private static final String AUTH_STATUS = "'FAILURE'";
     private final ClickHouseJdbcClient client;
     private final TelemetryStore store;
     private final WorkerStatusRepository workers;
@@ -58,7 +58,7 @@ public class OverviewService {
             concurrency = ConcurrencyTimeline.Result.unavailable();
         }
         var dns = counts(request, bucket, DNS, DNS_STATUS, request.getDnsResult(), false);
-        var auth = counts(request, bucket, AUTH, AUTH_STATUS, request.getAuthResult(), false);
+        var auth = counts(request, bucket, AUTH, AUTH_STATUS, "ALL", false);
         var result = new LinkedHashMap<String, Object>();
         result.put("from", request.getFrom().toString());
         result.put("to", request.getTo().toString());
@@ -139,6 +139,7 @@ public class OverviewService {
             range.where += categoryFilter(request);
             if (!request.getTrafficCategory().equals("ALL")) range.params.add(request.getTrafficCategory());
         }
+        if (table.equals(AUTH)) range.where += " AND " + AUTH_FAILURE_FILTER;
         if (table.equals(DNS) && !request.getDnsOrigin().equals("ALL")) {
             range.where += " AND query_origin = ?";
             range.params.add(request.getDnsOrigin());
@@ -234,12 +235,9 @@ public class OverviewService {
         }
         if (hasText(request.getUsername())) {
             // Failed authentication has no verified user: include its submitted account only in auth facts.
-            scope.where += authentication ? " AND (username = ? OR attempted_username = ? OR verified_username = ?)" : " AND username = ?";
+            scope.where += authentication ? " AND (username = ? OR attempted_username = ?)" : " AND username = ?";
             scope.params.add(request.getUsername());
-            if (authentication) {
-                scope.params.add(request.getUsername());
-                scope.params.add(request.getUsername());
-            }
+            if (authentication) scope.params.add(request.getUsername());
         }
         return scope;
     }
@@ -271,8 +269,8 @@ public class OverviewService {
         ZoneId.of(request.getTimeZone());
         if (!request.getTrafficCategory().equals("ALL")) TrafficCategory.valueOf(request.getTrafficCategory());
         if (!List.of("ALL", "SUCCESS", "FAILURE").contains(request.getTrafficResult())) throw new IllegalArgumentException("INVALID_TRAFFIC_RESULT");
-        for (String result : List.of(request.getTrafficResult(), request.getConnectionResult(), request.getDnsResult(), request.getAuthResult())) {
-            if (!List.of("ALL", "SUCCESS", "FAILURE", "BLOCKED", "CANCELLED", "CHALLENGE", "UNKNOWN").contains(result)) {
+        for (String result : List.of(request.getTrafficResult(), request.getConnectionResult(), request.getDnsResult())) {
+            if (!List.of("ALL", "SUCCESS", "FAILURE", "BLOCKED", "CANCELLED", "UNKNOWN").contains(result)) {
                 throw new IllegalArgumentException("INVALID_RESULT_FILTER");
             }
         }

@@ -1,6 +1,5 @@
 package org.congcong.controlmanager.service.mail.inspection;
 
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.AssertTrue;
@@ -20,10 +19,6 @@ public class InspectionProperties {
     private String primaryWorkerId = "default";
     @NotBlank
     private String timeZone = ZoneId.systemDefault().getId();
-    @Min(1) @Max(90)
-    private int authBaselineDays = 30;
-    @Min(1) @Max(30)
-    private int authMinimumHistoryDays = 7;
     @Min(1)
     private int diskSampleMinutes = 10;
     @Min(1)
@@ -31,13 +26,13 @@ public class InspectionProperties {
     @Min(1)
     private int ssdTemperatureThreshold = 70;
 
-    @AssertTrue(message = "认证历史最小天数必须不大于基线窗口，并且巡检时区必须有效")
+    @AssertTrue(message = "巡检时区必须有效")
     public boolean isInspectionConfigurationValid() {
         try {
             ZoneId.of(timeZone);
+            return true;
         } catch (RuntimeException error) {
             return false;
         }
-        return authMinimumHistoryDays <= authBaselineDays;
     }
 }

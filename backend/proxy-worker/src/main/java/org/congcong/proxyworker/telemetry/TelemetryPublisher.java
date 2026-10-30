@@ -16,7 +16,6 @@ public final class TelemetryPublisher {
             System.getenv().getOrDefault("OBSERVABILITY_ENABLED", "true")));
     private volatile boolean logReportingEnabled = true;
     private final boolean authEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_AUTH_ENABLED", "true"));
-    private final boolean eventsEnabled = Boolean.parseBoolean(System.getenv().getOrDefault("OBSERVABILITY_EVENTS_ENABLED", "true"));
     private final int capacity = Integer.parseInt(System.getenv().getOrDefault("OBSERVABILITY_BUFFER_CAPACITY", "5000"));
     private final long maxBytes = Long.parseLong(System.getenv().getOrDefault("OBSERVABILITY_BUFFER_MAX_BYTES", "4194304"));
     private final TelemetryBuffer buffer = new TelemetryBuffer(capacity, maxBytes);
@@ -42,10 +41,6 @@ public final class TelemetryPublisher {
 
     public boolean authEnabled() {
         return enabled() && authEnabled;
-    }
-
-    public boolean eventsEnabled() {
-        return enabled() && eventsEnabled;
     }
 
     public void publish(TelemetryRecordV1 record) {

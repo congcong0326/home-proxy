@@ -53,7 +53,7 @@ class TelemetryBufferTest {
         assertEquals(0, limited.bytesUsed());
         var buffer = new TelemetryBuffer(10, 1000000);
         var oversized = record();
-        oversized.setErrorMessage("x".repeat(TelemetryBuffer.MAX_BATCH_BYTES));
+        oversized.setLogicalTargetHost("x".repeat(TelemetryBuffer.MAX_BATCH_BYTES));
         assertFalse(buffer.offer(oversized));
         assertNull(buffer.peek());
         assertTrue(buffer.offer(record()));

@@ -1,6 +1,6 @@
 /** Independent V1 API contract. All UInt64 fields are decimal strings, never JS numbers. */
 export type UInt64String = string;
-export type TelemetryType = 'sessions' | 'dns' | 'events' | 'credential-auth';
+export type TelemetryType = 'sessions' | 'dns' | 'credential-auth';
 export type TrafficCategory = 'INTERNAL_REWRITE' | 'EXTERNAL' | 'OTHER_INTERNAL' | 'UNKNOWN';
 export type NetworkScope = 'INTERNAL' | 'EXTERNAL' | 'UNKNOWN';
 export type ConnectOutcome = 'CONNECTED' | 'FAILED' | 'BLOCKED' | 'CANCELLED' | 'NOT_ATTEMPTED';
@@ -16,14 +16,9 @@ export interface TelemetryRecordV1 {
   inboundName: string | null;
   username: string | null;
   clientIp: string | null;
-  clientIpSource: string | null;
-  transportPeerIp: string | null;
-  configVersion: string | null;
-  ruleSetVersion: string | null;
   inboundProtocol: string | null;
   schemaVersion: 1;
   clientPort: number | null;
-  transportPeerPort: number | null;
   inboundId: UInt64String | null;
   userId: UInt64String | null;
   occurredAt: string;
@@ -38,58 +33,39 @@ export interface SessionLogV1 extends TelemetryRecordV1 {
   startedAt: string;
   connectedAt: string | null;
   endedAt: string;
-  firstUploadAt: string | null;
-  firstDownloadAt: string | null;
   lastActivityAt: string | null;
   connectOutcome: ConnectOutcome;
   sessionOutcome: SessionOutcome;
   failureStage: string | null;
   errorCode: string | null;
-  errorMessage: string | null;
-  closeInitiator: string | null;
-  closeReason: string | null;
   originalDstIp: string | null;
   logicalTargetHost: string | null;
   targetSource: string | null;
   effectiveTargetHost: string | null;
   selectedTargetIp: string | null;
   outboundPeerIp: string | null;
-  outboundMode: string | null;
   outboundProtocol: string | null;
   outboundNodeId: string | null;
   routeName: string | null;
   routeAction: string | null;
-  routeSelection: string | null;
   matchedRuleId: string | null;
   matchedRuleSet: string | null;
-  targetAddressClass: string | null;
-  trafficCategoryBasis: string | null;
-  channelReadyBasis: string | null;
-  targetConfirmationLevel: string | null;
-  proxyHandshakeOutcome: string | null;
   originalDstPort: number | null;
   logicalTargetPort: number | null;
   effectiveTargetPort: number | null;
   outboundPeerPort: number | null;
-  trafficClassificationVersion: number | null;
   uploadBytes: UInt64String;
   downloadBytes: UInt64String;
   sessionDurationUs: UInt64String | null;
   channelSetupDurationUs: UInt64String | null;
   clientHandshakeDurationUs: UInt64String | null;
   targetRecoveryDurationUs: UInt64String | null;
-  routeSelectionDurationUs: UInt64String | null;
   dnsDurationUs: UInt64String | null;
   outboundTcpDurationUs: UInt64String | null;
   outboundTlsDurationUs: UInt64String | null;
   proxyHandshakeDurationUs: UInt64String | null;
-  uploadBackpressureDurationUs: UInt64String | null;
-  downloadBackpressureDurationUs: UInt64String | null;
   routeId: UInt64String | null;
   destinationOverrideApplied: boolean | null;
-  targetNetworkScope: NetworkScope | null;
-  clientNetworkScope: NetworkScope | null;
-  outboundPeerNetworkScope: NetworkScope | null;
   trafficCategory: TrafficCategory | null;
 }
 
@@ -124,24 +100,6 @@ export interface DnsQueryLogV1 extends TelemetryRecordV1 {
   answerIps: string[];
 }
 
-export interface ProxyEventLogV1 extends TelemetryRecordV1 {
-  eventId: string | null;
-  queryId: string | null;
-  eventType: string | null;
-  stage: string | null;
-  outcome: string | null;
-  errorCode: string | null;
-  errorMessage: string | null;
-  recoverySource: string | null;
-  mappingOutcome: string | null;
-  fallbackOutcome: string | null;
-  eventSequence: UInt64String | null;
-  durationUs: UInt64String | null;
-  repeatCount: UInt64String | null;
-  firstOccurredAt: string | null;
-  lastOccurredAt: string | null;
-}
-
 export interface CredentialAuthAnalysisV1 {
   authAttemptId: string | null;
   sourceCountryCode: string | null;
@@ -150,11 +108,7 @@ export interface CredentialAuthAnalysisV1 {
   sourceCity: string | null;
   geoLookupStatus: string | null;
   geoDatabaseVersion: string | null;
-  riskRuleVersion: string | null;
-  baselineStatus: string | null;
-  comparisonBasis: string | null;
   sourceNetworkScope: NetworkScope | null;
-  riskTags: string[];
 }
 
 export interface CredentialAuthLogV1 extends TelemetryRecordV1 {
@@ -162,7 +116,6 @@ export interface CredentialAuthLogV1 extends TelemetryRecordV1 {
   authMethod: string | null;
   authEventKind: string | null;
   attemptedUsername: string | null;
-  verifiedUsername: string | null;
   reasonCode: string | null;
   authOutcome: AuthOutcome | null;
   authDurationUs: UInt64String | null;
@@ -185,13 +138,12 @@ export interface TelemetryQuery {
   route?: string;
   trafficCategory?: TrafficCategory;
   qtype?: string;
-  eventType?: string;
   authMethod?: string;
-  authOutcomeGroup?: 'SUCCESS' | 'FAILURE';
+  authOutcomeGroup?: 'FAILURE';
   exactAuthUsername?: string;
 }
 
-export type AuditRecordV1 = SessionLogV1 | DnsQueryLogV1 | ProxyEventLogV1 | CredentialAuthLogV1;
+export type AuditRecordV1 = SessionLogV1 | DnsQueryLogV1 | CredentialAuthLogV1;
 
 export interface TelemetryPageV1<T extends TelemetryRecordV1 = AuditRecordV1> {
   items: T[];

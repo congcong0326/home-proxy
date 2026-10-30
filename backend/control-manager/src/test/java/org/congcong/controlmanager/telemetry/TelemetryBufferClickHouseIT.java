@@ -34,7 +34,6 @@ class TelemetryBufferClickHouseIT {
                 batch.setBatchId(UUID.randomUUID().toString());
                 batch.setSessions(List.of(session(), session()));
                 batch.setDnsQueries(List.of(dns(), dns()));
-                batch.setEvents(List.of(event(), event()));
                 batch.setCredentialAuth(List.of(auth(), auth()));
                 assertTrue(store.ingest(worker, batch).isPersisted());
                 for (var schema : TelemetrySchema.values()) assertEquals(0, count(client, schema, worker));
@@ -86,15 +85,10 @@ class TelemetryBufferClickHouseIT {
         return record;
     }
 
-    private ProxyEventLogV1 event() {
-        var record = base(new ProxyEventLogV1());
-        record.setEventId(record.getRecordId());
-        return record;
-    }
-
     private CredentialAuthLogV1 auth() {
         var record = base(new CredentialAuthLogV1());
         record.setAuthAttemptId(record.getRecordId());
+        record.setAuthOutcome(AuthOutcome.FAILURE);
         return record;
     }
 }

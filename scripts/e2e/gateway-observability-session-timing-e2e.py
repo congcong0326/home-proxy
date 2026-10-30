@@ -34,8 +34,7 @@ UPSTREAMS = {'http': 29684, 'socks': 29685, 'ss': 29686, 'reality': 29687, 'reje
 PAYLOAD = b'timing-e2e-controlled-payload\n'
 BULK_SIZE = 16 * 1024 * 1024
 TIMINGS = ['sessionDurationUs', 'channelSetupDurationUs', 'clientHandshakeDurationUs', 'targetRecoveryDurationUs',
-           'routeSelectionDurationUs', 'dnsDurationUs', 'outboundTcpDurationUs', 'outboundTlsDurationUs',
-           'proxyHandshakeDurationUs', 'uploadBackpressureDurationUs', 'downloadBackpressureDurationUs']
+           'dnsDurationUs', 'outboundTcpDurationUs', 'outboundTlsDurationUs', 'proxyHandshakeDurationUs']
 
 
 class LocalServer(socketserver.ThreadingTCPServer):
@@ -259,7 +258,6 @@ def audit(api, started, expected=8):
         for field in TIMINGS:
             value = row.get(field)
             assert value is None or isinstance(value, str) and value.isdecimal(), (row['recordId'], field)
-        assert row.get('routeSelectionDurationUs') is not None
         assert row['targetRecoveryDurationUs'] is not None if row['inboundProtocol'] == 'TLS_SNI_TCP' else row['clientHandshakeDurationUs'] is not None
         assert row['outboundTcpDurationUs'] is not None
         assert row['sessionDurationUs'] is not None and row['channelSetupDurationUs'] is not None
@@ -271,37 +269,29 @@ def audit(api, started, expected=8):
         row = by_host[kind + '.timing.home-proxy.test']
         assert row['connectOutcome'] == 'CONNECTED' and row['sessionOutcome'] == 'NORMAL_END'
         assert row['proxyHandshakeDurationUs'] is not None
-        assert row['proxyHandshakeOutcome'] == ('SUCCESS' if kind in ['http', 'socks'] else 'LOCAL_REQUEST_SENT')
         assert row['outboundTlsDurationUs'] is not None if kind == 'reality' else row['outboundTlsDurationUs'] is None
         if kind != 'reality': assert row['uploadBytes'] == row['downloadBytes'] == str(len(PAYLOAD))
     rejected = by_host['reject.timing.home-proxy.test']
-    assert rejected['connectOutcome'] == 'FAILED' and rejected['proxyHandshakeOutcome'] == 'FAILED'
+    assert rejected['connectOutcome'] == 'FAILED'
     assert rejected['proxyHandshakeDurationUs'] is not None and rejected['uploadBytes'] == rejected['downloadBytes'] == '0'
     download = by_host['download.timing.home-proxy.test']
     upload = by_host['upload.timing.home-proxy.test']
     assert download['downloadBytes'] == str(BULK_SIZE)
     assert upload['uploadBytes'] == str(BULK_SIZE + len(b'UPLOAD\n'))
-    assert int(download['downloadBackpressureDurationUs']) > 0, 'Download backpressure was not exercised'
-    assert int(upload['uploadBackpressureDurationUs']) > 0, 'Upload backpressure was not exercised'
     assert all(r['targetRecoveryDurationUs'] is None for r in by_host.values())
     sni = next(r for r in sessions if r['inboundProtocol'] == 'TLS_SNI_TCP')
     assert sni['clientHandshakeDurationUs'] is None and sni['outboundTlsDurationUs'] is None
     for row in sessions:
         detail = api.request('/api/observability/v1/sessions/' + row['recordId'] + '?' + urlencode({k:v for k,v in scope.items() if k != 'limit'}))
         assert all(detail.get(key) == row.get(key) for key in TIMINGS)
-    events = rows('events')
-    for event in events:
-        if event['eventType'] == 'CONNECT_RESULT':
-            session = next(r for r in sessions if r['connectionId'] == event['connectionId'])
-            assert event['durationUs'] == session['channelSetupDurationUs']
     status = api.request('/api/observability/v1/status?workerId=' + WORKER)
     assert status['worker']['dropped'] == status['worker']['serializationFailures'] == 0
-    return {'workerId': WORKER, 'from': scope['from'], 'to': scope['to'], 'counts': {'sessions': len(sessions), 'events': len(events)},
+    return {'workerId': WORKER, 'from': scope['from'], 'to': scope['to'], 'counts': {'sessions': len(sessions)},
             'sessionSamples': [{k:r.get(k) for k in ['recordId', 'connectionId', 'workerInstanceId', 'inboundName', 'inboundProtocol',
-             'logicalTargetHost', 'outboundProtocol', 'connectOutcome', 'sessionOutcome', 'proxyHandshakeOutcome',
+             'logicalTargetHost', 'outboundProtocol', 'connectOutcome', 'sessionOutcome',
              'uploadBytes', 'downloadBytes', 'startedAt', 'connectedAt', 'endedAt'] + TIMINGS} for r in sessions],
             'tablesPreserved': True, 'checks': {'protocolTimings': True, 'failureTimings': True, 'actualTls': True,
-             'sniRecovery': True, 'positiveUploadBackpressure': True, 'positiveDownloadBackpressure': True,
+             'sniRecovery': True,
              'detailConsistent': True, 'uint64Strings': True, 'removedLimiterFields': True, 'noDrops': True}}
 
 

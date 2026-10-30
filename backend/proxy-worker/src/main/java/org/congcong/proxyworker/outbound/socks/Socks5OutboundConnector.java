@@ -29,7 +29,7 @@ public class Socks5OutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel socketChannel) throws Exception {
-                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false, "SUCCESS");
+                        TelemetryHooks.outbound(socketChannel, inboundChannel, true, false);
                         socketChannel.pipeline().addLast(
                                 Socks5ClientEncoder.DEFAULT,//编码
                                 new Socks5InitialResponseDecoder(),//解码

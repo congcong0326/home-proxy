@@ -19,6 +19,5 @@ public class TelemetryProperties {
     /** Null disables TTL. Stage A never changes retention on legacy tables. */
     private Integer sessionRetentionDays;
     private Integer dnsRetentionDays;
-    private Integer eventRetentionDays;
     private Integer authRetentionDays;
 }

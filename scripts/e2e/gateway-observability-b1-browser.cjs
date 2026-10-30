@@ -71,13 +71,13 @@ const assert = require('node:assert/strict');
     await page.getByText('关联日志', { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(output, 'session-related.png'), fullPage: true });
     await page.getByRole('dialog').locator('.ant-drawer-close').click();
-    for (const [label, kind, file] of [['DNS 查询', 'dns', 'dns.png'], ['诊断事件', 'events', 'events.png'], ['认证审计', 'credential-auth', 'auth.png']]) {
+    for (const [label, kind, file] of [['DNS 查询', 'dns', 'dns.png'], ['认证审计', 'credential-auth', 'auth.png']]) {
       const queried = page.waitForResponse(r => r.url().includes('/' + kind + '/page?') && r.status() === 200);
       await page.getByRole('tab', { name: label, exact: true }).click();
       await queried;
       await page.locator('.ant-table-row').first().waitFor();
       let facts = await applyScope(kind);
-      for (const name of ['协议', '结果', kind === 'dns' ? '查询类型' : kind === 'events' ? '事件类型' : '认证方式']) {
+      for (const name of ['协议', '结果', kind === 'dns' ? '查询类型' : '认证方式']) {
         await page.getByRole('combobox', { name, exact: true }).waitFor();
       }
       if (kind === 'dns') {
@@ -88,14 +88,6 @@ const assert = require('node:assert/strict');
         facts = await query(kind);
         assert(facts.items.every(row => row.qtype === 'AAAA' && row.outcome === 'ANSWERED'));
         await page.locator('.ant-table-tbody').getByText('已应答', { exact: true }).first().waitFor();
-      }
-      if (kind === 'events') {
-        assert(facts.items.every(row => row.clientIp && row.inboundProtocol), 'New events must retain source and protocol');
-        await choose('事件类型', '建连结果');
-        await choose('结果', '通道已建立');
-        facts = await query(kind);
-        assert(facts.items.every(row => row.eventType === 'CONNECT_RESULT' && row.outcome === 'CONNECTED' && row.username), 'Connected fixtures must retain known users');
-        await page.getByText('通道建立', { exact: true }).first().waitFor();
       }
       if (kind === 'credential-auth') {
         await choose('协议', 'SOCKS5协议');

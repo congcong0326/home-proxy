@@ -23,7 +23,6 @@ import static org.congcong.controlmanager.service.mail.inspection.InspectionForm
 public class InspectionReportService {
     private final DiskInspectionService disks;
     private final NetworkInspectionService network;
-    private final AuthLocationInspectionService auth;
     private final ProxyWorkerRepository workers;
     private final WorkerStatusRepository statuses;
     private final TelemetryStore telemetry;
@@ -32,17 +31,16 @@ public class InspectionReportService {
 
     @Autowired
     public InspectionReportService(DiskInspectionService disks, NetworkInspectionService network,
-            AuthLocationInspectionService auth, ProxyWorkerRepository workers, WorkerStatusRepository statuses,
+            ProxyWorkerRepository workers, WorkerStatusRepository statuses,
             TelemetryStore telemetry, InspectionProperties properties) {
-        this(disks, network, auth, workers, statuses, telemetry, properties, Clock.systemDefaultZone());
+        this(disks, network, workers, statuses, telemetry, properties, Clock.systemDefaultZone());
     }
 
     InspectionReportService(DiskInspectionService disks, NetworkInspectionService network,
-            AuthLocationInspectionService auth, ProxyWorkerRepository workers, WorkerStatusRepository statuses,
+            ProxyWorkerRepository workers, WorkerStatusRepository statuses,
             TelemetryStore telemetry, InspectionProperties properties, Clock clock) {
         this.disks = disks;
         this.network = network;
-        this.auth = auth;
         this.workers = workers;
         this.statuses = statuses;
         this.telemetry = telemetry;
@@ -61,7 +59,6 @@ public class InspectionReportService {
                 safe("外网上下行流量", () -> network.traffic(required(ids), from, to, zone)),
                 safe("代理连接质量", () -> network.connections(required(ids), from, to, zone)),
                 safe("客户端 DNS 处理质量", () -> network.dns(required(ids), from, to, zone)),
-                safe("认证成功位置与变化", () -> auth.inspect(required(ids), from, to, zone)),
                 safe("日志采集与数据覆盖", () -> collection(required(enabled), zone)));
         return new InspectionReport(UUID.randomUUID().toString(), from, to, zone, sections);
     }

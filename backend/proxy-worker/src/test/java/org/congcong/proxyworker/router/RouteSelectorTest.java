@@ -43,7 +43,7 @@ class RouteSelectorTest {
         var selection = selector.select(request, inbound, 0L);
         assertSame(first, selection.route());
         assertFalse(selection.fallback());
-        assertEquals("v1:1:1", request.getTelemetryMatchedRuleId());
+        assertEquals("1:1", request.getTelemetryMatchedRuleId());
         assertNull(request.getTelemetryMatchedRuleSet());
         inbound.setRoutesMap(Map.of(0L, List.of(first)));
         assertSame(inbound.getDefaultRouteConfig(), selector.select(request("other.test"), inbound, 0L).route());

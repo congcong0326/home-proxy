@@ -5,7 +5,6 @@ import java.net.InetAddress;
 
 /** Literal-only classification. Reserved addresses must never become NAS traffic. */
 public final class TrafficClassifierV1 {
-    public static final int VERSION = 1;
     private TrafficClassifierV1() { }
 
     public static String addressClass(String literal) {
@@ -40,24 +39,16 @@ public final class TrafficClassifierV1 {
     }
 
     public static void classify(SessionLogV1 record) {
-        record.setTrafficClassificationVersion(VERSION);
-        record.setTargetAddressClass(addressClass(record.getSelectedTargetIp()));
-        record.setTargetNetworkScope(scope(record.getSelectedTargetIp()));
-        record.setClientNetworkScope(scope(record.getClientIp()));
-        record.setOutboundPeerNetworkScope(scope(record.getOutboundPeerIp()));
+        NetworkScope target = scope(record.getSelectedTargetIp());
         if ("OUTBOUND_PROXY".equals(record.getRouteAction()) && !Boolean.TRUE.equals(record.getDestinationOverrideApplied())) {
             record.setTrafficCategory(TrafficCategory.EXTERNAL);
-            record.setTrafficCategoryBasis("OUTBOUND_PROXY_ROUTE");
-        } else if (record.getTargetNetworkScope() == NetworkScope.INTERNAL) {
+        } else if (target == NetworkScope.INTERNAL) {
             boolean override = Boolean.TRUE.equals(record.getDestinationOverrideApplied());
             record.setTrafficCategory(override ? TrafficCategory.INTERNAL_REWRITE : TrafficCategory.OTHER_INTERNAL);
-            record.setTrafficCategoryBasis(override ? "OVERRIDE_PRIVATE_TARGET" : "NON_OVERRIDE_PRIVATE_TARGET");
-        } else if (record.getTargetNetworkScope() == NetworkScope.EXTERNAL) {
+        } else if (target == NetworkScope.EXTERNAL) {
             record.setTrafficCategory(TrafficCategory.EXTERNAL);
-            record.setTrafficCategoryBasis("PUBLIC_TARGET");
         } else {
             record.setTrafficCategory(TrafficCategory.UNKNOWN);
-            record.setTrafficCategoryBasis("UNRESOLVED");
         }
     }
 }

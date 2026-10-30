@@ -10,6 +10,7 @@ import java.util.List;
  * worker sends heartbeats and buffered logs through the same channel while the
  * controller returns configuration responses.
  */
+@com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown = true)
 @Data
 @NoArgsConstructor
 public class WorkerManagementMessage {

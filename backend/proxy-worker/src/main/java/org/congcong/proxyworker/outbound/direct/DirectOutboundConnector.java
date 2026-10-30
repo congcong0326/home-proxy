@@ -123,7 +123,7 @@ public class DirectOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<Channel>() {
                     @Override protected void initChannel(Channel channel) {
                         channel.pipeline().addLast(new DirectClientHandler(relayPromise));
-                        TelemetryHooks.outbound(channel, inboundChannel, false, false, null);
+                        TelemetryHooks.outbound(channel, inboundChannel, false, false);
                     }
                 });
 

@@ -138,6 +138,7 @@ class TelemetryStoreTest {
         var record = new CredentialAuthLogV1();
         record.setRecordId(UUID.randomUUID().toString());
         record.setAuthAttemptId(record.getRecordId());
+        record.setAuthOutcome(AuthOutcome.FAILURE);
         record.setWorkerInstanceId(UUID.randomUUID().toString());
         record.setOccurredAt(Instant.now());
         var batch = new TelemetryBatchV1();
@@ -174,6 +175,96 @@ class TelemetryStoreTest {
         }
         assertTrue(TelemetrySchema.SESSIONS.ddl().contains("dns_duration_us Nullable(UInt64)"));
     }
+    private static final com.fasterxml.jackson.databind.ObjectMapper WIRE = new com.fasterxml.jackson.databind.ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+
+    /** Wire JSON as an older worker sends it: removed fields, diagnostic events and non-failure auth records. */
+    private TelemetryBatchV1 legacy(boolean session, boolean event, String authOutcome) throws Exception {
+        String now = Instant.now().toString();
+        String id = UUID.randomUUID().toString();
+        String instance = UUID.randomUUID().toString();
+        String common = "\"workerInstanceId\":\"" + instance + "\",\"occurredAt\":\"" + now + "\",\"configVersion\":\"h\","
+                + "\"clientIpSource\":\"TRANSPORT_PEER\",\"transportPeerIp\":\"192.0.2.7\",\"someFutureField\":1";
+        List<String> parts = new java.util.ArrayList<>();
+        if (session) {
+            parts.add("\"sessions\":[{\"recordId\":\"" + id + "\",\"connectionId\":\"" + id + "\"," + common
+                    + ",\"startedAt\":\"" + now + "\",\"endedAt\":\"" + now + "\",\"connectOutcome\":\"CANCELLED\","
+                    + "\"sessionOutcome\":\"CANCELLED\",\"uploadBytes\":\"0\",\"downloadBytes\":\"0\","
+                    + "\"closeReason\":\"CHANNEL_CLOSED\",\"routeSelectionDurationUs\":\"3\"}]");
+        }
+        if (event) {
+            parts.add("\"events\":[{\"recordId\":\"" + id + "\",\"eventId\":\"" + id + "\",\"eventType\":\"CONNECT_RESULT\"," + common + "}]");
+        }
+        if (authOutcome != null) {
+            String auth = UUID.randomUUID().toString();
+            parts.add("\"credentialAuth\":[{\"recordId\":\"" + auth + "\",\"authAttemptId\":\"" + auth + "\"," + common
+                    + ",\"authOutcome\":\"" + authOutcome + "\",\"verifiedUsername\":\"alice\"}]");
+        }
+        parts.add("\"batchId\":\"" + UUID.randomUUID() + "\"");
+        return WIRE.readValue("{" + String.join(",", parts) + "}", TelemetryBatchV1.class);
+    }
+
+    private int queued(String table) {
+        return ((Map<?, ?>) store.bufferStatus().get("tables")).get(table) instanceof Integer n ? n : -1;
+    }
+
+    @Test
+    void legacyBatchWithRemovedFieldsAndEventsIsAcceptedAndOnlyKnownFactsAreStored() throws Exception {
+        var batch = legacy(true, true, "FAILURE");
+        assertEquals(1, batch.getEvents().size());
+        assertEquals(2, batch.recordCount());
+        assertTrue(store.ingest("node", batch).isPersisted());
+        assertEquals(1, queued("sessions"));
+        assertEquals(1, queued("credential-auth"));
+        assertEquals(2, store.bufferStatus().get("queueDepth"));
+    }
+
+    @Test
+    void batchWithOnlyEventsIsAcknowledgedWithoutBuffering() throws Exception {
+        var batch = legacy(false, true, null);
+        assertEquals(0, batch.recordCount());
+        var ack = store.ingest("node", batch);
+        assertTrue(ack.isPersisted());
+        assertEquals(batch.getBatchId(), ack.getBatchId());
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void successChallengeAndCancelledAuthRecordsAreDiscardedButBatchIsAcknowledged() throws Exception {
+        for (String outcome : List.of("SUCCESS", "CHALLENGE", "CANCELLED")) {
+            var batch = legacy(false, false, outcome);
+            assertTrue(store.ingest("node", batch).isPersisted(), outcome);
+        }
+        assertEquals(0, store.bufferStatus().get("queueDepth"));
+        for (String outcome : List.of("FAILURE", "DENIED", "MALFORMED", "ERROR")) store.ingest("node", legacy(false, false, outcome));
+        assertEquals(4, queued("credential-auth"));
+    }
+
+    @Test
+    void emptyBatchStillFailsAndLimitsApplyToTheOriginalBatch() throws Exception {
+        var empty = new TelemetryBatchV1();
+        empty.setBatchId(UUID.randomUUID().toString());
+        assertThrows(IllegalArgumentException.class, () -> store.ingest("node", empty));
+        properties.setMaxBatchRecords(1);
+        assertThrows(IllegalArgumentException.class, () -> store.ingest("node", legacy(true, true, null)));
+    }
+
+    @Test
+    void retentionDaysMapToTheirOwnTables() {
+        properties.setSessionRetentionDays(11);
+        properties.setDnsRetentionDays(22);
+        properties.setAuthRetentionDays(33);
+        store.requireQueryAvailable();
+        var statements = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(client, atLeastOnce()).execute(statements.capture());
+        var ttl = statements.getAllValues().stream().filter(sql -> sql.startsWith("CREATE TABLE")).toList();
+        assertEquals(3, ttl.size());
+        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("proxy_session_log_v1") && sql.endsWith("INTERVAL 11 DAY")));
+        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("dns_query_log_v1") && sql.endsWith("INTERVAL 22 DAY")));
+        assertTrue(ttl.stream().anyMatch(sql -> sql.contains("credential_auth_log_v1") && sql.endsWith("INTERVAL 33 DAY")));
+    }
+
     private TelemetryBatchV1 batch() {
         var record = new SessionLogV1();
         record.setRecordId(UUID.randomUUID().toString());

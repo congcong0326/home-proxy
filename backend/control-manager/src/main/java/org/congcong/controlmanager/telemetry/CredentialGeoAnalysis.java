@@ -78,10 +78,6 @@ public class CredentialGeoAnalysis {
         copy.setSourceCity(result.getSourceCity());
         copy.setGeoLookupStatus(result.getGeoLookupStatus());
         copy.setGeoDatabaseVersion(databaseVersion);
-        copy.setRiskRuleVersion("contract-v1");
-        copy.setBaselineStatus("BASELINE_INSUFFICIENT");
-        copy.setRiskTags("RESOLVED".equals(result.getGeoLookupStatus()) || "PRIVATE".equals(result.getGeoLookupStatus())
-                ? List.of() : List.of("LOCATION_UNKNOWN"));
         return copy;
     }
 

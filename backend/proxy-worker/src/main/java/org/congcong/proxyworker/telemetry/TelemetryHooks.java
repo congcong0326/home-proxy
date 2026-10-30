@@ -22,18 +22,14 @@ public final class TelemetryHooks {
     private TelemetryHooks() { }
     public static void accept(Channel channel, InboundConfig inbound) {
         if (inbound == null || inbound.getProtocol() == ProtocolType.DNS_SERVER || !TelemetryPublisher.getInstance().enabled()) return;
-        SessionObservation state = new SessionObservation(TelemetryPublisher.getInstance()::publish, TelemetryPublisher.getInstance().eventsEnabled());
+        SessionObservation state = new SessionObservation(TelemetryPublisher.getInstance()::publish);
         SessionLogV1 record = state.summary();
         record.setInboundId(inbound.getId());
         record.setInboundName(inbound.getName());
         record.setInboundProtocol(inbound.getProtocol().name());
-        record.setConfigVersion(inbound.getConfigVersion());
         if (channel.remoteAddress() instanceof InetSocketAddress peer && peer.getAddress() != null) {
-            record.setTransportPeerIp(peer.getAddress().getHostAddress());
-            record.setTransportPeerPort(peer.getPort());
-            record.setClientIp(record.getTransportPeerIp());
+            record.setClientIp(peer.getAddress().getHostAddress());
             record.setClientPort(peer.getPort());
-            record.setClientIpSource("TRANSPORT_PEER");
         }
         channel.attr(CONTEXT).set(state);
         if (inbound.getProtocol() == ProtocolType.TP_PROXY || inbound.getProtocol() == ProtocolType.TLS_SNI_TCP) {
@@ -74,15 +70,6 @@ public final class TelemetryHooks {
         endStage(channel, TARGET_RECOVERY);
     }
 
-    public static void relayStarted(Channel channel) {
-        run(channel, SessionObservation::relayStarted);
-    }
-
-    public static void backpressure(Channel channel, boolean upload, boolean blocked) {
-        var stage = upload ? UPLOAD_BACKPRESSURE : DOWNLOAD_BACKPRESSURE;
-        if (blocked) beginStage(channel, stage);
-        else endStage(channel, stage);
-    }
     /** Resolver observation excludes DNS from the socket connect timer and preserves address validation. */
     public static ChannelFuture connectTcp(Bootstrap bootstrap, Channel inbound, java.net.InetSocketAddress address) {
         if (state(inbound) == null) return bootstrap.connect(address);
@@ -97,11 +84,11 @@ public final class TelemetryHooks {
             throw failure;
         }
     }
-    public static void outbound(Channel outbound, Channel inbound, boolean proxy, boolean tls, String readyOutcome) {
+    public static void outbound(Channel outbound, Channel inbound, boolean proxy, boolean tls) {
         if (state(inbound) == null) return;
-        outbound.pipeline().addFirst(new OutboundTimingHandler(inbound, proxy, tls, readyOutcome));
+        outbound.pipeline().addFirst(new OutboundTimingHandler(inbound, proxy, tls));
     }
-    public static void routing(Channel channel, ProxyTunnelRequest request, boolean fallback) {
+    public static void routing(Channel channel, ProxyTunnelRequest request) {
         run(
                 channel,
                 state -> {
@@ -139,8 +126,6 @@ public final class TelemetryHooks {
                     record.setOutboundNodeId(
                             route.getId() == null ? null : "route:" + route.getId());
                     record.setRouteAction(route.getPolicy().name());
-                    record.setRouteSelection(fallback ? "DEFAULT" : "RULE_MATCH");
-                    record.setOutboundMode(route.getPolicy().name());
                     record.setOutboundProtocol(
                             route.getPolicy() == RoutePolicy.OUTBOUND_PROXY
                                             && route.getOutboundProxyType() != null
@@ -164,11 +149,6 @@ public final class TelemetryHooks {
                                                 ? IdentitySource.ANONYMOUS
                                                 : IdentitySource.DEVICE_IP);
                     }
-                    if (request.getLogicalTargetSource()
-                            != org.congcong.proxyworker.server.tunnel.LogicalTargetSource
-                                    .INBOUND_REQUEST) {
-                        state.event("TARGET_RECOVERY_RESULT", "TARGET_RECOVERY", "RECOVERED", null);
-                    }
                 });
     }
 
@@ -184,11 +164,6 @@ public final class TelemetryHooks {
                 record.setOutboundPeerPort(peer.getPort());
                 if (request.getRouteConfig().getPolicy() != RoutePolicy.OUTBOUND_PROXY) record.setSelectedTargetIp(record.getOutboundPeerIp());
             }
-            boolean proxy = request.getRouteConfig().getPolicy() == RoutePolicy.OUTBOUND_PROXY;
-            record.setChannelReadyBasis(proxy ? "PROXY_CONNECTOR_READY" : "DIRECT_TCP_CONNECTED");
-            record.setTargetConfirmationLevel(proxy ? "UPSTREAM_PROTOCOL_ONLY" : "LOCAL_TCP_CONNECTED");
-            var timing = outbound == null ? null : outbound.pipeline().get(OutboundTimingHandler.class);
-            if (proxy && timing != null) record.setProxyHandshakeOutcome(timing.readyOutcome());
             TrafficClassifierV1.classify(record);
             state.connected();
         });
@@ -217,26 +192,25 @@ public final class TelemetryHooks {
         if (!TelemetryPublisher.getInstance().authEnabled()) return;
         run(channel, state -> {
             var context = state.summary();
+            // Side effects on the connection summary apply to every outcome; only failures are published.
+            if (outcome == AuthOutcome.SUCCESS && verified != null) {
+                context.setUserId(verified.getId()); context.setUsername(verified.getUsername());
+                context.setIdentitySource(IdentitySource.ACCOUNT_AUTH);
+            } else if (outcome == AuthOutcome.FAILURE || outcome == AuthOutcome.DENIED || outcome == AuthOutcome.MALFORMED) {
+                state.error("AUTH", reason);
+            }
+            if (!outcome.isFailure()) return;
             CredentialAuthLogV1 record = new CredentialAuthLogV1();
             record.setAuthAttemptId(UUID.randomUUID().toString()); record.setRecordId(record.getAuthAttemptId());
             record.setConnectionId(context.getConnectionId()); record.setOccurredAt(Instant.now());
             record.setInboundId(context.getInboundId()); record.setInboundName(context.getInboundName());
-            record.setInboundProtocol(context.getInboundProtocol()); record.setConfigVersion(context.getConfigVersion());
+            record.setInboundProtocol(context.getInboundProtocol());
             record.setClientIp(context.getClientIp()); record.setClientPort(context.getClientPort());
-            record.setTransportPeerIp(context.getTransportPeerIp()); record.setTransportPeerPort(context.getTransportPeerPort());
-            record.setClientIpSource(context.getClientIpSource());
             record.setAuthMethod(method); record.setAuthEventKind(kind); record.setAuthOutcome(outcome);
             record.setReasonCode(reason); record.setAuthDurationUs(durationUs);
             if (attemptedUsername != null) {
                 String sanitized = attemptedUsername.replaceAll("[\\p{Cntrl}]", "");
                 record.setAttemptedUsername(sanitized.substring(0, Math.min(128, sanitized.length())));
-            }
-            if (outcome == AuthOutcome.SUCCESS && verified != null) {
-                record.setUserId(verified.getId()); record.setVerifiedUsername(verified.getUsername());
-                context.setUserId(verified.getId()); context.setUsername(verified.getUsername());
-                context.setIdentitySource(IdentitySource.ACCOUNT_AUTH);
-            } else if (outcome == AuthOutcome.FAILURE || outcome == AuthOutcome.DENIED || outcome == AuthOutcome.MALFORMED) {
-                state.error("AUTH", reason);
             }
             TelemetryPublisher.getInstance().publish(record);
         });

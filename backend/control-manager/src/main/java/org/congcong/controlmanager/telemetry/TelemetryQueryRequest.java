@@ -21,7 +21,6 @@ public class TelemetryQueryRequest {
     private String route;
     private String trafficCategory;
     private String qtype;
-    private String eventType;
     private String authMethod;
     private String authOutcomeGroup;
     private String exactAuthUsername;

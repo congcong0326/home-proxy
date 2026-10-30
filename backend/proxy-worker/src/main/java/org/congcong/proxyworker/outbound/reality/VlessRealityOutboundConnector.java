@@ -46,7 +46,7 @@ public class VlessRealityOutboundConnector extends AbstractOutboundConnector {
                 .handler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     protected void initChannel(SocketChannel ch) {
-                        TelemetryHooks.outbound(ch, inboundChannel, true, true, "LOCAL_REQUEST_SENT");
+                        TelemetryHooks.outbound(ch, inboundChannel, true, true);
                         RealityHandshakeEngine handshakeEngine = new RealityHandshakeEngine(
                                 realityConfig,
                                 new RealityClientHelloFactory());

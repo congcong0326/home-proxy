@@ -50,7 +50,6 @@ class ProxyWorkerApplicationTest {
             assertTrue(listener.onConfigChanged(config).success());
             assertFalse(TelemetryPublisher.getInstance().enabled());
             assertFalse(TelemetryPublisher.getInstance().authEnabled());
-            assertFalse(TelemetryPublisher.getInstance().eventsEnabled());
             assertEquals(1, refreshCount.get());
             config.setLogReportingEnabled(true);
             assertTrue(listener.onConfigChanged(config).success());

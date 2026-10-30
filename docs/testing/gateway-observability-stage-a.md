@@ -1,5 +1,9 @@
 # 网关观测阶段 A：契约、实施与保留数据 E2E
 
+> **后续变更（日志类型与字段精简）**：诊断事件日志类型已删除，认证审计只上报失败记录，并删除了一批无价值字段（详见 [日志类型与字段精简设计](../development/telemetry-field-slimming-design.md)）。本文中关于诊断事件、认证成功记录及被删字段的描述仅作为历史设计保留，以实际代码为准。
+
+旧列与旧表的清理脚本见 `scripts/clickhouse/telemetry-slimming-cleanup.sql`：**仅手工执行，不可回滚**，前提是所有 Worker 已升级并稳定运行、控制端已升级；执行后不能再回滚到旧版控制端。
+
 更新日期：2026-10-09。对应 [双轨设计](../development/gateway-observability-log-model-design.md) 的阶段 A；后续按第 13 节调整为 B 新版日志审计与数据确认、C 逐项迁移现有查询、D 独立清理旧链路，其中 B1 已实施，见 [B1 审计页面记录](gateway-observability-b1.md)；B2／C／D 尚未实施。完整采集、专题看板与高级异常来源分析按实际功能依赖逐步补齐，不作为开始查询迁移的统一前置条件。
 
 用户后续确认采用内网及时消费、有界内存缓冲方案。当前版本移除 Worker 日志磁盘缓存，交付语义为 `BEST_EFFORT_WITH_ACK`；不要求或承诺 Worker 重启恢复待确认日志。首版磁盘缓冲及 39 个事实的重启恢复测试仅为历史验证，已由本次内存方案替代，原先落库的记录继续保留。
@@ -23,7 +27,6 @@
 | 节点 logReportingEnabled | true | 管理台“代理网关日志上报”，动态控制 V1 采集／发送 |
 | Worker OBSERVABILITY_ENABLED | true | 每 Worker 打开新采集 |
 | Worker OBSERVABILITY_AUTH_ENABLED | true | 总开关下独立凭据认证采集 |
-| Worker OBSERVABILITY_EVENTS_ENABLED | true | 总开关下独立事件采集 |
 | Worker OBSERVABILITY_BUFFER_CAPACITY | 5000 | 最大未确认事实数，包含待 ACK 批次 |
 | Worker OBSERVABILITY_BUFFER_MAX_BYTES | 4194304 | 序列化事实载荷上限；实际堆占用另含对象/批次开销 |
 | 管理端 OBSERVABILITY_INGEST_ENABLED | true | 协商/接收/写入 |
@@ -53,7 +56,7 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 
 新版日志沿用原“系统运维 → 代理节点 → 编辑 → 代理网关日志上报”，对应数据库和聚合配置中的 `logReportingEnabled`，字段名、默认值与配置 hash 均不变。开启后采集／上报新版连接、DNS、诊断事件、认证日志，关闭后停止新事实入队与 telemetry 发送。保存后由已有配置通道动态下发，无需重启，也不会因仅修改此开关重启代理监听；各节点独立设置，缺失或 null 按开启处理。以前将该开关设为 false 的节点升级后新版日志也会停止，需在页面打开才能恢复。
 
-`OBSERVABILITY_ENABLED` 保留为部署层总开关，认证／事件仍受 `OBSERVABILITY_AUTH_ENABLED`／`OBSERVABILITY_EVENTS_ENABLED` 子开关控制；管理端 ingest/query 开关保持原语义。以上默认均为 true，页面开关不能覆盖部署层禁用；环境变量改变需重建容器或重启进程。
+`OBSERVABILITY_ENABLED` 保留为部署层总开关，认证仍受 `OBSERVABILITY_AUTH_ENABLED` 子开关控制（诊断事件已删除，`OBSERVABILITY_EVENTS_ENABLED` 不再生效）；管理端 ingest/query 开关保持原语义。以上默认均为 true，页面开关不能覆盖部署层禁用；环境变量改变需重建容器或重启进程。
 
 关闭页面开关后，已有新版待确认批次保留在有界内存中并暂停发送，重新开启继续发送；已发出的帧仍可能落库和返回 ACK，运行进程重启仍会丢失未确认记录。关闭期间不补采新事实，跨越关闭窗口的连接统计不能作为完整覆盖。配置下发和基本心跳不受日志开关影响，控制台／文件运行日志由另一个 `logLevel` 设置控制。
 

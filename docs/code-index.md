@@ -67,7 +67,7 @@
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。
-- `telemetry/TelemetryPublisher`：新版四类日志缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集与 HTTP 日志上报已移除。
+- `telemetry/TelemetryPublisher`：新版三类日志（连接、DNS、认证失败）缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集与 HTTP 日志上报已移除。
 
 ## 前端 frontend
 
@@ -114,7 +114,7 @@
 日志与看板链路：
 
 1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
-2. `control-manager` 的 telemetry ingest/writer 将新版四类日志写入 ClickHouse 的独立表；配置与日志均走 WSS，旧 `/api/logs/access`、`/api/logs/auth` 写入端点及 `LogService` 写入路径已移除，`GET /api/logs/**` 仍可查询历史数据。
+2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入 ClickHouse 的独立表；诊断事件已删除，旧 Worker 发来的事件与非失败认证记录接收后丢弃；配置与日志均走 WSS，旧 `/api/logs/access`、`/api/logs/auth` 写入端点及 `LogService` 写入路径已移除，`GET /api/logs/**` 仍可查询历史数据。
 3. 新版看板／审计页面查询 `/api/observability/v1`；保留的旧源消费者通过 `LogController`、`UserTrafficStatsController` 读取历史数据；网关监控读取 WSS 心跳落库的 `worker_status`。
 
 认证链路：
@@ -173,14 +173,14 @@
 
 ## 新版连接阶段耗时
 
-- `proxy-worker/telemetry/SessionObservation`、`TelemetryHooks`：单调时钟阶段计时、结束冻结、协议请求就绪和中继背压。
+- `proxy-worker/telemetry/SessionObservation`、`TelemetryHooks`：单调时钟阶段计时、结束冻结和协议请求就绪；认证只发布失败记录，成功认证仅更新连接身份。
 - `proxy-worker/telemetry/OutboundTimingHandler`、`TimingAddressResolverGroup`：实际 socket connect、系统解析与出站协议计时；自定义 DNS 在 direct／endpoint resolver 中计时。
 - `scripts/e2e/gateway-observability-session-timing-e2e.py`（`make e2e-observability-session-timing`）：本地真实上游／失败／背压／SNI 流量，保留日志并禁用临时入站；同目录 `gateway-observability-session-timing-browser.cjs` 只读核对实际详情。
 - [连接阶段耗时采集与验证](testing/gateway-observability-session-timing.md)：客户端握手、目标恢复、选路、DNS、TCP、REALITY TLS、上游代理握手和双向背压的采集边界；移除无执行来源的限流字段。
 
 ## 网关观测：访问分布预览
 
-- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证次数／成功失败筛选、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
+- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证失败次数、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
 - `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、UInt128 累加、93 天范围、缺失维度计数与节点历史起点；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
 - [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。
 

@@ -9,7 +9,6 @@ class TrafficClassifierV1Test {
         for (String ip : new String[]{"10.0.0.1", "172.16.0.1", "192.168.10.85", "fd00::85", "::ffff:192.168.10.85"}) {
             SessionLogV1 record = classify(ip, true, "DESTINATION_OVERRIDE");
             assertEquals(TrafficCategory.INTERNAL_REWRITE, record.getTrafficCategory(), ip);
-            assertEquals(NetworkScope.INTERNAL, record.getTargetNetworkScope());
         }
         assertEquals(TrafficCategory.OTHER_INTERNAL, classify("192.168.10.85", false, "DIRECT").getTrafficCategory());
         assertEquals(TrafficCategory.EXTERNAL, classify("8.8.8.8", true, "DESTINATION_OVERRIDE").getTrafficCategory());
@@ -30,10 +29,7 @@ class TrafficClassifierV1Test {
         record.setOutboundPeerIp("192.168.0.10");
         TrafficClassifierV1.classify(record);
         assertEquals(TrafficCategory.EXTERNAL, record.getTrafficCategory());
-        assertEquals("OUTBOUND_PROXY_ROUTE", record.getTrafficCategoryBasis());
         assertNull(record.getSelectedTargetIp());
-        assertEquals(NetworkScope.UNKNOWN, record.getTargetNetworkScope());
-        assertEquals(NetworkScope.INTERNAL, record.getOutboundPeerNetworkScope());
     }
 
     private SessionLogV1 classify(String ip, boolean override, String route) {

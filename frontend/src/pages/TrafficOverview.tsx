@@ -113,7 +113,6 @@ export function TrafficOverview() {
   const [source, setSource] = useState({ username: '', clientIp: '' });
   const [connectionResult, setConnectionResult] = useState<ResultFilter>('ALL');
   const [dnsResult, setDnsResult] = useState<ResultFilter>('ALL');
-  const [authResult, setAuthResult] = useState<ResultFilter>('ALL');
   const [dnsOrigin, setDnsOrigin] = useState<'CLIENT' | 'PROXY_RESOLVE' | 'ALL'>('CLIENT');
   const [connectionView, setConnectionView] = useState('concurrency');
   const [data, setData] = useState<OverviewData | null>(null);
@@ -136,10 +135,10 @@ export function TrafficOverview() {
     const end = preset === 'custom' ? new Date(to).toISOString() : new Date().toISOString();
     const start = preset === 'custom' ? new Date(from).toISOString() : new Date(new Date(end).getTime() - Number(preset) * 3600000).toISOString();
     return { workerId, from: start, to: end, timeZone, ...source, trafficCategory: category,
-      trafficResult: 'ALL', connectionResult, dnsResult, authResult, dnsOrigin };
+      trafficResult: 'ALL', connectionResult, dnsResult, dnsOrigin };
     // Refresh advances relative ranges even if filters remain unchanged.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workerId, preset, from, to, source, category, connectionResult, dnsResult, authResult, dnsOrigin, timeZone, revision]);
+  }, [workerId, preset, from, to, source, category, connectionResult, dnsResult, dnsOrigin, timeZone, revision]);
 
   useEffect(() => {
     if (!workersReady) return;
@@ -212,7 +211,7 @@ export function TrafficOverview() {
       <div className="ov-summary ov-blue"><div className="ov-summary-label"><GlobalOutlined /> {selectedLabel}流量 <span>所选范围</span></div><strong>{empty ? '—' : bytes(data?.traffic.total)}</strong><div className="ov-summary-footer"><span><ArrowUpOutlined /> {empty ? '—' : bytes(data?.traffic.upload)}</span><span><ArrowDownOutlined /> {empty ? '—' : bytes(data?.traffic.download)}</span></div></div>
       <div className="ov-summary ov-purple"><div className="ov-summary-label"><ApiOutlined /> 当前并发 <span>每 5 秒更新</span></div><strong>{data?.live.available ? count(data.live.count) : '—'}<small> 条</small></strong><div className="ov-summary-footer">{data?.live.available ? `采样于 ${clock(data.live.sampledAt!)}` : data?.live.reason === 'STALE' ? '节点离线或采样已过期' : data?.live.reason === 'GROUPS_TRUNCATED' ? '来源分组过多，当前筛选不可用' : '等待新版节点上报已建立连接'}</div></div>
       <div className="ov-summary ov-teal"><div className="ov-summary-label"><CloudOutlined /> DNS 查询 <span>{dnsOrigin === 'CLIENT' ? '客户端' : dnsOrigin === 'PROXY_RESOLVE' ? '内部解析' : '全部查询'}</span></div><strong>{empty ? '—' : count(data?.dns.total)}<small> 次</small></strong><div className="ov-summary-footer">成功 {empty ? '—' : count(data?.dns.totals.SUCCESS)}<span>失败 {empty ? '—' : count(data?.dns.totals.FAILURE)}</span></div></div>
-      <div className="ov-summary ov-amber"><div className="ov-summary-label"><SafetyCertificateOutlined /> 认证尝试 <span>凭据认证</span></div><strong>{empty ? '—' : count(data?.auth.total)}<small> 次</small></strong><div className="ov-summary-footer">成功 {empty ? '—' : count(data?.auth.totals.SUCCESS)}<span>失败 {empty ? '—' : count(data?.auth.totals.FAILURE)}</span></div></div>
+      <div className="ov-summary ov-amber"><div className="ov-summary-label"><SafetyCertificateOutlined /> 认证失败 <span>凭据认证</span></div><strong>{empty ? '—' : count(data?.auth.total)}<small> 次</small></strong><div className="ov-summary-footer">仅统计失败的认证尝试</div></div>
     </div>
 
     <div className="ov-charts-grid">
@@ -229,9 +228,9 @@ export function TrafficOverview() {
         <div className="ov-panel-metrics">{totals('dns')}</div><Chart option={dnsOption} empty={!!data && data.dns.total === '0'} loading={loading} />
         <div className="ov-panel-note">成功含正常否定应答（NXDOMAIN）；阻断与取消单列。</div>
       </section>
-      <section className="ov-panel"><div className="ov-panel-header"><div><h3><SafetyCertificateOutlined />认证尝试趋势</h3><p>成功与失败均保留实际来源</p></div><ResultSelect label="认证结果" value={authResult} onChange={setAuthResult} kinds={['SUCCESS', 'FAILURE', 'CHALLENGE', 'CANCELLED', 'UNKNOWN']} /></div>
+      <section className="ov-panel"><div className="ov-panel-header"><div><h3><SafetyCertificateOutlined />认证失败趋势</h3><p>仅统计失败的认证尝试</p></div></div>
         <div className="ov-panel-metrics">{totals('auth')}</div><Chart option={authOption} empty={!!data && data.auth.total === '0'} loading={loading} />
-        <div className="ov-panel-note">失败包含凭据错误、拒绝与异常；挑战单列。</div>
+        <div className="ov-panel-note">失败包含凭据错误、拒绝、格式错误与异常；认证成功不上报。</div>
       </section>
     </div>
 

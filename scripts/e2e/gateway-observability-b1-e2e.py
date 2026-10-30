@@ -34,7 +34,7 @@ def expect_status(path, expected):
         raise AssertionError('Expected HTTP ' + str(expected))
 
 
-for kind in ['sessions', 'dns', 'events', 'credential-auth']:
+for kind in ['sessions', 'dns', 'credential-auth']:
     first = page(kind, limit=2)
     assert first['items'], 'Retained sample required for ' + kind
     assert isinstance(first['total'], str) and int(first['total']) >= len(first['items'])
@@ -54,12 +54,12 @@ for kind in ['sessions', 'dns', 'events', 'credential-auth']:
             if row.get(field):
                 filters[parameter] = row[field]
         assert isinstance(row['uploadBytes'], str) and isinstance(row['downloadBytes'], str)
-        related = {k: page(k, connectionId=row['connectionId'], limit=200) for k in ['dns', 'events', 'credential-auth']}
+        related = {k: page(k, connectionId=row['connectionId'], limit=200) for k in ['dns', 'credential-auth']}
         for related_page in related.values():
             assert all(r.get('connectionId') == row['connectionId'] or r.get('parentConnectionId') == row['connectionId'] for r in related_page['items'])
         report['association'] = {k: v['total'] for k, v in related.items()}
     else:
-        for field, parameter in [('qname', 'target'), ('qtype', 'qtype'), ('eventType', 'eventType'), ('authMethod', 'authMethod'), ('authOutcome', 'outcome'), ('outcome', 'outcome'), ('attemptedUsername', 'username')]:
+        for field, parameter in [('qname', 'target'), ('qtype', 'qtype'), ('authMethod', 'authMethod'), ('authOutcome', 'outcome'), ('outcome', 'outcome'), ('attemptedUsername', 'username')]:
             if row.get(field):
                 filters[parameter] = row[field]
     filtered = page(kind, limit=200, **filters)
@@ -72,7 +72,7 @@ for kind in ['sessions', 'dns', 'events', 'credential-auth']:
     expect_status('/api/observability/v1/' + kind + '/' + row['recordId'] + '?' + urlencode(dict(scope, workerId='no-such-worker')), 404)
     report['types'][kind] = {'total': first['total'], 'filteredTotal': filtered['total'], 'recordId': row['recordId'], 'filters': filters}
 
-for outcome in ['FAILURE', 'CHALLENGE', 'DENIED', 'MALFORMED']:
+for outcome in ['FAILURE', 'DENIED', 'MALFORMED']:
     auth = page('credential-auth', outcome=outcome, limit=200)
     assert auth['items'], 'Retained auth sample required for ' + outcome
     assert all(row['authOutcome'] == outcome for row in auth['items'])

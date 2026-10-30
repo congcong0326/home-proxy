@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public final class TelemetryTimingAssertions {
     private TelemetryTimingAssertions() { }
 
-    public static void assertOutbound(int targetPort, String protocol, boolean tls, String confirmation) {
+    public static void assertOutbound(int targetPort, String protocol, boolean tls) {
         var publisher = TelemetryPublisher.getInstance();
         if (!publisher.enabled()) return;
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
@@ -37,12 +37,10 @@ public final class TelemetryTimingAssertions {
         }
         assertNotNull(record, "Expected a completed session with outbound timings");
         assertNotNull(record.getClientHandshakeDurationUs());
-        assertNotNull(record.getRouteSelectionDurationUs());
         assertNotNull(record.getOutboundTcpDurationUs());
         assertNotNull(record.getProxyHandshakeDurationUs());
         if (tls) assertNotNull(record.getOutboundTlsDurationUs());
         else assertNull(record.getOutboundTlsDurationUs());
-        assertEquals(confirmation, record.getProxyHandshakeOutcome());
         // These fixtures connect to IP upstream nodes; target DNS is performed remotely by Xray.
         assertNull(record.getDnsDurationUs());
     }
