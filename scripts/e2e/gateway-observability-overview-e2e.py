@@ -49,10 +49,10 @@ assert sum(int(p.get('upload', '0')) + int(p.get('download', '0')) for p in all_
 dns_status = ("CASE WHEN outcome='BLOCKED' THEN 'BLOCKED' WHEN outcome='CANCELLED' THEN 'CANCELLED' "
               "WHEN outcome='ERROR' OR (query_origin='CLIENT' AND response_sent=0) THEN 'FAILURE' "
               "WHEN outcome='ANSWERED' AND (query_origin='PROXY_RESOLVE' OR response_sent=1) THEN 'SUCCESS' ELSE 'UNKNOWN' END")
-auth_status = "'FAILURE'"
-auth_filter = " AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')"
+auth_status = ("CASE WHEN auth_outcome='SUCCESS' THEN 'SUCCESS' WHEN auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR') THEN 'FAILURE' "
+               "WHEN auth_outcome='CHALLENGE' THEN 'CHALLENGE' WHEN auth_outcome='CANCELLED' THEN 'CANCELLED' ELSE 'UNKNOWN' END")
 for kind, table, status in [('dns', 'dns_query_log_v1', dns_status), ('auth', 'credential_auth_log_v1', auth_status)]:
-    origin = " AND query_origin='CLIENT'" if kind == 'dns' else auth_filter
+    origin = " AND query_origin='CLIENT'" if kind == 'dns' else ''
     expected = {r['result']: str(r['count']) for r in db(f"SELECT {status} AS result, COUNT(*) AS count FROM {table} WHERE {where}{origin} GROUP BY result")}
     assert all_data[kind]['totals'] == expected, (kind, expected, all_data[kind]['totals'])
     if kind == 'dns':
@@ -64,8 +64,8 @@ external = overview(trafficCategory='EXTERNAL')
 assert external['dns'] == all_data['dns'] and external['auth'] == all_data['auth']
 # Failed credentials are searchable without a verified identity.
 name = worker + '-telemetry-a'
-account = overview(username=name)
-expected = str(db(f"SELECT COUNT(*) AS count FROM credential_auth_log_v1 WHERE {where} {auth_filter} AND (username={quote(name)} OR attempted_username={quote(name)})")[0]['count'])
+account = overview(username=name, authResult='FAILURE')
+expected = str(db(f"SELECT COUNT(*) AS count FROM credential_auth_log_v1 WHERE {where} AND ({auth_status})='FAILURE' AND (username={quote(name)} OR attempted_username={quote(name)})")[0]['count'])
 assert account['auth']['total'] == expected
 report['failedAccountCount'] = expected
 report['concurrency'] = {k: all_data['concurrency'][k] for k in ['average', 'peak']}

@@ -230,7 +230,7 @@ test('merges failure stage and error code into one sentence', async () => {
   expect(within(drawer).queryByText('失败阶段')).not.toBeInTheDocument();
 });
 
-test('authentication result filter only offers failure outcomes', async () => {
+test('authentication result filter offers every outcome', async () => {
   render(<ObservabilityLogAudit />);
   fireEvent.click(screen.getByRole('tab', { name: '认证审计' }));
   await waitFor(() => expect(api.queryTelemetryPage).toHaveBeenLastCalledWith('credential-auth', expect.anything()));
@@ -240,6 +240,5 @@ test('authentication result filter only offers failure outcomes', async () => {
     expect(element).not.toBeNull();
     return element as HTMLElement;
   });
-  for (const label of ['认证失败', '认证拒绝', '认证格式错误', '认证异常']) expect(within(dropdown).getByText(label)).toBeInTheDocument();
-  for (const label of ['认证通过', '请求提供凭据', '认证取消']) expect(within(dropdown).queryByText(label)).not.toBeInTheDocument();
+  for (const label of ['认证通过', '认证失败', '认证拒绝', '请求提供凭据', '认证格式错误', '认证取消', '认证异常']) expect(within(dropdown).getByText(label)).toBeInTheDocument();
 });

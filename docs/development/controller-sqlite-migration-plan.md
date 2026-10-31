@@ -176,7 +176,7 @@ ClickHouse 保持原样，本阶段控制端同时依赖 SQLite（元数据）�
 
 阶段 2、3、4 合并为一次切换：控制端从 MySQL + ClickHouse 三个容器直接换成 SQLite 单容器，Worker 不升级。
 
-- **兼容性判断**：新控制端下发的配置去掉了 `rateLimits`、`dnsRules`，旧 Worker 对这两个字段都有判空；旧 Worker 仍会上报的诊断事件、认证成功记录与旧 `accessLogs`/`authLogs` 字段由新控制端接收后丢弃。连接方向不变（控制端主动连 Worker WSS），Worker 地址与管理 Token 随 `proxy_worker` 表迁移。
+- **兼容性判断**：新控制端下发的配置去掉了 `rateLimits`、`dnsRules`，旧 Worker 对这两个字段都有判空；旧 Worker 仍会上报的诊断事件与旧 `accessLogs`/`authLogs` 字段由新控制端接收后丢弃（认证成功记录已于 2026-10-30 恢复入库）。连接方向不变（控制端主动连 Worker WSS），Worker 地址与管理 Token 随 `proxy_worker` 表迁移。
 - **部署方式**：新建独立 compose 目录（项目名、容器名与旧版不同，两套可并存），镜像另打日期标签，旧 `latest` 另打回滚标签；SQLite 数据目录用宿主机目录挂载到 `/data`。宿主机端口沿用旧值，浏览器与磁盘监控推送脚本无需修改。不设置 `TZ`，与旧容器一样以 UTC 运行，避免迁移来的时间与新写入的时间口径不一致。旧版的管理面 P12、口令文件、`http-certificate-master-key` 与 `WORKER_AUTH_LEGACY_ENABLED` 新版均不再读取。
 - **步骤**：停旧控制端（保留 MySQL 供导出）→ 容器内 `mysqldump --databases tpproxy --single-transaction` → `mysql-to-sqlite.py` 转换 → 写入数据目录 → 启动新容器。脚本要求 dump 含 `CREATE DATABASE`/`USE`，所以必须带 `--databases`。
 - **转换结果**：19 张表行数与内容摘要全部一致，`foreign_key_check` 0 违规、`integrity_check` ok，跳过 18 张空表。

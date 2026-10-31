@@ -34,12 +34,9 @@ const errorCodes: Record<string, string> = {
   POLICY_BLOCKED: '被策略阻断', WRITE_ERROR: '数据转发写入失败',
   RELAY_ERROR: '数据转发异常', UNHANDLED_EXCEPTION: '入站处理异常',
 };
-// Only failed attempts are reported; the full map still labels historical SUCCESS/CHALLENGE/CANCELLED rows.
-const authFailureOutcomes: Record<string, string> = {
-  FAILURE: '认证失败', DENIED: '认证拒绝', MALFORMED: '认证格式错误', ERROR: '认证异常',
-};
 const authOutcomes: Record<string, string> = {
-  SUCCESS: '认证通过', CHALLENGE: '请求提供凭据', CANCELLED: '认证取消', ...authFailureOutcomes,
+  SUCCESS: '认证通过', FAILURE: '认证失败', DENIED: '认证拒绝', CHALLENGE: '请求提供凭据',
+  MALFORMED: '认证格式错误', CANCELLED: '认证取消', ERROR: '认证异常',
 };
 const dnsOutcomes: Record<string, string> = {
   ANSWERED: '已应答', BLOCKED: '策略阻断', ERROR: '查询异常', CANCELLED: '查询取消',
@@ -47,7 +44,6 @@ const dnsOutcomes: Record<string, string> = {
 const outcomeLabels: Record<TelemetryType, Record<string, string>> = {
   sessions: sessionOutcomes, dns: dnsOutcomes, 'credential-auth': authOutcomes,
 };
-const outcomeFilterLabels: Record<TelemetryType, Record<string, string>> = { ...outcomeLabels, 'credential-auth': authFailureOutcomes };
 const protocolLabels: Record<string, string> = { ...PROTOCOL_TYPE_LABELS, DNS_SERVER: 'DNS 服务', DOT: 'DNS over TLS', TCP: 'TCP', UNKNOWN: '未知' };
 const connectionProtocols = ['SOCKS5', 'HTTPS_CONNECT', 'SHADOW_SOCKS', 'TP_PROXY', 'TLS_SNI_TCP'];
 const inboundProtocols: Record<TelemetryType, string[]> = {
@@ -362,7 +358,7 @@ export function ObservabilityLogAudit() {
         <Form.Item name="username" label="用户"><Input aria-label="用户" placeholder="用户名包含；连接／认证含尝试账号" maxLength={128} /></Form.Item>
         <Form.Item name="clientIp" label="来源 IP"><Input aria-label="来源 IP" placeholder="精确匹配" /></Form.Item>
         <Form.Item name="protocol" label="协议"><Select aria-label="协议" allowClear showSearch optionFilterProp="label" placeholder="选择入站协议" style={{ width: 200 }} options={inboundProtocols[type].map(value => ({ value, label: protocolLabels[value] }))} /></Form.Item>
-        <Form.Item name="outcome" label="结果"><Select aria-label="结果" allowClear showSearch optionFilterProp="label" placeholder={type === 'sessions' ? '结束结果' : '选择结果'} style={{ width: 170 }} options={optionsFor(outcomeFilterLabels[type])} /></Form.Item>
+        <Form.Item name="outcome" label="结果"><Select aria-label="结果" allowClear showSearch optionFilterProp="label" placeholder={type === 'sessions' ? '结束结果' : '选择结果'} style={{ width: 170 }} options={optionsFor(outcomeLabels[type])} /></Form.Item>
         {(type === 'sessions' || type === 'dns') && <Form.Item name="target" label={type === 'dns' ? '域名' : '目标'}><Input aria-label="目标／域名" placeholder="包含（原始／逻辑／有效目标）" /></Form.Item>}
         {type === 'sessions' && <><Form.Item name="connectOutcome" label="建连结果"><Select aria-label="建连结果" allowClear showSearch optionFilterProp="label" placeholder="建连结果" style={{ width: 160 }} options={optionsFor(connectOutcomes)} /></Form.Item><Form.Item name="route" label="路由"><Input placeholder="名称包含或完整 ID" /></Form.Item><Form.Item name="trafficCategory" label="流量分类"><Select aria-label="流量分类" allowClear showSearch optionFilterProp="label" style={{ width: 220 }} options={optionsFor(categories)} /></Form.Item></>}
         {type === 'dns' && <Form.Item name="qtype" label="查询类型"><Select aria-label="查询类型" allowClear showSearch optionFilterProp="label" placeholder="选择查询类型" style={{ width: 180 }} options={optionsFor(dnsQueryTypes)} /></Form.Item>}

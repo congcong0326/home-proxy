@@ -233,14 +233,11 @@ class TelemetryStoreTest {
     }
 
     @Test
-    void successChallengeAndCancelledAuthRecordsAreDiscardedButBatchIsAcknowledged() throws Exception {
-        for (String outcome : List.of("SUCCESS", "CHALLENGE", "CANCELLED")) {
-            var batch = legacy(false, false, outcome);
-            assertTrue(store.ingest("node", batch).isPersisted(), outcome);
+    void everyAuthOutcomeIsStored() throws Exception {
+        for (String outcome : List.of("SUCCESS", "CHALLENGE", "CANCELLED", "FAILURE", "DENIED", "MALFORMED", "ERROR")) {
+            assertTrue(store.ingest("node", legacy(false, false, outcome)).isPersisted(), outcome);
         }
-        assertEquals(0, store.bufferStatus().get("queueDepth"));
-        for (String outcome : List.of("FAILURE", "DENIED", "MALFORMED", "ERROR")) store.ingest("node", legacy(false, false, outcome));
-        assertEquals(4, queued("credential-auth"));
+        assertEquals(7, queued("credential-auth"));
     }
 
     @Test

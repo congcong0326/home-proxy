@@ -192,14 +192,6 @@ public final class TelemetryHooks {
         if (!TelemetryPublisher.getInstance().authEnabled()) return;
         run(channel, state -> {
             var context = state.summary();
-            // Side effects on the connection summary apply to every outcome; only failures are published.
-            if (outcome == AuthOutcome.SUCCESS && verified != null) {
-                context.setUserId(verified.getId()); context.setUsername(verified.getUsername());
-                context.setIdentitySource(IdentitySource.ACCOUNT_AUTH);
-            } else if (outcome == AuthOutcome.FAILURE || outcome == AuthOutcome.DENIED || outcome == AuthOutcome.MALFORMED) {
-                state.error("AUTH", reason);
-            }
-            if (!outcome.isFailure()) return;
             CredentialAuthLogV1 record = new CredentialAuthLogV1();
             record.setAuthAttemptId(UUID.randomUUID().toString()); record.setRecordId(record.getAuthAttemptId());
             record.setConnectionId(context.getConnectionId()); record.setOccurredAt(Instant.now());
@@ -211,6 +203,14 @@ public final class TelemetryHooks {
             if (attemptedUsername != null) {
                 String sanitized = attemptedUsername.replaceAll("[\\p{Cntrl}]", "");
                 record.setAttemptedUsername(sanitized.substring(0, Math.min(128, sanitized.length())));
+            }
+            if (outcome == AuthOutcome.SUCCESS && verified != null) {
+                // The verified identity is carried by the common user fields of the auth fact.
+                record.setUserId(verified.getId()); record.setUsername(verified.getUsername());
+                context.setUserId(verified.getId()); context.setUsername(verified.getUsername());
+                context.setIdentitySource(IdentitySource.ACCOUNT_AUTH);
+            } else if (outcome == AuthOutcome.FAILURE || outcome == AuthOutcome.DENIED || outcome == AuthOutcome.MALFORMED) {
+                state.error("AUTH", reason);
             }
             TelemetryPublisher.getInstance().publish(record);
         });

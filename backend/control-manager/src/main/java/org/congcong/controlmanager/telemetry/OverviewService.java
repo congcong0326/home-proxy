@@ -27,9 +27,10 @@ public class OverviewService {
     private static final String DNS_STATUS = "CASE WHEN outcome = 'BLOCKED' THEN 'BLOCKED' WHEN outcome = 'CANCELLED' THEN 'CANCELLED' "
             + "WHEN outcome = 'ERROR' OR (query_origin = 'CLIENT' AND response_sent = false) THEN 'FAILURE' "
             + "WHEN outcome = 'ANSWERED' AND (query_origin = 'PROXY_RESOLVE' OR response_sent = true) THEN 'SUCCESS' ELSE 'UNKNOWN' END";
-    /** Only failed attempts are reported; legacy SUCCESS/CHALLENGE/CANCELLED rows are excluded by the filter. */
-    static final String AUTH_FAILURE_FILTER = "auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')";
-    private static final String AUTH_STATUS = "'FAILURE'";
+    static final String AUTH_FAILURE_OUTCOMES = "('FAILURE','DENIED','MALFORMED','ERROR')";
+    private static final String AUTH_STATUS = "CASE WHEN auth_outcome = 'SUCCESS' THEN 'SUCCESS' "
+            + "WHEN auth_outcome IN " + AUTH_FAILURE_OUTCOMES + " THEN 'FAILURE' "
+            + "WHEN auth_outcome = 'CHALLENGE' THEN 'CHALLENGE' WHEN auth_outcome = 'CANCELLED' THEN 'CANCELLED' ELSE 'UNKNOWN' END";
     private final TelemetryJdbcClient client;
     private final TelemetryStore store;
     private final WorkerStatusRepository workers;
@@ -57,7 +58,7 @@ public class OverviewService {
             concurrency = ConcurrencyTimeline.Result.unavailable();
         }
         var dns = counts(request, bucket, DNS, DNS_STATUS, request.getDnsResult(), false);
-        var auth = counts(request, bucket, AUTH, AUTH_STATUS, "ALL", false);
+        var auth = counts(request, bucket, AUTH, AUTH_STATUS, request.getAuthResult(), false);
         var result = new LinkedHashMap<String, Object>();
         result.put("from", request.getFrom().toString());
         result.put("to", request.getTo().toString());
@@ -137,7 +138,6 @@ public class OverviewService {
             range.where += categoryFilter(request);
             if (!request.getTrafficCategory().equals("ALL")) range.params.add(request.getTrafficCategory());
         }
-        if (table.equals(AUTH)) range.where += " AND " + AUTH_FAILURE_FILTER;
         if (table.equals(DNS) && !request.getDnsOrigin().equals("ALL")) {
             range.where += " AND query_origin = ?";
             range.params.add(request.getDnsOrigin());
@@ -267,8 +267,8 @@ public class OverviewService {
         ZoneId.of(request.getTimeZone());
         if (!request.getTrafficCategory().equals("ALL")) TrafficCategory.valueOf(request.getTrafficCategory());
         if (!List.of("ALL", "SUCCESS", "FAILURE").contains(request.getTrafficResult())) throw new IllegalArgumentException("INVALID_TRAFFIC_RESULT");
-        for (String result : List.of(request.getTrafficResult(), request.getConnectionResult(), request.getDnsResult())) {
-            if (!List.of("ALL", "SUCCESS", "FAILURE", "BLOCKED", "CANCELLED", "UNKNOWN").contains(result)) {
+        for (String result : List.of(request.getTrafficResult(), request.getConnectionResult(), request.getDnsResult(), request.getAuthResult())) {
+            if (!List.of("ALL", "SUCCESS", "FAILURE", "BLOCKED", "CANCELLED", "CHALLENGE", "UNKNOWN").contains(result)) {
                 throw new IllegalArgumentException("INVALID_RESULT_FILTER");
             }
         }

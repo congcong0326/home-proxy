@@ -18,6 +18,8 @@
 | --- | --- | --- |
 | `mail.inspection.primary-worker-id` | `default` | 外网总览的主网关，其他启用节点分别列出 |
 | `mail.inspection.time-zone` | JVM 默认时区 | 正文显示时区；不改变 Cron 的触发时区 |
+| `mail.inspection.auth-baseline-days` | 30 | 本窗口之前的认证历史参考长度 |
+| `mail.inspection.auth-minimum-history-days` | 7 | 同账号至少有多少个可定位的历史成功认证日期才比较位置变化 |
 | `mail.inspection.disk-sample-minutes` | 10 | 磁盘预期采样间隔，连续超过三倍间隔视为缺报 |
 | `mail.inspection.hdd-temperature-threshold` | 50 | HDD 超温采样参考阈值，单位 ℃ |
 | `mail.inspection.ssd-temperature-threshold` | 70 | SSD / NVMe 超温采样参考阈值，单位 ℃ |
@@ -34,6 +36,7 @@
 - **外网总览**：新版唯一结束汇总中 `EXTERNAL` 的成功转发上 / 下行载荷。以结束时间入账，未结束长连接不提前补算。UInt128 聚合、Java BigInteger 格式化，保留准确原始字节。主网关单独作为总览，其余节点不相加，避免多级代理重复观测。
 - **连接质量**：建连成功 / 失败、策略阻断 / 客户端取消、成功建连后的传输错误。失败率为 `FAILED / (CONNECTED + FAILED)`。建连耗时 P95 仅使用已建立连接的有效测量，附样本数。主要失败分组最多列 10 组，总量来自全量聚合。
 - **客户端 DNS**：按 CLIENT 及应答模式分组，列查询量、应答 / 服务错误、服务错误率及处理耗时 P95。正常 NXDOMAIN、预期 AAAA 空回答不算故障；阻断 / 取消不进入错误率分母。不推测未采集的精确日超时数或异常上游端点。
+- **认证成功位置**：只使用 SUCCESS，优先按稳定用户 ID，其次认证成功时记录的用户名识别；内网 / 未知位置单列。将本窗口与它之前的历史比较，以同一 GeoIP 查询组件重新定位当前与历史 IP，避免旧地理分析版本产生假变化。历史认证日期按巡检时区的自然日计数（每个本地日转为 UTC 半开区间后在 SQLite 中关联，跨夏令时准确）。国家 / 地区新增重点列出，城市变化仅供参考；IP 变化本身不算位置变化。历史不足显示“基线不足”。同窗口多个国家 / 地区也列出，不能据此断言账号被盗。
 - **数据覆盖**：列新日志历史起点、窗口历史不足、当前 Worker 上报积压 / 累计丢弃及管理端待落库队列。零记录、查询失败、缺失测量各自说明，查询失败不伪造零值。
 
 ## 边界
@@ -45,7 +48,7 @@
 ## 实现入口
 
 - `service/mail/InspectionMailHandler`：业务 Key 注册、主题与双正文。
-- `service/mail/inspection`：统一窗口、SMART 解析、独立 V1 汇总与正文渲染。
+- `service/mail/inspection`：统一窗口、SMART 解析、独立 V1 汇总、成功认证位置比较与正文渲染。
 - `InternalMailController`：管理员预览 API；`MailSendService`：MIME 替代正文。
 - `frontend/src/pages/MailGateway.tsx`：巡检卡片、投递目标、预览和现有定时配置。
 

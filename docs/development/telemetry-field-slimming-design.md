@@ -1,5 +1,7 @@
 # 日志类型与字段精简设计（V1 日志）
 
+> **2026-10-30 回退第 2.2 节**：认证成功／挑战／取消记录恢复上报与入库，总览、认证地理分布、认证审计恢复成功／失败分组，巡检邮件恢复“认证成功位置与变化”。已验证用户写入公共字段 `userId`／`username`，不恢复 `verifiedUsername` 列。本文其余精简（诊断事件、字段删减）不变。
+>
 > 状态：已实施（三个 PR 合并交付；ClickHouse 清理脚本 `scripts/clickhouse/telemetry-slimming-cleanup.sql` 需在所有 Worker 升级后手工执行）。与《[Worker 遗留 HTTP 调用与旧日志链路清理设计](worker-legacy-http-removal-design.md)》互相独立，可分开发布。
 > 相关背景：[代理网关日志模型与双轨演进设计](gateway-observability-log-model-design.md)。
 

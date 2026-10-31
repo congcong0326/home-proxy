@@ -15,5 +15,6 @@ public class OverviewQuery {
     private String trafficResult = "ALL";
     private String connectionResult = "ALL";
     private String dnsResult = "ALL";
+    private String authResult = "ALL";
     private String dnsOrigin = "CLIENT";
 }

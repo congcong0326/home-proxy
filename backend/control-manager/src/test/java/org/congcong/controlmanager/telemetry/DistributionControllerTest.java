@@ -15,11 +15,11 @@ class DistributionControllerTest {
     private static final String PATH = "/api/observability/v1/distribution";
 
     @Test
-    void authenticationDimensionUsesIndependentSource() throws Exception {
+    void authenticationDimensionUsesIndependentSourceAndResultFilter() throws Exception {
         mvc.perform(get(PATH).param("workerId", "home-01").param("from", "2026-10-01T00:00:00Z")
                 .param("to", "2026-11-01T00:00:00Z").param("dimension", "auth_geo")
-                .param("metric", "authentications")).andExpect(status().isOk());
-        verify(credentials).aggregate(argThat(query -> query.getMetric().equals("authentications")));
+                .param("metric", "authentications").param("authOutcome", "FAILURE")).andExpect(status().isOk());
+        verify(credentials).aggregate(argThat(query -> query.getAuthOutcome().equals("FAILURE") && query.getMetric().equals("authentications")));
         verifyNoInteractions(service);
         when(credentials.aggregate(any())).thenThrow(new IllegalArgumentException("Invalid metric"));
         mvc.perform(get(PATH).param("dimension", "auth_geo")).andExpect(status().isBadRequest());

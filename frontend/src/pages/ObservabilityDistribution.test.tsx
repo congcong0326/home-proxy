@@ -79,7 +79,7 @@ it('groups location labels without discarding partial geography', () => {
   expect(distributionLabel({ ...item, keys: ['__UNKNOWN__', '', ''] }, 'auth_geo')).toBe('位置未知');
 });
 it('switches to authentication units and drills into the same filtered audit scope', async () => {
-  const auth = { attempts: '10' };
+  const auth = { attempts: '10', success: '6', failure: '3', other: '1' };
   (apiService.getObservabilityDistribution as jest.Mock).mockImplementation(query => Promise.resolve(query.dimension === 'auth_geo' ? {
     from: query.from, to: query.to, dimension: 'auth_geo', metric: 'authentications',
     items: [{ keys: ['中国', '', ''], value: '10', auth, sources: [{ clientIp: '1.1.1.1', counts: auth }] }],
@@ -89,13 +89,15 @@ it('switches to authentication units and drills into the same filtered audit sco
   render(<ObservabilityDistribution />);
   await screen.findByText('30.00%');
   await choose('维度', '认证地理位置');
-  await screen.findByText('认证失败：10');
+  await screen.findByText('全部认证：10');
+  expect(screen.getByText('成功：6')).toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: '流量分类' })).not.toBeInTheDocument();
   expect(screen.queryByRole('combobox', { name: '建连结果' })).not.toBeInTheDocument();
   expect(screen.getByRole('combobox', { name: '指标' })).toBeDisabled();
   expect(screen.getByTestId('distribution-chart')).toHaveTextContent('中国 / 地区未知 / 城市未知, 其他位置');
-  expect(screen.queryByRole('combobox', { name: '认证结果' })).not.toBeInTheDocument();
-  expect(apiService.getObservabilityDistribution).toHaveBeenLastCalledWith(expect.objectContaining({ dimension: 'auth_geo', metric: 'authentications', trafficCategory: 'ALL', connectOutcome: 'ALL' }));
+  expect(apiService.getObservabilityDistribution).toHaveBeenLastCalledWith(expect.objectContaining({ dimension: 'auth_geo', metric: 'authentications', trafficCategory: 'ALL', connectOutcome: 'ALL', authOutcome: 'ALL' }));
+  await choose('认证结果', '失败');
+  await waitFor(() => expect(apiService.getObservabilityDistribution).toHaveBeenLastCalledWith(expect.objectContaining({ dimension: 'auth_geo', authOutcome: 'FAILURE' })));
   fireEvent.click(screen.getByRole('button', { name: '中国 / 地区未知 / 城市未知' }));
   await waitFor(() => expect(apiService.queryTelemetryPage).toHaveBeenCalledWith('credential-auth', expect.objectContaining({ workerId: 'home-01', clientIp: '1.1.1.1', authOutcomeGroup: 'FAILURE' })));
 });

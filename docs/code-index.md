@@ -67,7 +67,7 @@
 - `router/RouterService`：按用户绑定的路由规则匹配 `GEO`、`DOMAIN`、`AD_BLOCK`，未命中时使用兜底路由。
 - `outbound/OutboundConnectorFactory`：根据 `RoutePolicy` 和出站协议选择直连、阻断、DNS 重写、上游 HTTP/SOCKS5/Shadowsocks/DoT/DNS 连接器。
 - `protocol/ProxyTunnelConnectorHandler`：建立出站连接，按协议写回成功或失败响应，并设置双向 relay。
-- `telemetry/TelemetryPublisher`：新版三类日志（连接、DNS、认证失败）缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集与 HTTP 日志上报已移除。
+- `telemetry/TelemetryPublisher`：新版三类日志（连接、DNS、认证成功与失败）缓冲后经 worker 管理 WSS 批量上报，受节点 `logReportingEnabled` 和部署总开关共同控制；旧 `audit/AccessLogUtil` 采集与 HTTP 日志上报已移除。
 
 ## 前端 frontend
 
@@ -113,7 +113,7 @@
 日志与看板链路：
 
 1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
-2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入遥测 SQLite 的独立表（`INSERT OR IGNORE`，重发只保留首次）；诊断事件已删除，旧 Worker 发来的事件与非失败认证记录接收后丢弃；配置与日志均走 WSS。旧 `access_log`/`auth_log` 链路（`/api/logs/**`、`LogService`、`logstore`）已整体删除。
+2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入遥测 SQLite 的独立表（`INSERT OR IGNORE`，重发只保留首次）；诊断事件已删除，旧 Worker 发来的事件接收后丢弃；认证全部结果均入库；配置与日志均走 WSS。旧 `access_log`/`auth_log` 链路（`/api/logs/**`、`LogService`、`logstore`）已整体删除。
 3. 看板／审计页面查询 `/api/observability/v1`；首页状态面板的用户流量（`UserTrafficStatsController`）与流量报表邮件（`TrafficReportMailHandler`）也读会话表；网关监控读取 WSS 心跳落库的 `worker_status`。保留期由 `TelemetryStore.purgeExpired` 每小时分批删除（`observability.*-retention-days`，默认不删）。
 
 认证链路：
@@ -179,7 +179,7 @@
 
 ## 网关观测：访问分布预览
 
-- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证失败次数、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
+- `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证次数（全部／成功／失败）、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
 - `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、64 位累加（溢出报错而非回绕）、93 天范围、缺失维度计数与节点历史起点；“根域名／用户－根域名”维度按 `RootDomainFunction` 注册到遥测连接的 `root_domain()`（Guava PSL 注册后缀下一级，IP／内网单标签原样）分组；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
 - [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。
 

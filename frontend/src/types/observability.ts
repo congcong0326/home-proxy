@@ -139,7 +139,7 @@ export interface TelemetryQuery {
   trafficCategory?: TrafficCategory;
   qtype?: string;
   authMethod?: string;
-  authOutcomeGroup?: 'FAILURE';
+  authOutcomeGroup?: 'SUCCESS' | 'FAILURE';
   exactAuthUsername?: string;
 }
 

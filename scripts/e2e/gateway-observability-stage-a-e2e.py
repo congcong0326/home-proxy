@@ -206,7 +206,7 @@ def run(api, legacy_only=False):
         def rows(kind):
             return [row for row in api.request('/api/observability/v1/' + kind + '?' + urllib.parse.urlencode(query)) if (row.get('inboundName') or '').startswith(PREFIX) or (kind == 'dns' and row.get('qname', '').rstrip('.') == 'stage-a.telemetry.test')]
         sessions = wait('all connection summaries persisted', lambda: (lambda data: data if len(data) >= 11 else None)(rows('sessions')))
-        auth = wait('all failed credential attempts persisted', lambda: (lambda data: data if {'FAILURE', 'DENIED', 'MALFORMED'} <= {row['authOutcome'] for row in data} else None)(rows('credential-auth')))
+        auth = wait('all credential attempts persisted', lambda: (lambda data: data if len(data) >= 11 else None)(rows('credential-auth')))
         dns = wait('A/AAAA query facts persisted', lambda: (lambda data: data if len(data) >= 2 else None)(rows('dns')))
         assert len({row['recordId'] for row in sessions}) == len(sessions)
         for host, category in [('private', 'INTERNAL_REWRITE'), ('public', 'EXTERNAL'), ('unknown', 'UNKNOWN')]:
@@ -221,16 +221,18 @@ def run(api, legacy_only=False):
             assert row['recordId'] == row['connectionId']
         assert any(row['connectOutcome'] == 'BLOCKED' and row['uploadBytes'] == '0' for row in sessions)
         outcomes = {row['authOutcome'] for row in auth}
-        assert {'FAILURE', 'DENIED', 'MALFORMED'} <= outcomes, outcomes
-        assert not outcomes & {'SUCCESS', 'CHALLENGE', 'CANCELLED'}, 'only failed authentication is reported'
+        assert {'SUCCESS', 'FAILURE', 'DENIED', 'CHALLENGE', 'MALFORMED'} <= outcomes, outcomes
         for row in auth:
             assert row['workerId'] == WORKER
             assert row['analysis']['geoLookupStatus'] == 'PRIVATE', row
             assert row['analysis']['sourceCountry'] is None
-            assert row['userId'] is None and 'verifiedUsername' not in row
+            assert 'verifiedUsername' not in row
+            # The verified identity is carried by the common user fields of successful attempts only.
+            assert (row['userId'] is not None and row['username'] == USERNAME) if row['authOutcome'] == 'SUCCESS' else row['userId'] is None, row
             assert PASSWORD not in json.dumps(row) and 'deliberately-invalid' not in json.dumps(row)
-        # A successful check is not reported, but still identifies the user on the connection summary.
         assert any(row['identitySource'] == 'ACCOUNT_AUTH' and row.get('username') for row in sessions)
+        no_tunnel = [row for row in auth if row['authOutcome'] == 'SUCCESS' and not next(s for s in sessions if s['connectionId'] == row['connectionId'])['logicalTargetHost']]
+        assert no_tunnel, 'successful credential check without a target must be retained'
         assert any(row['qtype'] == 'A' and row['answerMode'] == 'FAKE_IP' and row['answerIps'] for row in dns)
         assert any(row['qtype'] == 'AAAA' and row['emptyAnswerReason'] == 'IPV6_SUPPRESSED' and row['rcode'] == 0 for row in dns)
         assert all(row['responseSent'] is True for row in dns)

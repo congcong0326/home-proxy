@@ -106,6 +106,19 @@ public final class TelemetrySqliteFixture implements AutoCloseable {
         return record;
     }
 
+    public static CredentialAuthLogV1 successAuth(Instant occurredAt, String clientIp, Long userId, String username) {
+        var record = base(new CredentialAuthLogV1(), occurredAt);
+        record.setAuthAttemptId(record.getRecordId());
+        record.setConnectionId(UUID.randomUUID().toString());
+        record.setClientIp(clientIp);
+        record.setAttemptedUsername(username);
+        record.setUserId(userId);
+        record.setUsername(username);
+        record.setAuthOutcome(AuthOutcome.SUCCESS);
+        record.setAuthMethod("PASSWORD");
+        return record;
+    }
+
     @Override
     public void close() throws IOException {
         dataSource.close();

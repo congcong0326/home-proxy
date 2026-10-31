@@ -13,6 +13,7 @@ public class DistributionQuery {
     private int limit = 10;
     private String trafficCategory = "EXTERNAL";
     private String connectOutcome = "ALL";
+    private String authOutcome = "ALL";
     private String username;
     private String clientIp;
 }

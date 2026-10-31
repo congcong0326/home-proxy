@@ -141,8 +141,8 @@ public class TelemetryStore implements ApplicationRunner {
     /** ACK means the complete batch is frozen in manager memory, not yet stored in the telemetry database. */
     public TelemetryAckV1 ingest(String authenticatedWorkerId, TelemetryBatchV1 batch) throws Exception {
         if (!properties.isIngestEnabled()) throw new IllegalStateException("INGEST_DISABLED");
-        // Older workers still send removed events and non-failure auth records: size limits apply to the
-        // original batch, then those facts are accepted and discarded so the worker can release the batch.
+        // Older workers still send removed diagnostic events: size limits apply to the original batch,
+        // then those facts are accepted and discarded so the worker can release the batch.
         int received = batch.recordCount() + batch.getEvents().size();
         if (batch.getProtocolVersion() != 1 || batch.getBatchId() == null
                 || !batch.getBatchId().matches("[a-fA-F0-9-]{36}") || received < 1
@@ -150,14 +150,11 @@ public class TelemetryStore implements ApplicationRunner {
                 || mapper.writeValueAsBytes(batch).length > properties.getMaxBatchBytes()) {
             throw new IllegalArgumentException("INVALID_BATCH");
         }
-        List<CredentialAuthLogV1> failedAuth = batch.getCredentialAuth().stream()
-                .filter(auth -> auth.getAuthOutcome() != null && auth.getAuthOutcome().isFailure()).toList();
-        int discarded = batch.getEvents().size() + batch.getCredentialAuth().size() - failedAuth.size();
-        if (discarded > 0) log.debug("Discarded {} legacy telemetry records from batch {}", discarded, batch.getBatchId());
+        if (!batch.getEvents().isEmpty()) log.debug("Discarded {} legacy telemetry events from batch {}", batch.getEvents().size(), batch.getBatchId());
         Map<TelemetrySchema, List<? extends TelemetryRecordV1>> groups = new LinkedHashMap<>();
         groups.put(TelemetrySchema.SESSIONS, batch.getSessions());
         groups.put(TelemetrySchema.DNS, batch.getDnsQueries());
-        groups.put(TelemetrySchema.AUTH, failedAuth);
+        groups.put(TelemetrySchema.AUTH, batch.getCredentialAuth());
         List<Pending> pending = new ArrayList<>();
         Instant receivedAt = Instant.now();
         long queuedAt = nanoTime.getAsLong();
@@ -439,7 +436,8 @@ public class TelemetryStore implements ApplicationRunner {
             addFilter(where, params, request.getAuthMethod(), "auth_method = ?", 1);
             addFilter(where, params, request.getExactAuthUsername(), "(attempted_username = ? OR username = ?)", 2);
             if (has(request.getAuthOutcomeGroup())) {
-                if ("FAILURE".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
+                if ("SUCCESS".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome = 'SUCCESS'");
+                else if ("FAILURE".equals(request.getAuthOutcomeGroup())) where.append(" AND auth_outcome IN ('FAILURE','DENIED','MALFORMED','ERROR')");
                 else throw new IllegalArgumentException("Invalid authentication result group");
             }
         }

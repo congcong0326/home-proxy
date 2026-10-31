@@ -213,6 +213,41 @@ class TelemetrySqliteQueryTest {
     }
 
     @Test
+    void successfulAndFailedAuthenticationsAreCountedSeparately() throws Exception {
+        var challenge = failedAuth(T0.plusSeconds(64), null, "alice");
+        challenge.setAuthOutcome(AuthOutcome.CHALLENGE);
+        challenge.setClientIp("203.0.113.5");
+        db.ingest(WORKER, successAuth(T0.plusSeconds(63), "203.0.113.5", 1L, "alice"), challenge);
+        var workers = mock(WorkerStatusRepository.class);
+        when(workers.findById(any())).thenReturn(Optional.empty());
+        var overview = new OverviewService(db.client, db.store, workers);
+        var request = new OverviewQuery();
+        request.setWorkerId(WORKER);
+        request.setFrom(T0);
+        request.setTo(T0.plusSeconds(3600));
+        request.setTimeZone("UTC");
+        var auth = (Map<?, ?>) overview.overview(request).get("auth");
+        assertEquals("4", auth.get("total"));
+        assertEquals(Map.of("SUCCESS", "1", "FAILURE", "2", "CHALLENGE", "1"), auth.get("totals"));
+        request.setAuthResult("SUCCESS");
+        assertEquals("1", ((Map<?, ?>) overview.overview(request).get("auth")).get("total"));
+
+        var credential = new CredentialDistributionService(db.client, db.store, db.geo);
+        var query = new DistributionQuery();
+        query.setWorkerId(WORKER);
+        query.setFrom(T0);
+        query.setTo(T0.plusSeconds(3600));
+        query.setDimension("auth_geo");
+        query.setMetric("authentications");
+        var all = credential.aggregate(query).authTotals();
+        assertEquals(new CredentialDistributionService.Counts("4", "1", "2", "1"), all);
+        query.setAuthOutcome("SUCCESS");
+        assertEquals("1", credential.aggregate(query).totalValue());
+        query.setAuthOutcome("FAILURE");
+        assertEquals("2", credential.aggregate(query).totalValue());
+    }
+
+    @Test
     void inboundMonthlyAndCredentialAndUserTrafficStats() {
         var inbound = new InboundTrafficService(db.client, db.store).monthly(7, WORKER, "2026-10", "UTC");
         assertEquals("100", inbound.traffic().upload());

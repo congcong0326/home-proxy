@@ -67,7 +67,8 @@ class TelemetryAuditTest {
         request.setAuthOutcomeGroup("invalid");
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
         request.setAuthOutcomeGroup("SUCCESS");
-        assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.AUTH, request));
+        store.page(TelemetrySchema.AUTH, request);
+        verify(client, times(2)).query(contains("(attempted_username = ? OR username = ?) AND auth_outcome = 'SUCCESS'"), any(Object[].class));
         assertThrows(IllegalArgumentException.class, () -> store.page(TelemetrySchema.DNS, request));
     }
 

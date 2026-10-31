@@ -18,7 +18,7 @@ const data = (total = '1024'): OverviewData => ({
   concurrency: { available: true, series: [], average: '1.30', peak: '3' },
   connections: { series: [], totals: { SUCCESS: '4', FAILURE: '2' }, total: '6' },
   dns: { series: [], totals: { SUCCESS: '10', FAILURE: '2', BLOCKED: '1' }, total: '13' },
-  auth: { series: [], totals: { FAILURE: '4' }, total: '4' },
+  auth: { series: [], totals: { SUCCESS: '6', FAILURE: '4' }, total: '10' },
 });
 beforeEach(() => {
   jest.clearAllMocks();
@@ -106,6 +106,8 @@ it('keeps other statistics and connection attempts visible when historical concu
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   expect(panel).toHaveTextContent('建连记录 6');
   expect(screen.getByText('DNS 查询趋势').closest('section')).toHaveTextContent('成功 10');
-  expect(screen.getByText('认证失败趋势').closest('section')).toHaveTextContent('失败 4');
-  expect(screen.queryByLabelText('认证结果')).not.toBeInTheDocument();
+  expect(screen.getByText('认证尝试趋势').closest('section')).toHaveTextContent('成功 6');
+  expect(screen.getByText('认证尝试趋势').closest('section')).toHaveTextContent('失败 4');
+  fireEvent.change(screen.getByLabelText('认证结果'), { target: { value: 'SUCCESS' } });
+  await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenLastCalledWith(expect.objectContaining({ authResult: 'SUCCESS' })));
 });
