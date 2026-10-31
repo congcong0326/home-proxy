@@ -15,15 +15,20 @@ public class DistributionService {
     private record Dimension(List<String> keys, String missing) { }
     private static final String USER = "coalesce(CAST(user_id AS TEXT),'')", NAME = "coalesce(username,'')";
     private static final String TARGET = "coalesce(logical_target_host,'')";
+    /** IP targets keep the whole address; see {@link RootDomainFunction}. */
+    private static final String ROOT_DOMAIN = RootDomainFunction.NAME + "(logical_target_host)";
     private static final String ROUTE = "coalesce(CAST(route_id AS TEXT),'')", ROUTE_NAME = "coalesce(route_name,'')";
-    private static final Map<String, Dimension> DIMENSIONS = Map.of(
-            "users", new Dimension(List.of(USER, NAME), USER + " = '' AND " + NAME + " = ''"),
-            "targets", new Dimension(List.of(TARGET), TARGET + " = ''"),
-            "user_targets", new Dimension(List.of(USER, NAME, TARGET),
-                    "(" + USER + " = '' AND " + NAME + " = '') OR " + TARGET + " = ''"),
-            "routes", new Dimension(List.of(ROUTE, ROUTE_NAME), ROUTE + " = '' AND " + ROUTE_NAME + " = ''"),
-            "client_ips", new Dimension(List.of("coalesce(client_ip,'')"), "coalesce(client_ip,'') = ''"),
-            "categories", new Dimension(List.of("coalesce(traffic_category,'UNKNOWN')"), "coalesce(traffic_category,'UNKNOWN') = 'UNKNOWN'"));
+    private static final Map<String, Dimension> DIMENSIONS = Map.ofEntries(
+            Map.entry("users", new Dimension(List.of(USER, NAME), USER + " = '' AND " + NAME + " = ''")),
+            Map.entry("targets", new Dimension(List.of(TARGET), TARGET + " = ''")),
+            Map.entry("user_targets", new Dimension(List.of(USER, NAME, TARGET),
+                    "(" + USER + " = '' AND " + NAME + " = '') OR " + TARGET + " = ''")),
+            Map.entry("root_domains", new Dimension(List.of(ROOT_DOMAIN), ROOT_DOMAIN + " = ''")),
+            Map.entry("user_root_domains", new Dimension(List.of(USER, NAME, ROOT_DOMAIN),
+                    "(" + USER + " = '' AND " + NAME + " = '') OR " + ROOT_DOMAIN + " = ''")),
+            Map.entry("routes", new Dimension(List.of(ROUTE, ROUTE_NAME), ROUTE + " = '' AND " + ROUTE_NAME + " = ''")),
+            Map.entry("client_ips", new Dimension(List.of("coalesce(client_ip,'')"), "coalesce(client_ip,'') = ''")),
+            Map.entry("categories", new Dimension(List.of("coalesce(traffic_category,'UNKNOWN')"), "coalesce(traffic_category,'UNKNOWN') = 'UNKNOWN'")));
     private static final Map<String, String> METRICS = Map.of(
             "connections", "group_connections", "bytes", "group_upload + group_download", "upload", "group_upload", "download", "group_download");
 

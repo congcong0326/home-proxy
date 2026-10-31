@@ -180,7 +180,7 @@
 ## 网关观测：访问分布预览
 
 - `frontend/src/pages/ObservabilityDistribution.tsx`、`types/distribution.ts`：连接维度 TopN 和独立认证地理位置三元组，认证失败次数、位置来源 IP 与审计明细；连接数／上行／下行／总流量仍用于连接维度，全量分母与其余项目保留。
-- `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、64 位累加（溢出报错而非回绕）、93 天范围、缺失维度计数与节点历史起点；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
+- `control-manager/telemetry/DistributionQuery`、`DistributionService`、`DistributionController`：`/api/observability/v1/distribution`，唯一结束连接聚合、64 位累加（溢出报错而非回绕）、93 天范围、缺失维度计数与节点历史起点；“根域名／用户－根域名”维度按 `RootDomainFunction` 注册到遥测连接的 `root_domain()`（Guava PSL 注册后缀下一级，IP／内网单标签原样）分组；`CredentialDistributionService` 从认证事实全量按 IP 聚合后复用 GeoIP 按三元组合并，不改采集和旧 API。
 - [业务取舍、口径、测试与回退](testing/gateway-observability-distribution.md)：暂不迁移国家维度，连接与 DNS／认证单位分开；真实 ClickHouse 只读验证、UI 样例及真实数据截图，已更新本地管理端容器。
 
 ## 仅上报新版日志与旧页面屏蔽

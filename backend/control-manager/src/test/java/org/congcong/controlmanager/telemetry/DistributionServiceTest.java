@@ -63,7 +63,7 @@ class DistributionServiceTest {
     @Test
     void emptyRangeHasNoFakeHistoryAndAllDimensionsAreBounded() {
         when(client.query(anyString(), any(Object[].class))).thenReturn(List.of());
-        for (String dimension : List.of("users", "targets", "user_targets", "routes", "client_ips", "categories")) {
+        for (String dimension : List.of("users", "targets", "user_targets", "root_domains", "user_root_domains", "routes", "client_ips", "categories")) {
             var request = query();
             request.setDimension(dimension);
             request.setTrafficCategory("ALL");

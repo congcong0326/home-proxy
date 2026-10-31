@@ -39,10 +39,14 @@ public class TelemetryDataSourceConfig {
         sqlite.setBusyTimeout(busyTimeoutMs);
         sqlite.setTransactionMode(SQLiteConfig.TransactionMode.IMMEDIATE);
 
+        // Each physical connection registers root_domain(), which distribution queries group by.
+        var source = new RootDomainFunction.RegisteringDataSource();
+        source.setConfig(sqlite);
+        source.setUrl(url);
+
         HikariConfig config = new HikariConfig();
         config.setPoolName("sqlite-telemetry");
-        config.setJdbcUrl(url);
-        config.setDataSourceProperties(sqlite.toProperties());
+        config.setDataSource(source);
         config.setMaximumPoolSize(Math.max(1, poolSize));
         return new HikariDataSource(config);
     }

@@ -12,7 +12,8 @@ import { AuditRecordV1, TelemetryType } from '../types/observability';
 
 const dimensions: { value: DistributionDimension; label: string }[] = [
   { value: 'users', label: '用户' }, { value: 'targets', label: '目标主机' },
-  { value: 'user_targets', label: '用户－目标' }, { value: 'routes', label: '路由规则' },
+  { value: 'user_targets', label: '用户－目标' }, { value: 'root_domains', label: '根域名' },
+  { value: 'user_root_domains', label: '用户－根域名' }, { value: 'routes', label: '路由规则' },
   { value: 'auth_geo', label: '认证地理位置' }, { value: 'categories', label: '流量分类' },
 ];
 const metrics: { value: DistributionMetric; label: string }[] = [
@@ -54,10 +55,12 @@ export function distributionLabel(item: DistributionItem, dimension: Distributio
       if (id === '__UNKNOWN__') return '位置未知';
       return `${id || '国家未知'} / ${name || '地区未知'} / ${target || '城市未知'}`;
     case 'users': return user;
-    case 'user_targets': return `${user} → ${target || '未知目标'}`;
+    case 'user_targets':
+    case 'user_root_domains': return `${user} → ${target || '未知目标'}`;
     case 'routes': return `${name || (id ? `规则 #${id}` : '未选定路由')}${name && id ? ` (#${id})` : ''}`;
     case 'categories': return categories[id as TrafficCategory] || '未分类';
-    case 'targets': return id || '未知目标';
+    case 'targets':
+    case 'root_domains': return id || '未知目标';
     default: return id || '未知来源';
   }
 }

@@ -1,6 +1,6 @@
 import { ConnectOutcome, TrafficCategory } from './observability';
 
-export type DistributionDimension = 'users' | 'targets' | 'user_targets' | 'routes' | 'client_ips' | 'auth_geo' | 'categories';
+export type DistributionDimension = 'users' | 'targets' | 'user_targets' | 'root_domains' | 'user_root_domains' | 'routes' | 'client_ips' | 'auth_geo' | 'categories';
 export type DistributionMetric = 'connections' | 'bytes' | 'upload' | 'download' | 'authentications';
 export interface DistributionQuery {
   workerId: string;
