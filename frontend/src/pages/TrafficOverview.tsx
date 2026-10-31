@@ -3,7 +3,7 @@ import ReactECharts from 'echarts-for-react';
 import * as echarts from 'echarts';
 import { ReloadOutlined, ArrowUpOutlined, ArrowDownOutlined, GlobalOutlined, ApartmentOutlined, ApiOutlined, SafetyCertificateOutlined, CloudOutlined } from '@ant-design/icons';
 import apiService from '../services/api';
-import { CountOverview, OverviewData, OverviewPoint, OverviewQuery, ResultFilter } from '../types/overview';
+import { CountOverview, LiveConnections, OverviewData, OverviewPoint, OverviewQuery, ResultFilter } from '../types/overview';
 import { ProxyWorkerDTO } from '../types/worker';
 import { TrafficCategory } from '../types/observability';
 import './TrafficOverview.css';
@@ -116,6 +116,7 @@ export function TrafficOverview() {
   const [dnsOrigin, setDnsOrigin] = useState<'CLIENT' | 'PROXY_RESOLVE' | 'ALL'>('CLIENT');
   const [connectionView, setConnectionView] = useState('concurrency');
   const [data, setData] = useState<OverviewData | null>(null);
+  const [live, setLive] = useState<LiveConnections | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
@@ -151,18 +152,22 @@ export function TrafficOverview() {
     return () => { active = false; };
   }, [query, workersReady]);
 
+  // Live count reads the worker heartbeat; never wait on the historical aggregation.
   useEffect(() => {
     if (!workersReady) return;
     let active = true;
     let sequence = 0;
-    const timer = window.setInterval(() => {
+    const load = () => {
       const id = ++sequence;
-      apiService.getObservabilityLive(query).then(live => {
-        if (active && id === sequence) setData(previous => previous ? { ...previous, live } : previous);
+      apiService.getObservabilityLive(query).then(result => {
+        if (active && id === sequence) setLive(result);
       }).catch(() => {
-        if (active && id === sequence) setData(previous => previous ? { ...previous, live: { available: false, reason: 'STALE' } } : previous);
+        if (active && id === sequence) setLive({ available: false, reason: 'STALE' });
       });
-    }, 5000);
+    };
+    setLive(null);
+    load();
+    const timer = window.setInterval(load, 5000);
     return () => { window.clearInterval(timer); active = false; };
   }, [query, workersReady]);
 
@@ -209,7 +214,7 @@ export function TrafficOverview() {
 
     <div className="ov-summary-grid">
       <div className="ov-summary ov-blue"><div className="ov-summary-label"><GlobalOutlined /> {selectedLabel}流量 <span>所选范围</span></div><strong>{empty ? '—' : bytes(data?.traffic.total)}</strong><div className="ov-summary-footer"><span><ArrowUpOutlined /> {empty ? '—' : bytes(data?.traffic.upload)}</span><span><ArrowDownOutlined /> {empty ? '—' : bytes(data?.traffic.download)}</span></div></div>
-      <div className="ov-summary ov-purple"><div className="ov-summary-label"><ApiOutlined /> 当前并发 <span>每 5 秒更新</span></div><strong>{data?.live.available ? count(data.live.count) : '—'}<small> 条</small></strong><div className="ov-summary-footer">{data?.live.available ? `采样于 ${clock(data.live.sampledAt!)}` : data?.live.reason === 'STALE' ? '节点离线或采样已过期' : data?.live.reason === 'GROUPS_TRUNCATED' ? '来源分组过多，当前筛选不可用' : '等待新版节点上报已建立连接'}</div></div>
+      <div className="ov-summary ov-purple"><div className="ov-summary-label"><ApiOutlined /> 当前并发 <span>每 5 秒更新</span></div><strong>{live?.available ? count(live.count) : '—'}<small> 条</small></strong><div className="ov-summary-footer">{!live ? '加载中' : live.available ? `采样于 ${clock(live.sampledAt!)}` : live.reason === 'STALE' ? '节点离线或采样已过期' : live.reason === 'GROUPS_TRUNCATED' ? '来源分组过多，当前筛选不可用' : '等待新版节点上报已建立连接'}</div></div>
       <div className="ov-summary ov-teal"><div className="ov-summary-label"><CloudOutlined /> DNS 查询 <span>{dnsOrigin === 'CLIENT' ? '客户端' : dnsOrigin === 'PROXY_RESOLVE' ? '内部解析' : '全部查询'}</span></div><strong>{empty ? '—' : count(data?.dns.total)}<small> 次</small></strong><div className="ov-summary-footer">成功 {empty ? '—' : count(data?.dns.totals.SUCCESS)}<span>失败 {empty ? '—' : count(data?.dns.totals.FAILURE)}</span></div></div>
       <div className="ov-summary ov-amber"><div className="ov-summary-label"><SafetyCertificateOutlined /> 认证失败 <span>凭据认证</span></div><strong>{empty ? '—' : count(data?.auth.total)}<small> 次</small></strong><div className="ov-summary-footer">仅统计失败的认证尝试</div></div>
     </div>

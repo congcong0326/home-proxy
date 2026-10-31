@@ -15,7 +15,7 @@ const data = (total = '1024'): OverviewData => ({
   from: '2026-10-09T00:00:00Z', to: '2026-10-09T01:00:00Z', timeZone: 'Asia/Shanghai', bucketSeconds: 60,
   firstSessionAt: '2026-10-08 01:00:00', historyBasis: 'ENDED_SESSIONS_ONLY',
   traffic: { upload: '512', download: '512', total, daily: '2048', monthly: '8192', series: [], sources: [], categories: [] },
-  concurrency: { available: true, series: [], average: '1.30', peak: '3' }, live: { available: false, reason: 'UNSUPPORTED' },
+  concurrency: { available: true, series: [], average: '1.30', peak: '3' },
   connections: { series: [], totals: { SUCCESS: '4', FAILURE: '2' }, total: '6' },
   dns: { series: [], totals: { SUCCESS: '10', FAILURE: '2', BLOCKED: '1' }, total: '13' },
   auth: { series: [], totals: { FAILURE: '4' }, total: '4' },
@@ -27,14 +27,22 @@ beforeEach(() => {
   (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: true, count: '2', sampledAt: '2026-10-09T01:00:00Z' });
 });
 it('defaults to external traffic and shows four distinct charts without substituting legacy data', async () => {
+  (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: false, reason: 'UNSUPPORTED' });
   render(<TrafficOverview />);
   await waitFor(() => expect(apiService.getObservabilityOverview).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL', trafficResult: 'ALL', dnsOrigin: 'CLIENT' })));
   expect(screen.queryByLabelText('流量结束结果')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '外网' })).toHaveAttribute('aria-pressed', 'true');
   await screen.findByText('1 KB');
   expect(screen.getAllByTestId('overview-chart')).toHaveLength(4);
-  expect(screen.getByText('等待新版节点上报已建立连接')).toBeInTheDocument();
+  expect(await screen.findByText('等待新版节点上报已建立连接')).toBeInTheDocument();
   expect(apiService.getDailyUserTrafficStats).not.toHaveBeenCalled();
+});
+it('shows the live count without waiting for the historical overview query', async () => {
+  (apiService.getObservabilityOverview as jest.Mock).mockReturnValue(new Promise(() => {}));
+  (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: true, count: '7', sampledAt: '2026-10-09T01:00:00Z' });
+  render(<TrafficOverview />);
+  expect(await screen.findByText('7')).toBeInTheDocument();
+  expect(apiService.getObservabilityLive).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL' }));
 });
 it('plots upload and download independently when their volumes differ substantially', async () => {
   const result = data('1100');
@@ -84,8 +92,8 @@ it('reports unavailable queries without showing fabricated zero totals', async (
 it('keeps other statistics and connection attempts visible when historical concurrency is unavailable', async () => {
   const result = data();
   result.concurrency = { available: false, series: [], average: null, peak: null };
-  result.live = { available: true, count: '42', sampledAt: '2026-10-09T01:00:00Z' };
   (apiService.getObservabilityOverview as jest.Mock).mockResolvedValue(result);
+  (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: true, count: '42', sampledAt: '2026-10-09T01:00:00Z' });
   render(<TrafficOverview />);
   expect(await screen.findByRole('status')).toHaveTextContent('历史并发暂不可用');
   expect(screen.getByText('1 KB')).toBeInTheDocument();

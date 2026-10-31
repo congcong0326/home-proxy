@@ -66,7 +66,6 @@ public class OverviewService {
         result.put("traffic", traffic);
         result.put("connections", connections);
         result.put("concurrency", concurrency);
-        result.put("live", live(request));
         result.put("dns", dns);
         result.put("auth", auth);
         result.put("historyBasis", "ENDED_SESSIONS_ONLY");
@@ -179,8 +178,8 @@ public class OverviewService {
         return ConcurrencyTimeline.fromBuckets(request.getFrom(), request.getTo(), bucket, rows);
     }
 
+    /** Reads the worker heartbeat (same source as the gateway monitor), never the telemetry store. */
     public Map<String, Object> live(OverviewQuery request) {
-        store.requireQueryAvailable();
         var status = workers.findById(request.getWorkerId()).orElse(null);
         if (status == null || status.getMetricsJson() == null) return Map.of("available", false, "reason", "UNSUPPORTED");
         try {

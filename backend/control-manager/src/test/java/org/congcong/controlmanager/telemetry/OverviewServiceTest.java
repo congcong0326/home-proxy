@@ -78,7 +78,8 @@ class OverviewServiceTest {
         assertEquals("1241", ((Map<?, ?>) result.get("traffic")).get("total"));
         assertEquals("8", ((Map<?, ?>) result.get("dns")).get("total"));
         assertEquals("3", ((Map<?, ?>) result.get("auth")).get("total"));
-        assertEquals("42", ((Map<?, ?>) result.get("live")).get("count"));
+        assertFalse(result.containsKey("live"));
+        assertEquals("42", service.live(query()).get("count"));
     }
 
     @Test

@@ -59,7 +59,6 @@ export interface OverviewData {
   };
   connections: CountOverview;
   concurrency: HistoricalConcurrency;
-  live: LiveConnections;
   dns: CountOverview;
   auth: CountOverview;
 }
