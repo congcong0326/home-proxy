@@ -13,35 +13,28 @@ import {
   Alert,
   Typography,
   Tag,
-  Tooltip,
+  Radio,
 } from 'antd';
 import {
   PlusOutlined,
   DeleteOutlined,
-  InfoCircleOutlined,
   SaveOutlined,
   CloseOutlined,
 } from '@ant-design/icons';
 import {
   RouteDTO,
-  RoutePolicy,
+  RouteAction,
   RouteStatus,
   CreateRouteRequest,
   UpdateRouteRequest,
-  ROUTE_POLICY_LABELS,
+  ROUTE_ACTION_LABELS,
   ROUTE_STATUS_LABELS,
   RouteRule,
   RouteConditionType,
   MatchOp,
-  ProtocolType,
-  PROTOCOL_TYPE_LABELS,
-  OutboundProxyEncAlgo,
 } from '../types/route';
-import {
-  PROXY_ENC_ALGO_OPTIONS,
-  SHADOWSOCKS_2022_PSK_LENGTH,
-  isShadowsocks2022Algo,
-} from '../types/proxyEncAlgo';
+import { OUTBOUND_KIND_COLORS, OUTBOUND_KIND_LABELS, OutboundDTO, OutboundKind } from '../types/outbound';
+import { RewriteTableDTO } from '../types/rewrite';
 import { RuleSetSummaryDTO } from '../types/ruleset';
 
 // 使用 AntD v5 的 options 属性，不再使用 Select.Option
@@ -55,28 +48,27 @@ interface RouteFormProps {
   loading?: boolean;
   mode: 'create' | 'edit';
   ruleSetOptions?: RuleSetSummaryDTO[];
+  outbounds?: OutboundDTO[];
+  rewriteTables?: RewriteTableDTO[];
 }
+
+type RewriteSource = 'table' | 'fixed';
 
 interface FormValues {
   name: string;
-  policy: RoutePolicy;
+  action: RouteAction;
   rules: RouteRule[];
-  outboundTag?: string;
-  outboundProxyType?: ProtocolType;
-  outboundProxyHost?: string;
-  outboundProxyPort?: number;
-  outboundProxyUsername?: string;
-  outboundProxyPassword?: string;
-  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
-  realityServerName?: string;
-  realityPublicKey?: string;
-  realityShortId?: string;
-  realityUuid?: string;
-  realityFlow?: string;
-  realityConnectTimeoutMillis?: number;
+  outboundId?: number;
+  rewriteSource: RewriteSource;
+  rewriteTableId?: number;
+  rewriteTargetHost?: string;
+  rewriteTargetPort?: number;
   status: RouteStatus;
   notes?: string;
 }
+
+const OUTBOUND_KIND_ORDER = [OutboundKind.DIRECT, OutboundKind.BLOCK, OutboundKind.PROXY, OutboundKind.DNS_UPSTREAM];
+const IP_PATTERN = /^(\d{1,3}(\.\d{1,3}){3}|[0-9a-fA-F:]+:[0-9a-fA-F:.]*)$/;
 
 const RouteForm: React.FC<RouteFormProps> = ({
   initialValues,
@@ -85,93 +77,40 @@ const RouteForm: React.FC<RouteFormProps> = ({
   loading = false,
   mode,
   ruleSetOptions = [],
+  outbounds = [],
+  rewriteTables = [],
 }) => {
   const [form] = Form.useForm<FormValues>();
-  const [policy, setPolicy] = useState<RoutePolicy>(initialValues?.policy || RoutePolicy.DIRECT);
   const [rules, setRules] = useState<RouteRule[]>(
     initialValues?.rules?.length
       ? initialValues.rules
       : [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }]
   );
-  // 监听代理类型以控制加密算法下拉框的显示
-  const outboundProxyTypeWatch = Form.useWatch('outboundProxyType', form);
-  const outboundProxyEncAlgoWatch = Form.useWatch('outboundProxyEncAlgo', form);
-  const allowMultiDnsHost = outboundProxyTypeWatch === ProtocolType.DOT || outboundProxyTypeWatch === ProtocolType.DNS_SERVER;
-  const shadowsocks2022PskLength = outboundProxyEncAlgoWatch
-    ? SHADOWSOCKS_2022_PSK_LENGTH[outboundProxyEncAlgoWatch]
-    : undefined;
+  const action: RouteAction = Form.useWatch('action', form) ?? initialValues?.action ?? RouteAction.FORWARD;
+  const rewriteSource: RewriteSource = Form.useWatch('rewriteSource', form)
+    ?? (initialValues?.rewriteTableId ? 'table' : 'fixed');
+  const rewriteTableId = Form.useWatch('rewriteTableId', form);
+  const usesTable = action === RouteAction.REWRITE_DESTINATION && rewriteSource === 'table';
+  const showRules = !usesTable;
+  const selectedTable = rewriteTables.find((table) => table.id === rewriteTableId);
 
   useEffect(() => {
     if (initialValues) {
-      const outboundProxyConfig = (initialValues.outboundProxyConfig || {}) as Record<string, unknown>;
       form.setFieldsValue({
         name: initialValues.name,
-        policy: initialValues.policy,
+        action: initialValues.action ?? RouteAction.FORWARD,
         rules: initialValues.rules,
-        outboundTag: initialValues.outboundTag,
-        outboundProxyType: initialValues.outboundProxyType,
-        outboundProxyHost: initialValues.outboundProxyHost,
-        outboundProxyPort: initialValues.outboundProxyPort,
-        outboundProxyUsername: initialValues.outboundProxyUsername,
-        outboundProxyPassword: initialValues.outboundProxyPassword,
-        outboundProxyEncAlgo: initialValues.outboundProxyEncAlgo,
-        realityServerName: outboundProxyConfig.serverName as string | undefined,
-        realityPublicKey: outboundProxyConfig.publicKey as string | undefined,
-        realityShortId: outboundProxyConfig.shortId as string | undefined,
-        realityUuid: outboundProxyConfig.uuid as string | undefined,
-        realityFlow: (outboundProxyConfig.flow as string | undefined) || 'xtls-rprx-vision',
-        realityConnectTimeoutMillis: (outboundProxyConfig.connectTimeoutMillis as number | undefined) || 10000,
+        outboundId: initialValues.action === RouteAction.FORWARD ? initialValues.outboundId : undefined,
+        rewriteSource: initialValues.rewriteTableId ? 'table' : 'fixed',
+        rewriteTableId: initialValues.rewriteTableId,
+        rewriteTargetHost: initialValues.rewriteTargetHost,
+        rewriteTargetPort: initialValues.rewriteTargetPort,
         status: initialValues.status,
         notes: initialValues.notes,
       });
-      setPolicy(initialValues.policy);
-      setRules(initialValues.rules);
+      if (initialValues.rules?.length) setRules(initialValues.rules);
     }
   }, [initialValues, form]);
-
-  const handlePolicyChange = (value: RoutePolicy) => {
-    setPolicy(value);
-    // 切换不同策略时清理相关字段
-    if (value === RoutePolicy.DESTINATION_OVERRIDE) {
-      // 目标重写只需要目标地址和端口，不需要出站标签或代理认证信息
-      form.setFieldsValue({
-        outboundTag: undefined,
-        outboundProxyType: undefined,
-        outboundProxyUsername: undefined,
-        outboundProxyPassword: undefined,
-        outboundProxyEncAlgo: undefined,
-        realityServerName: undefined,
-        realityPublicKey: undefined,
-        realityShortId: undefined,
-        realityUuid: undefined,
-        realityFlow: undefined,
-        realityConnectTimeoutMillis: undefined,
-      });
-    } else if (value === RoutePolicy.DNS_REWRITING) {
-      // DNS 重写不需要认证信息
-      form.setFieldsValue({
-        outboundProxyUsername: undefined,
-        outboundProxyPassword: undefined,
-      });
-    } else if (value !== RoutePolicy.OUTBOUND_PROXY) {
-      // 直连或阻断清空所有出站配置
-      form.setFieldsValue({
-        outboundTag: undefined,
-        outboundProxyType: undefined,
-        outboundProxyHost: undefined,
-        outboundProxyPort: undefined,
-        outboundProxyUsername: undefined,
-        outboundProxyPassword: undefined,
-        outboundProxyEncAlgo: undefined,
-        realityServerName: undefined,
-        realityPublicKey: undefined,
-        realityShortId: undefined,
-        realityUuid: undefined,
-        realityFlow: undefined,
-        realityConnectTimeoutMillis: undefined,
-      });
-    }
-  };
 
   const handleAddRule = () => {
     const newRules = [...rules, { conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }];
@@ -212,41 +151,19 @@ const RouteForm: React.FC<RouteFormProps> = ({
 
   const handleSubmit = async (values: FormValues) => {
     try {
-      const submitData = {
+      const tableRoute = values.action === RouteAction.REWRITE_DESTINATION && values.rewriteSource === 'table';
+      const submitData: CreateRouteRequest = {
         name: values.name,
-        policy: values.policy,
-        rules: rules
+        action: values.action,
+        rules: tableRoute ? [] : rules
           .filter(r => r.value && r.value.trim())
           .map(r => ({ conditionType: r.conditionType, op: r.op, value: r.value.trim() })),
         status: values.status,
         notes: values.notes,
-        ...(values.policy === RoutePolicy.OUTBOUND_PROXY && {
-          outboundTag: values.outboundTag,
-          outboundProxyType: values.outboundProxyType,
-          outboundProxyHost: values.outboundProxyHost,
-          outboundProxyPort: values.outboundProxyPort,
-          outboundProxyUsername: values.outboundProxyType === ProtocolType.VLESS_REALITY ? undefined : values.outboundProxyUsername,
-          outboundProxyPassword: values.outboundProxyType === ProtocolType.VLESS_REALITY ? undefined : values.outboundProxyPassword,
-          outboundProxyEncAlgo: values.outboundProxyType === ProtocolType.SHADOW_SOCKS ? values.outboundProxyEncAlgo : undefined,
-          outboundProxyConfig: values.outboundProxyType === ProtocolType.VLESS_REALITY
-            ? {
-                serverName: values.realityServerName?.trim(),
-                publicKey: values.realityPublicKey?.trim(),
-                shortId: values.realityShortId?.trim(),
-                uuid: values.realityUuid?.trim(),
-                flow: values.realityFlow || 'xtls-rprx-vision',
-                connectTimeoutMillis: values.realityConnectTimeoutMillis || 10000,
-              }
-            : {},
-        }),
-        ...(values.policy === RoutePolicy.DESTINATION_OVERRIDE && {
-          outboundProxyHost: values.outboundProxyHost,
-          outboundProxyPort: values.outboundProxyPort,
-        }),
-        ...(values.policy === RoutePolicy.DNS_REWRITING && {
-          outboundTag: values.outboundTag,
-          outboundProxyHost: values.outboundProxyHost,
-        }),
+        outboundId: values.action === RouteAction.FORWARD ? values.outboundId : undefined,
+        rewriteTableId: tableRoute ? values.rewriteTableId : undefined,
+        rewriteTargetHost: !tableRoute && values.action !== RouteAction.FORWARD ? values.rewriteTargetHost?.trim() : undefined,
+        rewriteTargetPort: !tableRoute && values.action === RouteAction.REWRITE_DESTINATION ? values.rewriteTargetPort : undefined,
       };
 
       await onSubmit(submitData);
@@ -256,6 +173,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
   };
 
   const validateRules = () => {
+    if (!showRules) return Promise.resolve();
     const validRules = rules.filter(r => r.value && r.value.trim());
     if (validRules.length === 0) {
       return Promise.reject(new Error('至少需要一个有效的路由规则'));
@@ -263,16 +181,31 @@ const RouteForm: React.FC<RouteFormProps> = ({
     return Promise.resolve();
   };
 
+  const outboundOptions = OUTBOUND_KIND_ORDER
+    .map((kind) => ({
+      label: OUTBOUND_KIND_LABELS[kind],
+      options: outbounds.filter((outbound) => outbound.kind === kind).map((outbound) => ({
+        value: outbound.id,
+        label: (
+          <Space>
+            <Tag color={OUTBOUND_KIND_COLORS[outbound.kind]}>{OUTBOUND_KIND_LABELS[outbound.kind]}</Tag>
+            {outbound.name}
+            {outbound.host && <Text type="secondary">{outbound.host}:{outbound.port}</Text>}
+          </Space>
+        ),
+      })),
+    }))
+    .filter((group) => group.options.length > 0);
+
   return (
     <Form
       form={form}
       layout="vertical"
       onFinish={handleSubmit}
       initialValues={{
-        policy: RoutePolicy.DIRECT,
+        action: RouteAction.FORWARD,
+        rewriteSource: 'fixed',
         status: RouteStatus.ENABLED,
-        realityFlow: 'xtls-rprx-vision',
-        realityConnectTimeoutMillis: 10000,
         rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '' }],
       }}
     >
@@ -291,42 +224,29 @@ const RouteForm: React.FC<RouteFormProps> = ({
         </Col>
         <Col span={12}>
           <Form.Item
-            name="policy"
-            label="路由策略"
-            rules={[{ required: true, message: '请选择路由策略' }]}
+            name="action"
+            label="路由动作"
+            rules={[{ required: true, message: '请选择路由动作' }]}
           >
             <Select
-              placeholder="请选择路由策略"
-              onChange={handlePolicyChange}
+              placeholder="请选择路由动作"
               options={[
-                { value: RoutePolicy.DIRECT, label: (
+                { value: RouteAction.FORWARD, label: (
                   <Space>
-                    <Tag color="green">{ROUTE_POLICY_LABELS[RoutePolicy.DIRECT]}</Tag>
-                    <Text type="secondary">直接连接</Text>
+                    <Tag color="blue">{ROUTE_ACTION_LABELS[RouteAction.FORWARD]}</Tag>
+                    <Text type="secondary">直连、阻断或经上游转发</Text>
                   </Space>
                 ) },
-                { value: RoutePolicy.BLOCK, label: (
+                { value: RouteAction.REWRITE_DESTINATION, label: (
                   <Space>
-                    <Tag color="red">{ROUTE_POLICY_LABELS[RoutePolicy.BLOCK]}</Tag>
-                    <Text type="secondary">阻断连接</Text>
+                    <Tag color="purple">{ROUTE_ACTION_LABELS[RouteAction.REWRITE_DESTINATION]}</Tag>
+                    <Text type="secondary">改写连接目标后直连</Text>
                   </Space>
                 ) },
-                { value: RoutePolicy.OUTBOUND_PROXY, label: (
+                { value: RouteAction.REWRITE_DNS, label: (
                   <Space>
-                    <Tag color="blue">{ROUTE_POLICY_LABELS[RoutePolicy.OUTBOUND_PROXY]}</Tag>
-                    <Text type="secondary">代理转发</Text>
-                  </Space>
-                ) },
-                { value: RoutePolicy.DESTINATION_OVERRIDE, label: (
-                  <Space>
-                    <Tag color="purple">{ROUTE_POLICY_LABELS[RoutePolicy.DESTINATION_OVERRIDE]}</Tag>
-                    <Text type="secondary">目标地址重写</Text>
-                  </Space>
-                ) },
-                { value: RoutePolicy.DNS_REWRITING, label: (
-                  <Space>
-                    <Tag color="cyan">{ROUTE_POLICY_LABELS[RoutePolicy.DNS_REWRITING]}</Tag>
-                    <Text type="secondary">自定义DNS解析</Text>
+                    <Tag color="cyan">{ROUTE_ACTION_LABELS[RouteAction.REWRITE_DNS]}</Tag>
+                    <Text type="secondary">DNS 入站返回固定 IP</Text>
                   </Space>
                 ) },
               ]}
@@ -335,6 +255,85 @@ const RouteForm: React.FC<RouteFormProps> = ({
         </Col>
       </Row>
 
+      {action === RouteAction.FORWARD && (
+        <Form.Item
+          name="outboundId"
+          label="出站"
+          rules={[{ required: true, message: '请选择出站' }]}
+          extra="上游代理和 DNS 上游在「出站管理」中维护"
+        >
+          <Select placeholder="请选择出站" options={outboundOptions} showSearch optionFilterProp="label" />
+        </Form.Item>
+      )}
+
+      {action === RouteAction.REWRITE_DESTINATION && (
+        <>
+          <Form.Item name="rewriteSource" label="改写目标来源">
+            <Radio.Group>
+              <Radio value="table">引用改写表</Radio>
+              <Radio value="fixed">固定目标</Radio>
+            </Radio.Group>
+          </Form.Item>
+          {rewriteSource === 'table' ? (
+            <Form.Item
+              name="rewriteTableId"
+              label="改写表"
+              rules={[{ required: true, message: '请选择改写表' }]}
+              extra={selectedTable
+                ? `表中 ${selectedTable.entries.length} 个域名即匹配条件，命中后改写到对应目标并直连`
+                : '表中的域名即匹配条件，无需再配置路由规则'}
+            >
+              <Select
+                placeholder="请选择改写表"
+                options={rewriteTables.map((table) => ({ value: table.id, label: `${table.name}（${table.entries.length} 条）` }))}
+              />
+            </Form.Item>
+          ) : (
+            <Row gutter={16}>
+              <Col span={16}>
+                <Form.Item
+                  name="rewriteTargetHost"
+                  label="目标地址"
+                  rules={[
+                    { required: true, message: '请输入目标地址' },
+                    { pattern: /^[a-zA-Z0-9.:-]+$/, message: '请输入有效的主机地址' },
+                  ]}
+                >
+                  <Input placeholder="例如：192.168.10.85" />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item
+                  name="rewriteTargetPort"
+                  label="目标端口"
+                  rules={[
+                    { required: true, message: '请输入目标端口' },
+                    { type: 'number', min: 1, max: 65535, message: '端口范围应在1-65535之间' },
+                  ]}
+                >
+                  <InputNumber placeholder="端口" style={{ width: '100%' }} min={1} max={65535} />
+                </Form.Item>
+              </Col>
+            </Row>
+          )}
+        </>
+      )}
+
+      {action === RouteAction.REWRITE_DNS && (
+        <Form.Item
+          name="rewriteTargetHost"
+          label="应答IP"
+          rules={[
+            { required: true, message: '请输入应答IP' },
+            { pattern: IP_PATTERN, message: '请输入 IPv4 或 IPv6 地址' },
+          ]}
+        >
+          <Input placeholder="例如：192.168.10.1" />
+        </Form.Item>
+      )}
+
+      {showRules && (
+      <>
       <Divider orientation="left">路由规则</Divider>
       
       <Alert
@@ -439,284 +438,7 @@ const RouteForm: React.FC<RouteFormProps> = ({
           ))}
         </Card>
       </Form.Item>
-
-      {policy === RoutePolicy.OUTBOUND_PROXY && (
-        <>
-          <Divider orientation="left">代理配置</Divider>
-          
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="outboundProxyType"
-                label="代理类型"
-                rules={[{ required: true, message: '请选择代理类型' }]}
-              >
-                <Select
-                  placeholder="请选择代理类型"
-                  options={[
-                    { value: ProtocolType.SOCKS5, label: PROTOCOL_TYPE_LABELS[ProtocolType.SOCKS5] },
-                    { value: ProtocolType.HTTPS_CONNECT, label: PROTOCOL_TYPE_LABELS[ProtocolType.HTTPS_CONNECT] },
-                    { value: ProtocolType.DOT, label: PROTOCOL_TYPE_LABELS[ProtocolType.DOT] },
-                    { value: ProtocolType.DNS_SERVER, label: PROTOCOL_TYPE_LABELS[ProtocolType.DNS_SERVER] },
-                    { value: ProtocolType.SHADOW_SOCKS, label: PROTOCOL_TYPE_LABELS[ProtocolType.SHADOW_SOCKS] },
-                    { value: ProtocolType.VLESS_REALITY, label: PROTOCOL_TYPE_LABELS[ProtocolType.VLESS_REALITY] },
-                  ]}
-                />
-              </Form.Item>
-            </Col>
-            {outboundProxyTypeWatch === ProtocolType.SHADOW_SOCKS && (
-              <Col span={12}>
-                <Form.Item
-                  name="outboundProxyEncAlgo"
-                  label="加密算法（Shadowsocks）"
-                  rules={[{ required: true, message: '请选择加密算法' }]}
-                >
-                  <Select
-                    placeholder="请选择加密算法"
-                    options={PROXY_ENC_ALGO_OPTIONS}
-                  />
-                </Form.Item>
-              </Col>
-            )}
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={12}>
-              <Form.Item
-                name="outboundTag"
-                label={
-                  <Space>
-                    出站标签
-                    <Tooltip title="用于标识此代理配置的唯一标签">
-                      <InfoCircleOutlined />
-                    </Tooltip>
-                  </Space>
-                }
-                rules={[
-                  { required: true, message: '请输入出站标签' },
-                  { pattern: /^[a-zA-Z0-9_-]+$/, message: '标签只能包含字母、数字、下划线和连字符' },
-                ]}
-              >
-                <Input placeholder="请输入出站标签" />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item
-                name="outboundProxyHost"
-                label="代理地址"
-                rules={[
-                  { required: true, message: '请输入代理地址' },
-                  {
-                    validator: (_, value: string) => {
-                      if (!value) return Promise.resolve();
-                      const hostPattern = /^[a-zA-Z0-9.-]+$/;
-                      if (allowMultiDnsHost) {
-                        const parts = value.split(',').map((p: string) => p.trim()).filter(Boolean);
-                        if (!parts.length) {
-                          return Promise.reject(new Error('请输入至少一个地址'));
-                        }
-                        const invalid = parts.find(p => !hostPattern.test(p));
-                        return invalid
-                          ? Promise.reject(new Error('请输入有效的主机地址，多个地址请用逗号分隔'))
-                          : Promise.resolve();
-                      }
-                      return hostPattern.test(value)
-                        ? Promise.resolve()
-                        : Promise.reject(new Error('请输入有效的主机地址'));
-                    },
-                  },
-                ]}
-                extra={allowMultiDnsHost ? '支持多个DNS上游，使用英文逗号分隔，例如：1.1.1.1,8.8.8.8' : undefined}
-              >
-                <Input placeholder={allowMultiDnsHost ? '多个DNS上游用逗号分隔，如 1.1.1.1,8.8.8.8' : '请输入代理服务器地址'} />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Row gutter={16}>
-            <Col span={outboundProxyTypeWatch === ProtocolType.VLESS_REALITY ? 12 : 8}>
-              <Form.Item
-                name="outboundProxyPort"
-                label="代理端口"
-                rules={[
-                  { required: true, message: '请输入代理端口' },
-                  { type: 'number', min: 1, max: 65535, message: '端口范围应在1-65535之间' },
-                ]}
-              >
-                <InputNumber
-                  placeholder="端口"
-                  style={{ width: '100%' }}
-                  min={1}
-                  max={65535}
-                />
-              </Form.Item>
-            </Col>
-            {outboundProxyTypeWatch !== ProtocolType.VLESS_REALITY && (
-              <>
-                <Col span={8}>
-                  <Form.Item
-                    name="outboundProxyUsername"
-                    label="用户名（可选）"
-                  >
-                    <Input placeholder="代理认证用户名" />
-                  </Form.Item>
-                </Col>
-                <Col span={8}>
-                  <Form.Item
-                    name="outboundProxyPassword"
-                    label="密码（可选）"
-                    extra={
-                      outboundProxyTypeWatch === ProtocolType.SHADOW_SOCKS &&
-                      isShadowsocks2022Algo(outboundProxyEncAlgoWatch)
-                        ? `支持单个 Base64 uPSK，或 iPSK:uPSK 形式；每段都必须是 ${shadowsocks2022PskLength} 字节 Base64`
-                        : undefined
-                    }
-                  >
-                    <Input.Password placeholder="代理认证密码" />
-                  </Form.Item>
-                </Col>
-              </>
-            )}
-          </Row>
-
-          {outboundProxyTypeWatch === ProtocolType.VLESS_REALITY && (
-            <>
-              <Divider orientation="left">REALITY 配置</Divider>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityServerName"
-                    label="Server Name"
-                    rules={[{ required: true, message: '请输入 REALITY serverName' }]}
-                  >
-                    <Input placeholder="例如：www.example.com" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityPublicKey"
-                    label="Public Key"
-                    rules={[{ required: true, message: '请输入 REALITY publicKey' }]}
-                  >
-                    <Input placeholder="请输入 Xray REALITY publicKey" />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityShortId"
-                    label="Short ID"
-                    rules={[
-                      { required: true, message: '请输入 REALITY shortId' },
-                      { pattern: /^[0-9a-fA-F]{0,16}$/, message: 'shortId 必须是 0-16 位十六进制字符' },
-                    ]}
-                  >
-                    <Input placeholder="例如：6ba85179e30d4fc2" />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityUuid"
-                    label="UUID"
-                    rules={[{ required: true, message: '请输入 VLESS UUID' }]}
-                  >
-                    <Input.Password placeholder="请输入 VLESS UUID" />
-                  </Form.Item>
-                </Col>
-              </Row>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityFlow"
-                    label="Flow"
-                    rules={[{ required: true, message: '请选择 VLESS flow' }]}
-                  >
-                    <Select
-                      options={[
-                        { value: 'xtls-rprx-vision', label: 'xtls-rprx-vision' },
-                      ]}
-                    />
-                  </Form.Item>
-                </Col>
-                <Col span={12}>
-                  <Form.Item
-                    name="realityConnectTimeoutMillis"
-                    label="连接超时（毫秒）"
-                    rules={[{ type: 'number', min: 1, message: '连接超时必须大于0' }]}
-                  >
-                    <InputNumber
-                      placeholder="10000"
-                      style={{ width: '100%' }}
-                      min={1}
-                    />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </>
-          )}
-        </>
-      )}
-
-      {(policy === RoutePolicy.DESTINATION_OVERRIDE || policy === RoutePolicy.DNS_REWRITING) && (
-        <>
-          <Divider orientation="left">{policy === RoutePolicy.DNS_REWRITING ? 'DNS解析配置' : '目标重写配置'}</Divider>
-          <Row gutter={16}>
-            {policy === RoutePolicy.DNS_REWRITING && (
-              <Col span={12}>
-                <Form.Item
-                  name="outboundTag"
-                  label={
-                    <Space>
-                      出站标签
-                      <Tooltip title="用于标识此配置的唯一标签">
-                        <InfoCircleOutlined />
-                      </Tooltip>
-                    </Space>
-                  }
-                  rules={[
-                    { required: true, message: '请输入出站标签' },
-                    { pattern: /^[a-zA-Z0-9_-]+$/, message: '标签只能包含字母、数字、下划线和连字符' },
-                  ]}
-                >
-                  <Input placeholder="请输入出站标签" />
-                </Form.Item>
-              </Col>
-            )}
-            <Col span={policy === RoutePolicy.DNS_REWRITING ? 12 : 24}>
-              <Form.Item
-                name="outboundProxyHost"
-                label={policy === RoutePolicy.DNS_REWRITING ? '应答IP' : '目标地址'}
-                rules={[
-                  { required: true, message: '请输入目标地址' },
-                  { pattern: /^[a-zA-Z0-9.-]+$/, message: '请输入有效的主机地址' },
-                ]}
-              >
-                <Input placeholder={policy === RoutePolicy.DNS_REWRITING ? '请输入应答IP' : '请输入目标服务器地址'} />
-              </Form.Item>
-            </Col>
-          </Row>
-          {policy === RoutePolicy.DESTINATION_OVERRIDE && (
-            <Row gutter={16}>
-              <Col span={8}>
-                <Form.Item
-                  name="outboundProxyPort"
-                  label="目标端口（可选）"
-                  rules={[
-                    { type: 'number', min: 1, max: 65535, message: '端口范围应在1-65535之间' },
-                  ]}
-                >
-                  <InputNumber
-                    placeholder="端口"
-                    style={{ width: '100%' }}
-                    min={1}
-                    max={65535}
-                  />
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
-        </>
+      </>
       )}
 
       <Divider orientation="left">其他设置</Divider>

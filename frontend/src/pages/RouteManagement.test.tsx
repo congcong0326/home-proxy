@@ -5,6 +5,7 @@ import RouteManagement from './RouteManagement';
 import { apiService } from '../services/api';
 import {
   MatchOp,
+  RouteAction,
   RouteConditionType,
   RoutePolicy,
   RouteStatus,
@@ -14,12 +15,16 @@ jest.mock('../services/api', () => ({
   apiService: {
     getRoutes: jest.fn(),
     getPublishedRuleSets: jest.fn(),
+    getOutbounds: jest.fn().mockResolvedValue([]),
+    getRewriteTables: jest.fn().mockResolvedValue([]),
     deleteRoute: jest.fn(),
   },
 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
+  (apiService.getOutbounds as jest.Mock).mockResolvedValue([]);
+  (apiService.getRewriteTables as jest.Mock).mockResolvedValue([]);
   Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
   window.dispatchEvent(new Event('resize'));
 });
@@ -31,10 +36,11 @@ test('does not show outbound tag in destination override route outbound info', a
         id: 201,
         name: 'rewrite route',
         rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: 'example.com' }],
+        action: RouteAction.REWRITE_DESTINATION,
         policy: RoutePolicy.DESTINATION_OVERRIDE,
         outboundTag: 'legacy-tag',
-        outboundProxyHost: 'rewrite.example.com',
-        outboundProxyPort: 443,
+        rewriteTargetHost: 'rewrite.example.com',
+        rewriteTargetPort: 443,
         status: RouteStatus.ENABLED,
         notes: '',
         createdAt: '2026-01-01T00:00:00Z',
@@ -125,3 +131,40 @@ test.each(['single', 'batch'])('%s delete shows referencing inbounds and where t
   expect(screen.getByText('家庭直连')).toBeInTheDocument();
   expect(apiService.deleteRoute).toHaveBeenCalledWith(7);
 }, 20000);
+
+test('shows rewrite table and outbound names in outbound info', async () => {
+  (apiService.getRoutes as jest.Mock).mockResolvedValue({
+    items: [
+      {
+        id: 301,
+        name: 'NAS 改写',
+        rules: [],
+        action: RouteAction.REWRITE_DESTINATION,
+        rewriteTableId: 5,
+        rewriteTableName: '日常服务',
+        rewriteEntryCount: 11,
+        policy: RoutePolicy.DESTINATION_OVERRIDE,
+        status: RouteStatus.ENABLED,
+      },
+      {
+        id: 302,
+        name: '科学上网',
+        rules: [{ conditionType: RouteConditionType.RULE_SET, op: MatchOp.IN, value: 'geo-not-cn' }],
+        action: RouteAction.FORWARD,
+        outboundId: 5,
+        outboundName: '机场 Reality',
+        policy: RoutePolicy.OUTBOUND_PROXY,
+        status: RouteStatus.ENABLED,
+      },
+    ],
+    total: 2,
+    page: 1,
+    pageSize: 10,
+  });
+  (apiService.getPublishedRuleSets as jest.Mock).mockResolvedValue([]);
+
+  render(<RouteManagement />);
+
+  expect(await screen.findByText('改写表：日常服务（11 条）')).toBeInTheDocument();
+  expect(screen.getByText('机场 Reality')).toBeInTheDocument();
+});

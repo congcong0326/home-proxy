@@ -45,9 +45,13 @@ import {
   ROUTE_POLICY_COLORS,
   RouteConditionType,
   MatchOp,
-  ProtocolType,
-  PROTOCOL_TYPE_LABELS,
+  RouteAction,
+  ROUTE_ACTION_LABELS,
+  describeRouteTarget,
 } from '../types/route';
+import { OutboundDTO } from '../types/outbound';
+import { RewriteTableDTO } from '../types/rewrite';
+import RewriteMergeModal from '../components/RewriteMergeModal';
 import { RuleSetSummaryDTO } from '../types/ruleset';
 import { apiService } from '../services/api';
 import RouteForm from '../components/RouteForm';
@@ -93,6 +97,9 @@ const RouteManagement: React.FC = () => {
   const [formLoading, setFormLoading] = useState(false);
   const [publishedRuleSets, setPublishedRuleSets] = useState<RuleSetSummaryDTO[]>([]);
   const [deleteConflict, setDeleteConflict] = useState<string | null>(null);
+  const [outbounds, setOutbounds] = useState<OutboundDTO[]>([]);
+  const [rewriteTables, setRewriteTables] = useState<RewriteTableDTO[]>([]);
+  const [mergeModalVisible, setMergeModalVisible] = useState(false);
   const screens = Grid.useBreakpoint();
   const isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : screens.md === false;
 
@@ -123,9 +130,8 @@ const RouteManagement: React.FC = () => {
       name: '代理转发',
       rules: [{ conditionType: RouteConditionType.DOMAIN, op: MatchOp.IN, value: '*.example.com' }],
       policy: RoutePolicy.OUTBOUND_PROXY,
-      outboundTag: 'proxy-1',
-      outboundProxyHost: 'proxy.example.com',
-      outboundProxyPort: 8080,
+      action: RouteAction.FORWARD,
+      outboundName: 'proxy-1',
       status: RouteStatus.ENABLED,
       notes: '通过代理访问',
       createdAt: '2024-01-17T11:20:00Z',
@@ -229,6 +235,23 @@ const RouteManagement: React.FC = () => {
 
     loadPublishedRuleSets();
   }, []);
+
+  const loadRouteTargets = useCallback(async () => {
+    try {
+      const [outboundData, tableData] = await Promise.all([
+        apiService.getOutbounds(),
+        apiService.getRewriteTables(),
+      ]);
+      setOutbounds(outboundData ?? []);
+      setRewriteTables(tableData ?? []);
+    } catch (error) {
+      console.error('Failed to load outbounds or rewrite tables:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRouteTargets();
+  }, [loadRouteTargets]);
 
   // 处理搜索
   const handleSearch = useCallback((value: string) => {
@@ -364,44 +387,16 @@ const RouteManagement: React.FC = () => {
       loadRoutes();
     } catch (error) {
       console.error('Failed to create route:', error);
-      
-      // API失败时添加到模拟数据
-      try {
-        const newRoute: RouteDTO = {
-          id: Math.max(...mockRoutes.map(r => r.id), 0) + 1,
-          name: values.name,
-          rules: values.rules,
-          policy: values.policy,
-          outboundTag: values.outboundTag,
-          outboundProxyType: values.outboundProxyType,
-          outboundProxyHost: values.outboundProxyHost,
-          outboundProxyPort: values.outboundProxyPort,
-          outboundProxyUsername: values.outboundProxyUsername,
-          outboundProxyPassword: values.outboundProxyPassword,
-          outboundProxyEncAlgo: values.outboundProxyEncAlgo,
-          outboundProxyConfig: values.outboundProxyConfig,
-          status: values.status ?? RouteStatus.ENABLED,
-          notes: values.notes,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        
-        setMockRoutes(prev => [...prev, newRoute]);
-        message.success('路由创建成功');
-        setCreateModalVisible(false);
-        loadRoutes();
-      } catch (mockError) {
-        message.error('创建路由失败');
-      }
+      message.error(error instanceof Error ? error.message : '创建路由失败');
     } finally {
       setFormLoading(false);
     }
-  }, [loadRoutes, mockRoutes]);
+  }, [loadRoutes]);
 
   // 处理更新路由
   const handleUpdateRoute = useCallback(async (values: UpdateRouteRequest) => {
     if (!currentRoute) return;
-    
+
     setFormLoading(true);
     try {
       await apiService.updateRoute(currentRoute.id, values);
@@ -411,37 +406,7 @@ const RouteManagement: React.FC = () => {
       loadRoutes();
     } catch (error) {
       console.error('Failed to update route:', error);
-      
-      // API失败时更新模拟数据
-      try {
-        setMockRoutes(prev => prev.map(route => 
-          route.id === currentRoute.id 
-            ? {
-                ...route,
-                name: values.name ?? route.name,
-                rules: values.rules ?? route.rules,
-                policy: values.policy ?? route.policy,
-                outboundTag: values.outboundTag ?? route.outboundTag,
-                outboundProxyType: values.outboundProxyType ?? route.outboundProxyType,
-                outboundProxyHost: values.outboundProxyHost ?? route.outboundProxyHost,
-                outboundProxyPort: values.outboundProxyPort ?? route.outboundProxyPort,
-                outboundProxyUsername: values.outboundProxyUsername ?? route.outboundProxyUsername,
-                outboundProxyPassword: values.outboundProxyPassword ?? route.outboundProxyPassword,
-                outboundProxyConfig: values.outboundProxyConfig ?? route.outboundProxyConfig,
-                status: values.status ?? route.status,
-                notes: values.notes ?? route.notes,
-                updatedAt: new Date().toISOString(),
-              }
-            : route
-        ));
-        
-        message.success('路由更新成功');
-        setEditModalVisible(false);
-        setCurrentRoute(null);
-        loadRoutes();
-      } catch (mockError) {
-        message.error('更新路由失败');
-      }
+      message.error(error instanceof Error ? error.message : '更新路由失败');
     } finally {
       setFormLoading(false);
     }
@@ -491,41 +456,16 @@ const RouteManagement: React.FC = () => {
               </li>
             ))}
           </ul>
-          {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DESTINATION_OVERRIDE || route.policy === RoutePolicy.DNS_REWRITING) && (
-            <>
-              {(route.policy === RoutePolicy.OUTBOUND_PROXY || route.policy === RoutePolicy.DNS_REWRITING) && (
-                <p><strong>出站标签：</strong>{route.outboundTag}</p>
-              )}
-              {route.policy === RoutePolicy.OUTBOUND_PROXY && (
-                <>
-                  <p><strong>代理类型：</strong>{route.outboundProxyType ? PROTOCOL_TYPE_LABELS[route.outboundProxyType as ProtocolType] : '未设置'}</p>
-                  {route.outboundProxyType === 'SHADOW_SOCKS' && (
-                    <p><strong>加密算法：</strong>{route.outboundProxyEncAlgo || '未设置'}</p>
-                  )}
-                  {route.outboundProxyType === ProtocolType.VLESS_REALITY && (
-                    <>
-                      <p><strong>Server Name：</strong>{String(route.outboundProxyConfig?.serverName || '未设置')}</p>
-                      <p><strong>Flow：</strong>{String(route.outboundProxyConfig?.flow || 'xtls-rprx-vision')}</p>
-                      <p><strong>Short ID：</strong>{String(route.outboundProxyConfig?.shortId || '未设置')}</p>
-                    </>
-                  )}
-                </>
-              )}
-              {route.policy === RoutePolicy.DNS_REWRITING ? (
-                <p><strong>应答IP：</strong>{route.outboundProxyHost}</p>
-              ) : (
-                <p><strong>{route.policy === RoutePolicy.OUTBOUND_PROXY ? '代理地址' : '目标地址'}：</strong>{route.outboundProxyHost}:{route.outboundProxyPort}</p>
-              )}
-            </>
-          )}
+          <p><strong>路由动作：</strong>{route.action ? ROUTE_ACTION_LABELS[route.action] : '未设置'}</p>
+          <p><strong>{route.action === RouteAction.FORWARD ? '出站' : '改写目标'}：</strong>{describeRouteTarget(route)}</p>
           <p><strong>状态：</strong>
             <Tag color={ROUTE_STATUS_COLORS[route.status as RouteStatus]}>
               {ROUTE_STATUS_LABELS[route.status as RouteStatus]}
             </Tag>
           </p>
           <p><strong>备注：</strong>{route.notes || '无'}</p>
-          <p><strong>创建时间：</strong>{new Date(route.createdAt).toLocaleString()}</p>
-          <p><strong>更新时间：</strong>{new Date(route.updatedAt).toLocaleString()}</p>
+          <p><strong>创建时间：</strong>{route.createdAt ? new Date(route.createdAt).toLocaleString() : '-'}</p>
+          <p><strong>更新时间：</strong>{route.updatedAt ? new Date(route.updatedAt).toLocaleString() : '-'}</p>
         </div>
       ),
     });
@@ -581,18 +521,13 @@ const RouteManagement: React.FC = () => {
       key: 'outbound',
       width: 200,
       render: (_: any, record: RouteDTO) => {
-        if (record.policy === RoutePolicy.OUTBOUND_PROXY) {
-          return (
-            <Space direction="vertical" size="small">
-              <Text type="secondary">{record.outboundTag}</Text>
-              <Text code>{record.outboundProxyHost}:{record.outboundProxyPort}</Text>
-            </Space>
-          );
+        if (record.rewriteTableId) {
+          return <Tag color="purple">{describeRouteTarget(record)}</Tag>;
         }
-        if (record.policy === RoutePolicy.DESTINATION_OVERRIDE) {
-          return <Text code>{record.outboundProxyHost}:{record.outboundProxyPort}</Text>;
+        if (record.action === RouteAction.FORWARD) {
+          return <Text>{describeRouteTarget(record)}</Text>;
         }
-        return <Text type="secondary">-</Text>;
+        return <Text code>{describeRouteTarget(record)}</Text>;
       },
     },
     {
@@ -901,6 +836,11 @@ const RouteManagement: React.FC = () => {
           
           <Col>
             <Space>
+              {state.selectedRowKeys.length > 1 && (
+                <Button icon={<NodeIndexOutlined />} onClick={() => setMergeModalVisible(true)}>
+                  合并为改写表
+                </Button>
+              )}
               {state.selectedRowKeys.length > 0 && (
                 <Popconfirm
                   title={`确定要删除选中的 ${state.selectedRowKeys.length} 个路由吗？`}
@@ -992,6 +932,8 @@ const RouteManagement: React.FC = () => {
           }}
           loading={formLoading}
           ruleSetOptions={publishedRuleSets}
+          outbounds={outbounds}
+          rewriteTables={rewriteTables}
         />
       </Modal>
 
@@ -1020,9 +962,23 @@ const RouteManagement: React.FC = () => {
             }}
             loading={formLoading}
             ruleSetOptions={publishedRuleSets}
+            outbounds={outbounds}
+            rewriteTables={rewriteTables}
           />
         )}
       </Modal>
+
+      <RewriteMergeModal
+        open={mergeModalVisible}
+        routes={state.routes.filter((route) => state.selectedRowKeys.includes(route.id))}
+        onCancel={() => setMergeModalVisible(false)}
+        onMerged={() => {
+          setMergeModalVisible(false);
+          setState(prev => ({ ...prev, selectedRowKeys: [] }));
+          loadRoutes();
+          loadRouteTargets();
+        }}
+      />
     </div>
   );
 };

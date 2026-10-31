@@ -33,7 +33,7 @@ import { InboundConfigDTO, InboundConfigCreateRequest, InboundConfigUpdateReques
 import { TrafficCategory } from '../types/observability';
 import { ProtocolType, PROTOCOL_TYPE_LABELS } from '../types/route';
 import { UserDTO } from '../types/user';
-import { RouteDTO } from '../types/route';
+import { RouteDTO, describeRouteTarget } from '../types/route';
 import { ProxyWorkerDTO } from '../types/worker';
 import { PROXY_ENC_ALGO_OPTIONS } from '../types/proxyEncAlgo';
 import { formatBytes } from '../utils/format';
@@ -205,10 +205,15 @@ const InboundManagement: React.FC = () => {
   const routeSelectOptions = useMemo(() => (
     routeOptions.map(r => ({
       value: r.id,
-      label: r.status === 1 ? r.name : `${r.name}（已禁用）`,
+      label: `${r.name} → ${describeRouteTarget(r)}${r.status === 1 ? '' : '（已禁用）'}`,
       disabled: r.status !== 1,
     }))
   ), [routeOptions]);
+
+  // 兜底路由只能是单条路由，排除引用改写表的路由
+  const fallbackRouteOptions = useMemo(() => (
+    routeSelectOptions.filter((option) => !routeOptions.find((route) => route.id === option.value)?.rewriteTableId)
+  ), [routeSelectOptions, routeOptions]);
 
   const workerSelectOptions = useMemo(() => workerOptions.map((worker) => ({
     value: worker.workerId,
@@ -639,7 +644,7 @@ const InboundManagement: React.FC = () => {
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="anonymousUserId" label="匿名用户"><Select allowClear options={userSelectOptions} /></Form.Item></Col>
-            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={routeSelectOptions} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={fallbackRouteOptions} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="listenIp" label="监听IP" rules={[{ required: true }]}><Input placeholder="0.0.0.0" /></Form.Item></Col>
@@ -729,7 +734,7 @@ const InboundManagement: React.FC = () => {
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="anonymousUserId" label="匿名用户"><Select allowClear options={userSelectOptions} /></Form.Item></Col>
-            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={routeSelectOptions} /></Form.Item></Col>
+            <Col span={12}><Form.Item name="fallbackRouteId" label="兜底路由"><Select allowClear options={fallbackRouteOptions} /></Form.Item></Col>
           </Row>
           <Row gutter={16}>
             <Col span={12}><Form.Item name="listenIp" label="监听IP" rules={[{ required: true }]}><Input /></Form.Item></Col>

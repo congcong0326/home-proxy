@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -12,20 +13,26 @@ import static org.mockito.Mockito.when;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.InboundRouteBinding;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.controlmanager.dto.route.CreateRouteRequest;
-import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.dto.route.RouteRequest;
+import org.congcong.controlmanager.dto.route.RouteView;
 import org.congcong.controlmanager.entity.InboundConfig;
-import org.congcong.controlmanager.repository.RuleSetRepository;
+import org.congcong.controlmanager.entity.Outbound;
+import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.enums.OutboundKind;
+import org.congcong.controlmanager.enums.RouteAction;
+import org.congcong.controlmanager.repository.OutboundRepository;
+import org.congcong.controlmanager.repository.RewriteEntryRepository;
+import org.congcong.controlmanager.repository.RewriteTableRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
+import org.congcong.controlmanager.repository.RuleSetRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
@@ -35,50 +42,124 @@ class RouteServiceTest {
     private final RouteRepository routeRepository = mock(RouteRepository.class);
     private final RuleSetRepository ruleSetRepository = mock(RuleSetRepository.class);
     private final WorkerConfigDependencyResolver dependencyResolver = mock(WorkerConfigDependencyResolver.class);
-    private final RouteService routeService = new RouteService(routeRepository, ruleSetRepository, dependencyResolver);
+    private final OutboundRepository outboundRepository = mock(OutboundRepository.class);
+    private final RewriteTableRepository rewriteTableRepository = mock(RewriteTableRepository.class);
+    private final RouteService routeService = new RouteService(routeRepository, ruleSetRepository, dependencyResolver,
+            outboundRepository, rewriteTableRepository, mock(RewriteEntryRepository.class));
 
-    @Test
-    void rejectsVlessRealityRouteWhenRequiredConfigIsMissing() {
-        when(routeRepository.existsByName("reality")).thenReturn(false);
-        CreateRouteRequest request = vlessRealityRequest(Map.of(
-                "publicKey", "j4VYpQ2F2P7N5L3S0M9K8J6H4G2F1D0C",
-                "shortId", "6ba85179e30d4fc2",
-                "uuid", "11111111-1111-1111-1111-111111111111"));
-
-        ResponseStatusException error = assertThrows(
-                ResponseStatusException.class,
-                () -> routeService.createRoute(request));
-
-        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
-        assertEquals("VLESS REALITY serverName is required", error.getReason());
-    }
-
-    @Test
-    void returnsOutboundProxyConfigForVlessRealityRoute() {
-        when(routeRepository.existsByName("reality")).thenReturn(false);
+    @BeforeEach
+    void setUp() {
+        Outbound direct = outbound(1L, "直连", OutboundKind.DIRECT);
+        direct.setBuiltinKey(OutboundService.BUILTIN_DIRECT);
+        Outbound proxy = outbound(3L, "机场", OutboundKind.PROXY);
+        when(outboundRepository.findByBuiltinKey(OutboundService.BUILTIN_DIRECT)).thenReturn(Optional.of(direct));
+        when(outboundRepository.findById(1L)).thenReturn(Optional.of(direct));
+        when(outboundRepository.findById(3L)).thenReturn(Optional.of(proxy));
+        when(outboundRepository.findAllById(any())).thenReturn(List.of(direct, proxy));
         when(routeRepository.save(any(Route.class))).thenAnswer(invocation -> {
             Route route = invocation.getArgument(0);
             route.setId(99L);
             return route;
         });
-        Map<String, Object> config = Map.of(
-                "serverName", "www.example.com",
-                "publicKey", "j4VYpQ2F2P7N5L3S0M9K8J6H4G2F1D0C",
-                "shortId", "6ba85179e30d4fc2",
-                "uuid", "11111111-1111-1111-1111-111111111111");
+    }
 
-        RouteDTO route = routeService.createRoute(vlessRealityRequest(config));
+    @Test
+    void forwardRouteDerivesPolicyFromOutboundKind() {
+        RouteRequest request = request(RouteAction.FORWARD);
+        request.setOutboundId(3L);
 
-        assertEquals(config, route.getOutboundProxyConfig());
+        RouteView route = routeService.createRoute(request);
+
+        assertEquals(RoutePolicy.OUTBOUND_PROXY, route.getPolicy());
+        assertEquals("机场", route.getOutboundName());
+    }
+
+    @Test
+    void forwardRouteRequiresOutbound() {
+        ResponseStatusException error = assertThrows(ResponseStatusException.class,
+                () -> routeService.createRoute(request(RouteAction.FORWARD)));
+
+        assertEquals(HttpStatus.BAD_REQUEST, error.getStatusCode());
+        assertEquals("转发路由必须选择出站", error.getReason());
+    }
+
+    @Test
+    void destinationRewritePinsBuiltinDirectOutbound() {
+        RouteRequest request = request(RouteAction.REWRITE_DESTINATION);
+        request.setOutboundId(3L);
+        request.setRewriteTargetHost("192.168.10.85");
+        request.setRewriteTargetPort(8096);
+
+        RouteView route = routeService.createRoute(request);
+
+        assertEquals(1L, route.getOutboundId());
+        assertEquals(RoutePolicy.DESTINATION_OVERRIDE, route.getPolicy());
+    }
+
+    @Test
+    void destinationRewriteRequiresPort() {
+        RouteRequest request = request(RouteAction.REWRITE_DESTINATION);
+        request.setRewriteTargetHost("192.168.10.85");
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> routeService.createRoute(request));
+
+        assertEquals("改写端口必须在 1-65535 之间", error.getReason());
+    }
+
+    @Test
+    void rewriteTableRouteRejectsExtraConditions() {
+        RouteRequest request = request(RouteAction.REWRITE_DESTINATION);
+        request.setRewriteTableId(5L);
+        when(rewriteTableRepository.existsById(5L)).thenReturn(true);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> routeService.createRoute(request));
+
+        assertEquals("引用改写表的路由不能再配置条件，表中的域名即匹配条件", error.getReason());
+    }
+
+    @Test
+    void rewriteTableRouteStoresNoRulesOrFixedTarget() {
+        RouteRequest request = request(RouteAction.REWRITE_DESTINATION);
+        request.setRules(List.of());
+        request.setRewriteTableId(5L);
+        when(rewriteTableRepository.existsById(5L)).thenReturn(true);
+
+        RouteView route = routeService.createRoute(request);
+
+        assertEquals(5L, route.getRewriteTableId());
+        assertTrue(route.getRules().isEmpty());
+        assertNull(route.getRewriteTargetHost());
+    }
+
+    @Test
+    void fallbackRouteCannotSwitchToRewriteTable() {
+        Route existing = new Route();
+        existing.setId(7L);
+        when(routeRepository.findById(7L)).thenReturn(Optional.of(existing));
+        when(dependencyResolver.isFallbackRoute(7L)).thenReturn(true);
+        RouteRequest request = request(RouteAction.REWRITE_DESTINATION);
+        request.setRules(List.of());
+        request.setRewriteTableId(5L);
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> routeService.updateRoute(7L, request));
+
+        assertEquals("该路由被用作入站的兜底路由，不能改为引用改写表", error.getReason());
+    }
+
+    @Test
+    void dnsRewriteRequiresIpLiteral() {
+        RouteRequest request = request(RouteAction.REWRITE_DNS);
+        request.setRewriteTargetHost("nas.local");
+
+        ResponseStatusException error = assertThrows(ResponseStatusException.class, () -> routeService.createRoute(request));
+
+        assertEquals("DNS 改写的应答必须是 IP 地址: nas.local", error.getReason());
     }
 
     @Test
     void rejectsAdBlockRouteCondition() {
-        when(routeRepository.existsByName("ad-block")).thenReturn(false);
-        CreateRouteRequest request = new CreateRouteRequest();
-        request.setName("ad-block");
-        request.setPolicy(RoutePolicy.DIRECT);
-        request.setStatus(1);
+        RouteRequest request = request(RouteAction.FORWARD);
+        request.setOutboundId(1L);
         RouteRule rule = routeRule();
         rule.setConditionType(RouteConditionType.AD_BLOCK);
         request.setRules(List.of(rule));
@@ -144,18 +225,21 @@ class RouteServiceTest {
         verify(routeRepository).delete(route);
     }
 
-    private CreateRouteRequest vlessRealityRequest(Map<String, Object> config) {
-        CreateRouteRequest request = new CreateRouteRequest();
-        request.setName("reality");
-        request.setPolicy(RoutePolicy.OUTBOUND_PROXY);
-        request.setOutboundTag("reality");
-        request.setOutboundProxyType(ProtocolType.VLESS_REALITY);
-        request.setOutboundProxyHost("reality.example.com");
-        request.setOutboundProxyPort(443);
-        request.setOutboundProxyConfig(config);
+    private RouteRequest request(RouteAction action) {
+        RouteRequest request = new RouteRequest();
+        request.setName("route");
+        request.setAction(action);
         request.setRules(List.of(routeRule()));
         request.setStatus(1);
         return request;
+    }
+
+    private static Outbound outbound(Long id, String name, OutboundKind kind) {
+        Outbound outbound = new Outbound();
+        outbound.setId(id);
+        outbound.setName(name);
+        outbound.setKind(kind);
+        return outbound;
     }
 
     private RouteRule routeRule() {

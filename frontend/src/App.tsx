@@ -14,6 +14,8 @@ import ProxyConfig from './pages/ProxyConfig';
 import UserManagement from './pages/UserManagement';
 import RouteManagement from './pages/RouteManagement';
 import RuleSetManagement from './pages/RuleSetManagement';
+import { OutboundManagement } from './pages/OutboundManagement';
+import { RewriteTableManagement } from './pages/RewriteTableManagement';
 import './App.css';
 import InboundManagement from './pages/InboundManagement';
 import { ObservabilityLogAudit } from './pages/ObservabilityLogAudit';
@@ -121,6 +123,8 @@ const AppContent: React.FC = () => {
           <Route path="users" element={<UserManagement />} />
           <Route path="routing" element={<RouteManagement />} />
           <Route path="rule-sets" element={<RuleSetManagement />} />
+          <Route path="outbounds" element={<OutboundManagement />} />
+          <Route path="rewrite-tables" element={<RewriteTableManagement />} />
           <Route path="inbound" element={<InboundManagement />} />
           {/* 网关观测；旧访问概览地址跳转到对应新版页面 */}
           <Route path="observability/log-audit" element={<ObservabilityLogAudit />} />

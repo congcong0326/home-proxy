@@ -3,11 +3,11 @@ package org.congcong.controlmanager.service;
 import com.google.common.net.InetAddresses;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.InboundRouteBinding;
+import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.entity.InboundConfig;
-import org.congcong.controlmanager.entity.Route;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.springframework.stereotype.Component;
 
@@ -15,14 +15,22 @@ import java.net.InetAddress;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Function;
 
 /** Validates combinations that depend on all enabled inbounds of one worker. */
 @Component
 @RequiredArgsConstructor
 public class FakeIpConfigValidator {
     private final RouteRepository routeRepository;
+    private final RouteCompiler routeCompiler;
 
+    /** Validates persisted inbounds; route IDs are resolved from the database. */
     public void validate(List<InboundConfig> inbounds) {
+        validate(inbounds, id -> routeRepository.findById(id).map(routeCompiler::compileHead).orElse(null));
+    }
+
+    /** Validates inbounds whose route IDs refer to already compiled worker routes. */
+    public void validate(List<InboundConfig> inbounds, Function<Long, RouteDTO> routeLookup) {
         List<InboundConfig> enabled = inbounds.stream()
                 .filter(inbound -> Integer.valueOf(1).equals(inbound.getStatus()))
                 .toList();
@@ -40,19 +48,19 @@ public class FakeIpConfigValidator {
         if (transparent.isEmpty()) throw new IllegalArgumentException("启用 Fake IP 需要同一 worker 的透明代理入站");
 
         InboundConfig dnsInbound = dns.get(0);
-        Route fallback = requireRoute(dnsInbound.getFallbackRouteId());
+        RouteDTO fallback = requireRoute(routeLookup, dnsInbound.getFallbackRouteId());
         if (!isDnsForward(fallback)) {
             throw new IllegalArgumentException("Fake IP 的 DNS 兜底路由必须配置真实 DNS/DoT 转发");
         }
         Set<Long> dnsRouteIds = routeIds(dnsInbound);
         for (Long routeId : dnsRouteIds) {
-            Route route = requireRoute(routeId);
+            RouteDTO route = requireRoute(routeLookup, routeId);
             if (isDnsForward(route)) validateUpstream(route, dnsInbound);
         }
         validateUpstream(fallback, dnsInbound);
 
         for (Long routeId : routeIds(transparent.get(0))) {
-            Route route = requireRoute(routeId);
+            RouteDTO route = requireRoute(routeLookup, routeId);
             if (route.getRules() != null && route.getRules().stream().anyMatch(rule -> rule != null
                     && rule.getConditionType() == RouteConditionType.GEO)) {
                 throw new IllegalArgumentException("启用 Fake IP 的透明代理不能使用 GEO 路由条件");
@@ -72,18 +80,20 @@ public class FakeIpConfigValidator {
         return ids;
     }
 
-    private Route requireRoute(Long id) {
-        return id == null ? null : routeRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("路由不存在: " + id));
+    private RouteDTO requireRoute(Function<Long, RouteDTO> routeLookup, Long id) {
+        if (id == null) return null;
+        RouteDTO route = routeLookup.apply(id);
+        if (route == null) throw new IllegalArgumentException("路由不存在: " + id);
+        return route;
     }
 
-    private boolean isDnsForward(Route route) {
+    private boolean isDnsForward(RouteDTO route) {
         return route != null && route.getPolicy() == RoutePolicy.OUTBOUND_PROXY
                 && (route.getOutboundProxyType() == ProtocolType.DNS_SERVER
                 || route.getOutboundProxyType() == ProtocolType.DOT);
     }
 
-    private void validateUpstream(Route route, InboundConfig dnsInbound) {
+    private void validateUpstream(RouteDTO route, InboundConfig dnsInbound) {
         String hosts = route.getOutboundProxyHost();
         Integer port = route.getOutboundProxyPort();
         if (port == null || port < 1 || port > 65535 || hosts == null || hosts.isBlank()) {

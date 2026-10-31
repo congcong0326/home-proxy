@@ -25,6 +25,14 @@ import {
   UpdateRouteRequest,
   RouteQueryParams
 } from '../types/route';
+import { OutboundDTO, OutboundRequest } from '../types/outbound';
+import {
+  RewriteMergePreview,
+  RewriteMergeRequest,
+  RewriteTableDTO,
+  RewriteTableImportRequest,
+  RewriteTableRequest,
+} from '../types/rewrite';
 import {
   CreateRuleSetRequest,
   RuleSetBatchSyncRequest,
@@ -477,6 +485,66 @@ class ApiService {
   async deleteRoute(id: number): Promise<void> {
     return this.request<void>(`/routes/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  // ========== 出站管理接口 ==========
+  async getOutbounds(): Promise<OutboundDTO[]> {
+    return this.request<OutboundDTO[]>('/outbounds');
+  }
+
+  async createOutbound(data: OutboundRequest): Promise<OutboundDTO> {
+    return this.request<OutboundDTO>('/outbounds', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateOutbound(id: number, data: OutboundRequest): Promise<OutboundDTO> {
+    return this.request<OutboundDTO>(`/outbounds/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteOutbound(id: number): Promise<void> {
+    return this.request<void>(`/outbounds/${id}`, { method: 'DELETE' });
+  }
+
+  // ========== 改写表管理接口 ==========
+  async getRewriteTables(): Promise<RewriteTableDTO[]> {
+    return this.request<RewriteTableDTO[]>('/rewrite-tables');
+  }
+
+  async createRewriteTable(data: RewriteTableRequest): Promise<RewriteTableDTO> {
+    return this.request<RewriteTableDTO>('/rewrite-tables', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateRewriteTable(id: number, data: RewriteTableRequest): Promise<RewriteTableDTO> {
+    return this.request<RewriteTableDTO>(`/rewrite-tables/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteRewriteTable(id: number): Promise<void> {
+    return this.request<void>(`/rewrite-tables/${id}`, { method: 'DELETE' });
+  }
+
+  async importRewriteEntries(id: number, data: RewriteTableImportRequest): Promise<RewriteTableDTO> {
+    return this.request<RewriteTableDTO>(`/rewrite-tables/${id}/import`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async mergeRoutesIntoRewriteTable(data: RewriteMergeRequest): Promise<RewriteMergePreview> {
+    return this.request<RewriteMergePreview>('/rewrite-tables/merge-from-routes', {
+      method: 'POST',
+      body: JSON.stringify(data),
     });
   }
 

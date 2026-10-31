@@ -27,18 +27,19 @@
 - `src/main/resources/application.properties`：默认端口、SQLite 数据源（`HOME_PROXY_DATA_DIR`）、Flyway、备份、JWT、遥测 SQLite（`observability.sqlite.*`）与日志落库配置。
 - `config/DataSourceConfig`：SQLite 连接池（WAL、`foreign_keys`、`busy_timeout`、`BEGIN IMMEDIATE`）；`persistence/Sqlite*Converter` 把 `LocalDateTime`/`Instant` 存为 UTC 文本；`service/SqliteBackupService` + `controller/DatabaseBackupController` 提供在线备份（`VACUUM INTO`）、定时备份与重启生效的恢复。
 - `config/SelfSignedTlsConfiguration`：启动时生成临时自签名 HTTPS 密钥库；worker 保持 HTTPS 但不校验管理端证书。
-- `src/main/resources/db/migration`：Flyway 脚本；SQLite 单一基线 `V1__baseline.sql`，覆盖管理员、用户、路由、规则集、入站、Worker、WOL、磁盘监控、邮件网关、计划任务等表。后续结构变更以 `V2__*.sql` 递增（SQLite 不能 `ALTER` 约束，改表需重建表）。
+- `src/main/resources/db/migration` + `src/main/java/db/migration`：Flyway 脚本（SQL 与 Java 迁移，后者用于需要解析 JSON 的数据迁移，如 `V2__route_outbound_split`）；SQLite 单一基线 `V1__baseline.sql`，覆盖管理员、用户、路由、规则集、入站、Worker、WOL、磁盘监控、邮件网关、计划任务等表。后续结构变更以 `V2__*.sql` 递增（SQLite 不能 `ALTER` 约束，改表需重建表）。
 
 主要控制器：
 
 - `AdminController`：`/admin` 登录、当前用户、改密、登出、管理员维护。
-- `UserController`、`RouteController`、`InboundConfigController`：代理核心配置 CRUD。
+- `UserController`、`RouteController`、`InboundConfigController`、`OutboundController`、`RewriteTableController`：代理核心配置 CRUD。
 - `UserTrafficStatsController`：按用户的日／月流量（读遥测会话表，首页状态面板使用）。
 - `WolController`、`DiskMonitorController`：WOL 配置/唤醒/监控和磁盘状态。
 - `MailGatewayAdminController`、`MailTargetAdminController`、`MailSendLogController`、`InternalMailController`、`SchedulerController`：邮件网关、收件目标、发送日志、内部发送和计划任务。
 
 服务与数据层：
 
+- `RouteCompiler`：把路由 + 出站 + 改写表编译为 worker 使用的 `RouteDTO`；改写表路由按条目展开为合成路由（ID = `1e12 + 条目 ID`），worker 不感知出站和改写表。`OutboundService`、`RewriteTableService`、`RewriteMergeService`（多条固定目标改写路由合并为改写表，带 dry-run 预览）分别管理出站、改写表与合并。
 - `AggregateConfigService`：聚合所有启用的入站、路由、限流、用户配置，并计算配置 hash；下发副本过滤禁用路由及入站引用，保留数据库绑定供重新启用时恢复，见 [禁用路由下发与验证](testing/disabled-route-delivery.md)。
 - `AggregateConfigCacheService`：缓存聚合配置，供配置分发接口复用。
 - `DataInitializer`：启动时幂等确保 `default` Worker、匿名用户、兜底路由和默认规则集存在。
@@ -83,7 +84,8 @@
 
 - `Dashboard.tsx`、`TrafficOverview.tsx`、`AccessOverview.tsx`：看板和流量概览。
 - `UserManagement.tsx`：用户管理。
-- `RouteManagement.tsx` + `components/RouteForm.tsx`：路由策略管理。
+- `RouteManagement.tsx` + `components/RouteForm.tsx`：路由管理（动作 + 出站／改写表），`components/RewriteMergeModal.tsx` 合并改写路由。
+- `OutboundManagement.tsx` + `components/OutboundForm.tsx`：出站管理；`RewriteTableManagement.tsx`：改写表。
 - `InboundManagement.tsx`：入站监听配置。
 - `LogAudit.tsx`、`AggregatedAnalysis.tsx`：保留的旧访问日志审计和聚合分析源码；“访问概览”入口已屏蔽，原地址跳转对应新版页面。
 - `WolManagement.tsx`、`DiskMonitor.tsx`、`MailGateway.tsx`：WOL、磁盘监控、邮件网关。
@@ -129,6 +131,7 @@
 - 新增聚合配置字段：同步改 `common` DTO、control-manager 实体/迁移/service/hash、worker 运行时 config 转换、frontend `types` 和表单。
 - 新增协议：先改 `ProtocolType`，再补 control-manager 表单和校验、worker `ProxyServerFactory`、协议 strategy/initializer、出站 connector。
 - 新增路由条件或策略：改 `common` enum/DTO、control-manager 路由管理、worker `RouterService` 或 `OutboundConnectorFactory`。
+- 路由与出站模型（一期已实施，二期待实施）：先读 [演进规划](development/route-outbound-model-roadmap.md)；新模型只在控制端，由 `RouteCompiler` 编译回现有 `RouteDTO` 下发，worker 不改。改动路由、出站或改写表的下发语义后，用 `migration/AggregateConfigSnapshotExportTest` 对生产库副本导出前后配置做等价比较。
 - 新增管理台页面：补 `frontend/src/pages`、`frontend/src/types`、`frontend/src/services/api.ts`，再把路由挂到 `App.tsx` 和 `ProxyConfig.tsx` 导航。
 - 新日志模型与网关观测（阶段 A、B1 已实施，B2 及后续待实施）：先读 [双轨演进设计](development/gateway-observability-log-model-design.md) 第 13 节；B1 已交付四类日志的新版审计页面，B2 继续确认关键数据，用户确认可用后进入 C，按入站流量、用户／全局流量、聚合分析、日志入口分批迁移查询；高级看板与风险分析按需独立实施，D 清理旧链路需另行确认。使用独立 DTO、采集／存储／API 和前端分类；流量重点区分实际目标重写至内网的子集与外网，不需额外 NAS 归属配置，并新增用户名密码认证来源审计。B 保留所有旧代码、旧表与旧查询，C 每批保留回退能力及旧采集／代码／表。
 - 新增数据库字段：新增 Flyway 脚本，更新 entity、DTO、mapper/service、前端类型。

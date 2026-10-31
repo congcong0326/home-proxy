@@ -27,7 +27,13 @@ import org.congcong.common.enums.ProtocolType;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.entity.InboundConfig;
+import org.congcong.controlmanager.entity.Outbound;
+import org.congcong.controlmanager.entity.RewriteEntry;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.enums.OutboundKind;
+import org.congcong.controlmanager.enums.RouteAction;
+import org.congcong.controlmanager.repository.OutboundRepository;
+import org.congcong.controlmanager.repository.RewriteEntryRepository;
 import org.congcong.controlmanager.repository.InboundConfigRepository;
 import org.congcong.controlmanager.repository.ProxyWorkerRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
@@ -41,7 +47,9 @@ class AggregateConfigServiceTest {
     private static final String WORKER_ID = "worker-1";
 
     private final InboundConfigService inboundService = mock(InboundConfigService.class);
-    private final RouteService routeService = mock(RouteService.class);
+    private final OutboundRepository outboundRepository = mock(OutboundRepository.class);
+    private final RewriteEntryRepository rewriteEntryRepository = mock(RewriteEntryRepository.class);
+    private final RouteCompiler routeCompiler = new RouteCompiler(outboundRepository, rewriteEntryRepository);
     private final UserService userService = mock(UserService.class);
     private final RuleSetService ruleSetService = mock(RuleSetService.class);
     private final InboundConfigRepository inboundRepository = mock(InboundConfigRepository.class);
@@ -51,10 +59,12 @@ class AggregateConfigServiceTest {
             inboundRepository, workerRepository, mock(UserRepository.class), routeRepository,
             mock(RuleSetRepository.class));
     private final AggregateConfigService service = new AggregateConfigService(
-            inboundService, routeService, userService, ruleSetService,
+            inboundService, routeCompiler, userService, ruleSetService,
             inboundRepository, routeRepository, resolver, new CanonicalConfigHasher(),
-            new FakeIpConfigValidator(routeRepository), workerRepository);
+            new FakeIpConfigValidator(routeRepository, routeCompiler), workerRepository);
     private final List<Route> routes = new ArrayList<>();
+    private final List<Outbound> outbounds = new ArrayList<>(List.of(outbound(1L, OutboundKind.DIRECT)));
+    private final List<RewriteEntry> entries = new ArrayList<>();
     private final InboundConfig inbound = new InboundConfig();
     private final InboundRouteBinding binding = new InboundRouteBinding();
 
@@ -80,13 +90,17 @@ class AggregateConfigServiceTest {
         });
         when(routeRepository.findById(any())).thenAnswer(invocation ->
                 routes.stream().filter(route -> route.getId().equals(invocation.getArgument(0))).findFirst());
-        when(routeService.getEnabledRoutes()).thenAnswer(invocation -> routes.stream()
-                .filter(route -> Integer.valueOf(1).equals(route.getStatus()))
-                .map(route -> {
-                    RouteDTO dto = new RouteDTO();
-                    BeanUtils.copyProperties(route, dto);
-                    return dto;
-                }).toList());
+        when(outboundRepository.findAllById(any())).thenAnswer(invocation -> {
+            Iterable<Long> ids = invocation.getArgument(0);
+            return StreamSupport.stream(ids.spliterator(), false)
+                    .flatMap(id -> outbounds.stream().filter(outbound -> outbound.getId().equals(id))).toList();
+        });
+        when(outboundRepository.findById(any())).thenAnswer(invocation ->
+                outbounds.stream().filter(outbound -> outbound.getId().equals(invocation.getArgument(0))).findFirst());
+        when(rewriteEntryRepository.findByTableIdInOrderBySortOrderAscIdAsc(any())).thenAnswer(invocation -> {
+            java.util.Collection<Long> tableIds = invocation.getArgument(0);
+            return entries.stream().filter(entry -> tableIds.contains(entry.getTableId())).toList();
+        });
         when(userService.findUserDTOWithCredentialByStatus(1)).thenReturn(List.of(user(11L), user(12L)));
         when(workerRepository.findById(WORKER_ID)).thenReturn(Optional.empty());
     }
@@ -168,10 +182,12 @@ class AggregateConfigServiceTest {
     @Test
     void disablesRuntimeFakeIpWhenItsFallbackIsDisabledAndRestoresItOnReenable() {
         Route route = route(21L, 1);
-        route.setPolicy(RoutePolicy.OUTBOUND_PROXY);
-        route.setOutboundProxyType(ProtocolType.DNS_SERVER);
-        route.setOutboundProxyHost("8.8.8.8");
-        route.setOutboundProxyPort(53);
+        Outbound upstream = outbound(2L, OutboundKind.DNS_UPSTREAM);
+        upstream.setProxyType(ProtocolType.DNS_SERVER);
+        upstream.setHost("8.8.8.8");
+        upstream.setPort(53);
+        outbounds.add(upstream);
+        route.setOutboundId(2L);
         inbound.setProtocol(ProtocolType.DNS_SERVER);
         inbound.setPort(5353);
         inbound.setListenIp("127.0.0.1");
@@ -202,6 +218,65 @@ class AggregateConfigServiceTest {
     }
 
     @Test
+    void expandsRewriteTableRouteInPlaceWithStableSyntheticIds() {
+        route(21L, 1);
+        tableRoute(22L, 5L);
+        route(23L, 1);
+        entry(7L, 5L, "my-emby.com", true);
+        entry(8L, 5L, "disabled.com", false);
+        entry(9L, 5L, "*.my-emby.com", true);
+        binding.setRouteIds(List.of(21L, 22L, 23L));
+
+        AggregateConfigResponse config = service.getAggregateConfig(WORKER_ID);
+
+        long first = RouteCompiler.REWRITE_ROUTE_ID_BASE + 7;
+        long second = RouteCompiler.REWRITE_ROUTE_ID_BASE + 9;
+        assertEquals(List.of(21L, first, second, 23L),
+                config.getInbounds().get(0).getInboundRouteBindings().get(0).getRouteIds());
+        RouteDTO expanded = config.getRoutes().stream().filter(route -> route.getId() == first).findFirst().orElseThrow();
+        assertEquals("NAS / my-emby.com", expanded.getName());
+        assertEquals(RoutePolicy.DESTINATION_OVERRIDE, expanded.getPolicy());
+        assertEquals("192.168.10.85", expanded.getOutboundProxyHost());
+        assertEquals(8007, expanded.getOutboundProxyPort());
+        assertEquals("my-emby.com", expanded.getRules().get(0).getValue());
+        assertEquals(List.of(21L, 23L, first, second), config.getRoutes().stream().map(RouteDTO::getId).toList());
+    }
+
+    @Test
+    void emptyRewriteTableExpandsToNothing() {
+        tableRoute(22L, 5L);
+        binding.setRouteIds(List.of(22L));
+
+        AggregateConfigResponse config = service.getAggregateConfig(WORKER_ID);
+
+        assertTrue(config.getRoutes().isEmpty());
+        assertTrue(config.getInbounds().get(0).getInboundRouteBindings().get(0).getRouteIds().isEmpty());
+    }
+
+    @Test
+    void compilesForwardRouteWithProxyOutboundFields() {
+        Route route = route(21L, 1);
+        Outbound proxy = outbound(3L, OutboundKind.PROXY);
+        proxy.setProxyType(ProtocolType.SHADOW_SOCKS);
+        proxy.setHost("ss.example.com");
+        proxy.setPort(8388);
+        proxy.setPassword("secret");
+        outbounds.add(proxy);
+        route.setOutboundId(3L);
+        route.setOutboundTag("legacy-tag");
+        binding.setRouteIds(List.of(21L));
+
+        RouteDTO compiled = service.getAggregateConfig(WORKER_ID).getRoutes().get(0);
+
+        assertEquals(RoutePolicy.OUTBOUND_PROXY, compiled.getPolicy());
+        assertEquals(ProtocolType.SHADOW_SOCKS, compiled.getOutboundProxyType());
+        assertEquals("ss.example.com", compiled.getOutboundProxyHost());
+        assertEquals(8388, compiled.getOutboundProxyPort());
+        assertEquals("secret", compiled.getOutboundProxyPassword());
+        assertEquals("legacy-tag", compiled.getOutboundTag());
+    }
+
+    @Test
     void handlesInboundsWithoutBindingsOrFallback() {
         inbound.setInboundRouteBindings(null);
         when(userService.findUserDTOWithCredentialByStatus(1)).thenReturn(List.of(user(11L)));
@@ -227,9 +302,39 @@ class AggregateConfigServiceTest {
         Route route = new Route();
         route.setId(id);
         route.setStatus(status);
+        route.setAction(RouteAction.FORWARD);
+        route.setOutboundId(1L);
         route.setPolicy(RoutePolicy.DIRECT);
         routes.add(route);
         return route;
+    }
+
+    private Route tableRoute(long id, long tableId) {
+        Route route = route(id, 1);
+        route.setName("NAS");
+        route.setRules(List.of());
+        route.setAction(RouteAction.REWRITE_DESTINATION);
+        route.setRewriteTableId(tableId);
+        return route;
+    }
+
+    private RewriteEntry entry(long id, long tableId, String pattern, boolean enabled) {
+        RewriteEntry entry = new RewriteEntry();
+        entry.setId(id);
+        entry.setTableId(tableId);
+        entry.setDomainPattern(pattern);
+        entry.setTargetHost("192.168.10.85");
+        entry.setTargetPort(8000 + (int) id);
+        entry.setEnabled(enabled);
+        entries.add(entry);
+        return entry;
+    }
+
+    private static Outbound outbound(long id, OutboundKind kind) {
+        Outbound outbound = new Outbound();
+        outbound.setId(id);
+        outbound.setKind(kind);
+        return outbound;
     }
 
     private UserDtoWithCredential user(long id) {

@@ -180,6 +180,8 @@ worker 启动后会在持久卷中生成 `/data/proxy-worker/management.token`�
 
 数据库升级由 Flyway 自动执行 `V37__add_worker_log_level.sql`，为 `proxy_worker` 增加 `log_level`，已有节点默认 `INFO`。升级时先更新 worker，再更新控制面，避免旧 worker 无法解析新增配置字段。
 
+路由与出站拆分后（Flyway `V2__route_outbound_split`，Java 迁移），上游代理和 DNS 上游在“出站管理”中维护，路由只配置条件和动作；目标改写可以引用按服务分组的“改写表”。迁移把每条旧路由一对一转换，重复的上游合并为同一个出站，下发给 worker 的配置不变，worker 无需升级。升级前请先在“数据库备份”中做一次在线备份，回滚方式为旧版本镜像加恢复备份。设计见 [路由与出站配置模型演进规划](docs/development/route-outbound-model-roadmap.md)。
+
 worker 使用 `network_mode: host`，控制面下发的代理入站端口会直接监听在宿主机上。新增端口前请确认宿主机防火墙已放行，并且没有其他进程占用同一端口。
 
 ### 3. 透明代理场景（可选）

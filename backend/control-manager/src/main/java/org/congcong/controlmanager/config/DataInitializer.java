@@ -1,6 +1,7 @@
 package org.congcong.controlmanager.config;
 
 import lombok.RequiredArgsConstructor;
+import org.congcong.controlmanager.service.OutboundService;
 import org.congcong.controlmanager.service.RouteService;
 import org.congcong.controlmanager.service.RuleSetService;
 import org.congcong.controlmanager.service.UserService;
@@ -24,6 +25,7 @@ public class DataInitializer implements ApplicationRunner {
     private final UserService userService;
 
     private final RouteService routeService;
+    private final OutboundService outboundService;
 
     private final RuleSetService ruleSetService;
     private final InboundConfigService inboundConfigService;
@@ -35,6 +37,7 @@ public class DataInitializer implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         ensureDefaultWorkerExists();
         userService.ensureDefaultAnonymousUserExists();
+        outboundService.ensureBuiltinOutboundsExist();
         routeService.ensureDefaultRouteExists();
         ruleSetService.ensureDefaultRuleSetsExist();
         Long fallbackRouteId = routeRepository.findAll().stream()

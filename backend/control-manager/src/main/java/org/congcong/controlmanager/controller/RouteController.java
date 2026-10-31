@@ -3,10 +3,10 @@ package org.congcong.controlmanager.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.congcong.common.dto.RouteDTO;
+
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.controlmanager.dto.route.CreateRouteRequest;
-import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
+import org.congcong.controlmanager.dto.route.RouteRequest;
+import org.congcong.controlmanager.dto.route.RouteView;
 import org.congcong.controlmanager.dto.PageResponse;
 import org.congcong.controlmanager.service.RouteService;
 import org.springframework.data.domain.PageRequest;
@@ -36,7 +36,7 @@ public class RouteController {
      * GET /api/routes
      */
     @GetMapping
-    public ResponseEntity<PageResponse<RouteDTO>> getRoutes(
+    public ResponseEntity<PageResponse<RouteView>> getRoutes(
             @RequestParam(defaultValue = "1") @Min(1) int page,
             @RequestParam(defaultValue = "10") @Min(1) int pageSize,
             @RequestParam(defaultValue = "id") String sortBy,
@@ -50,7 +50,7 @@ public class RouteController {
             Sort.Direction.ASC : Sort.Direction.DESC;
         Pageable pageable = PageRequest.of(page - 1, pageSize, Sort.by(sortDirection, sortBy));
         
-        PageResponse<RouteDTO> response = routeService.getRoutes(pageable, name, policy, status);
+        PageResponse<RouteView> response = routeService.getRoutes(pageable, name, policy, status);
         return ResponseEntity.ok(response);
     }
 
@@ -59,8 +59,8 @@ public class RouteController {
      * GET /api/routes/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<RouteDTO> getRouteById(@PathVariable Long id) {
-        RouteDTO route = routeService.getRouteById(id);
+    public ResponseEntity<RouteView> getRouteById(@PathVariable Long id) {
+        RouteView route = routeService.getRouteById(id);
         return ResponseEntity.ok(route);
     }
 
@@ -69,8 +69,8 @@ public class RouteController {
      * POST /api/routes
      */
     @PostMapping
-    public ResponseEntity<RouteDTO> createRoute(@Valid @RequestBody CreateRouteRequest request) {
-        RouteDTO route = routeService.createRoute(request);
+    public ResponseEntity<RouteView> createRoute(@Valid @RequestBody RouteRequest request) {
+        RouteView route = routeService.createRoute(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(route);
     }
 
@@ -79,9 +79,9 @@ public class RouteController {
      * PUT /api/routes/{id}
      */
     @PutMapping("/{id}")
-    public ResponseEntity<RouteDTO> updateRoute(@PathVariable Long id, 
-                                               @Valid @RequestBody UpdateRouteRequest request) {
-        RouteDTO route = routeService.updateRoute(id, request);
+    public ResponseEntity<RouteView> updateRoute(@PathVariable Long id, 
+                                               @Valid @RequestBody RouteRequest request) {
+        RouteView route = routeService.updateRoute(id, request);
         return ResponseEntity.ok(route);
     }
 
@@ -100,8 +100,8 @@ public class RouteController {
      * GET /api/routes/enabled
      */
     @GetMapping("/enabled")
-    public ResponseEntity<List<RouteDTO>> getEnabledRoutes() {
-        List<RouteDTO> routes = routeService.getEnabledRoutes();
+    public ResponseEntity<List<RouteView>> getEnabledRoutes() {
+        List<RouteView> routes = routeService.getEnabledRoutes();
         return ResponseEntity.ok(routes);
     }
 }

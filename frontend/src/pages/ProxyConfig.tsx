@@ -32,7 +32,9 @@ import {
   MailOutlined,
   ToolOutlined,
   CloudDownloadOutlined,
-  ApiOutlined
+  ApiOutlined,
+  CloudServerOutlined,
+  SwapOutlined
 } from '@ant-design/icons';
 import { useNavigate, Outlet, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -123,6 +125,16 @@ const ProxyConfig: React.FC = () => {
           key: '/config/routing',
           icon: <BranchesOutlined />,
           label: '路由规则',
+        },
+        {
+          key: '/config/outbounds',
+          icon: <CloudServerOutlined />,
+          label: '出站管理',
+        },
+        {
+          key: '/config/rewrite-tables',
+          icon: <SwapOutlined />,
+          label: '改写表',
         },
         {
           key: '/config/rule-sets',
@@ -370,6 +382,10 @@ const getCardDescription = (key: string): string => {
       return '配置入站监听与协议';
     case '/config/routing':
       return '设置路由规则与流量分发策略';
+    case '/config/outbounds':
+      return '维护上游代理与 DNS 上游，多条路由共用同一出站';
+    case '/config/rewrite-tables':
+      return '按服务分组维护域名到内网目标的改写';
     case '/config/rule-sets':
       return '统一管理 AI / GEO 等规则集与外部规则源同步';
     case '/config/observability/log-audit':

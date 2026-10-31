@@ -1,21 +1,27 @@
 package org.congcong.controlmanager.service;
 
+import com.google.common.net.InetAddresses;
 import lombok.RequiredArgsConstructor;
 import org.congcong.common.dto.InboundRouteBinding;
-import org.congcong.common.dto.RouteDTO;
 import org.congcong.common.dto.RouteRule;
 import org.congcong.common.enums.MatchOp;
 import org.congcong.common.enums.ProtocolType;
-import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RouteConditionType;
 import org.congcong.common.enums.RoutePolicy;
-import org.congcong.controlmanager.dto.route.CreateRouteRequest;
-import org.congcong.controlmanager.dto.route.UpdateRouteRequest;
 import org.congcong.controlmanager.dto.PageResponse;
+import org.congcong.controlmanager.dto.route.RouteRequest;
+import org.congcong.controlmanager.dto.route.RouteView;
 import org.congcong.controlmanager.entity.InboundConfig;
+import org.congcong.controlmanager.entity.Outbound;
+import org.congcong.controlmanager.entity.RewriteTable;
 import org.congcong.controlmanager.entity.Route;
-import org.congcong.controlmanager.repository.RuleSetRepository;
+import org.congcong.controlmanager.enums.OutboundKind;
+import org.congcong.controlmanager.enums.RouteAction;
+import org.congcong.controlmanager.repository.OutboundRepository;
+import org.congcong.controlmanager.repository.RewriteEntryRepository;
+import org.congcong.controlmanager.repository.RewriteTableRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
+import org.congcong.controlmanager.repository.RuleSetRepository;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,39 +31,35 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Objects;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 路由服务层
+ * 路由服务层。路由只描述条件与动作，出站参数在 {@link OutboundService}，改写条目在 {@link RewriteTableService}。
  */
 @Service
 @RequiredArgsConstructor
 public class RouteService {
+    static final String DEFAULT_ROUTE_NAME = "兜底直连路由规则";
 
     private final RouteRepository routeRepository;
     private final RuleSetRepository ruleSetRepository;
     private final WorkerConfigDependencyResolver workerConfigDependencyResolver;
+    private final OutboundRepository outboundRepository;
+    private final RewriteTableRepository rewriteTableRepository;
+    private final RewriteEntryRepository rewriteEntryRepository;
 
     /**
      * 分页查询路由列表
      */
-    public PageResponse<RouteDTO> getRoutes(Pageable pageable, String name, RoutePolicy policy, Integer status) {
-        Page<Route> routePage;
-        
-        // 使用复合条件查询
-        routePage = routeRepository.findByConditions(name, policy, status, pageable);
-        
-        List<RouteDTO> routeDTOs = routePage.getContent().stream()
-                .map(this::convertToDTO)
-                .toList();
-        
+    public PageResponse<RouteView> getRoutes(Pageable pageable, String name, RoutePolicy policy, Integer status) {
+        Page<Route> routePage = routeRepository.findByConditions(name, policy, status, pageable);
         return new PageResponse<>(
-                routeDTOs,
+                toViews(routePage.getContent()),
                 routePage.getTotalElements(),
                 routePage.getNumber() + 1,
                 routePage.getSize()
@@ -67,123 +69,46 @@ public class RouteService {
     /**
      * 根据ID获取路由详情
      */
-    public RouteDTO getRouteById(Long id) {
-        Route route = routeRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
-        return convertToDTO(route);
+    public RouteView getRouteById(Long id) {
+        return toViews(List.of(require(id))).get(0);
+    }
+
+    /**
+     * 获取所有启用的路由（用于下拉选择）
+     */
+    public List<RouteView> getEnabledRoutes() {
+        return toViews(routeRepository.findByStatus(1));
     }
 
     /**
      * 创建路由
      */
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
-    public RouteDTO createRoute(CreateRouteRequest request) {
-        // 检查名称是否已存在
-        if (routeRepository.existsByName(request.getName())) {
+    public RouteView createRoute(RouteRequest request) {
+        if (routeRepository.existsByName(request.getName().trim())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
-        validateAdBlockConditionDisabled(request.getRules());
-        validateRuleSetReferences(request.getRules(), request.getStatus() != null ? request.getStatus() : 1);
-        validateShadowsocksRoute(request.getOutboundProxyType(), request.getOutboundProxyEncAlgo(), request.getOutboundProxyPassword());
-        validateOutboundProxy(
-                request.getPolicy(),
-                request.getOutboundProxyType(),
-                request.getOutboundProxyHost(),
-                request.getOutboundProxyPort(),
-                request.getOutboundProxyConfig());
-
         Route route = new Route();
-        route.setName(request.getName());
-        route.setRules(request.getRules());
-        route.setPolicy(request.getPolicy());
-        route.setOutboundTag(request.getOutboundTag());
-        route.setOutboundProxyType(request.getOutboundProxyType());
-        route.setOutboundProxyHost(request.getOutboundProxyHost());
-        route.setOutboundProxyPort(request.getOutboundProxyPort());
-        route.setOutboundProxyUsername(request.getOutboundProxyUsername());
-        route.setOutboundProxyPassword(request.getOutboundProxyPassword());
-        route.setOutboundProxyEncAlgo(request.getOutboundProxyEncAlgo());
-        route.setOutboundProxyConfig(request.getOutboundProxyConfig());
-        route.setStatus(request.getStatus() != null ? request.getStatus() : 1);
-        route.setNotes(request.getNotes());
-
-        Route savedRoute = routeRepository.save(route);
-
-        return convertToDTO(savedRoute);
+        apply(route, request);
+        return toViews(List.of(routeRepository.save(route))).get(0);
     }
 
     /**
-     * 更新路由
+     * 更新路由。请求为整体替换，字段组合按动作重新校验。
      */
+    @Transactional
     @CacheEvict(value = {"aggregateConfig"}, allEntries = true)
-    public RouteDTO updateRoute(Long id, UpdateRouteRequest request) {
-        Route route = routeRepository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
-
-        // 检查名称是否与其他路由冲突
-        if (request.getName() != null && !request.getName().equals(route.getName())) {
-            if (routeRepository.existsByNameAndIdNot(request.getName(), id)) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
-            }
-            route.setName(request.getName());
+    public RouteView updateRoute(Long id, RouteRequest request) {
+        Route route = require(id);
+        if (routeRepository.existsByNameAndIdNot(request.getName().trim(), id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "路由名称已存在");
         }
-
-        List<RouteRule> targetRules = request.getRules() != null ? request.getRules() : route.getRules();
-        Integer targetStatus = request.getStatus() != null ? request.getStatus() : route.getStatus();
-        validateAdBlockConditionDisabled(targetRules);
-        validateRuleSetReferences(targetRules, targetStatus);
-        ProtocolType targetProxyType = request.getOutboundProxyType() != null ? request.getOutboundProxyType() : route.getOutboundProxyType();
-        ProxyEncAlgo targetProxyEncAlgo = request.getOutboundProxyEncAlgo() != null ? request.getOutboundProxyEncAlgo() : route.getOutboundProxyEncAlgo();
-        String targetProxyPassword = request.getOutboundProxyPassword() != null ? request.getOutboundProxyPassword() : route.getOutboundProxyPassword();
-        validateShadowsocksRoute(targetProxyType, targetProxyEncAlgo, targetProxyPassword);
-
-        // 更新其他字段
-        if (request.getRules() != null) {
-            route.setRules(request.getRules());
+        if (request.getRewriteTableId() != null && workerConfigDependencyResolver.isFallbackRoute(id)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "该路由被用作入站的兜底路由，不能改为引用改写表");
         }
-        if (request.getPolicy() != null) {
-            route.setPolicy(request.getPolicy());
-        }
-        if (request.getOutboundTag() != null) {
-            route.setOutboundTag(request.getOutboundTag());
-        }
-        if (request.getOutboundProxyType() != null) {
-            route.setOutboundProxyType(request.getOutboundProxyType());
-        }
-        if (request.getOutboundProxyHost() != null) {
-            route.setOutboundProxyHost(request.getOutboundProxyHost());
-        }
-        if (request.getOutboundProxyPort() != null) {
-            route.setOutboundProxyPort(request.getOutboundProxyPort());
-        }
-        if (request.getOutboundProxyUsername() != null) {
-            route.setOutboundProxyUsername(request.getOutboundProxyUsername());
-        }
-        if (request.getOutboundProxyPassword() != null) {
-            route.setOutboundProxyPassword(request.getOutboundProxyPassword());
-        }
-        if (request.getOutboundProxyEncAlgo() != null) {
-            route.setOutboundProxyEncAlgo(request.getOutboundProxyEncAlgo());
-        }
-        if (request.getOutboundProxyConfig() != null) {
-            route.setOutboundProxyConfig(request.getOutboundProxyConfig());
-        }
-        if (request.getStatus() != null) {
-            route.setStatus(request.getStatus());
-        }
-        if (request.getNotes() != null) {
-            route.setNotes(request.getNotes());
-        }
-        validateOutboundProxy(
-                route.getPolicy(),
-                route.getOutboundProxyType(),
-                route.getOutboundProxyHost(),
-                route.getOutboundProxyPort(),
-                route.getOutboundProxyConfig());
-
-        Route savedRoute = routeRepository.save(route);
-
-        return convertToDTO(savedRoute);
+        apply(route, request);
+        return toViews(List.of(routeRepository.save(route))).get(0);
     }
 
     /**
@@ -234,106 +159,142 @@ public class RouteService {
                 + "）：" + String.join("、", locations);
     }
 
-    /**
-     * 获取所有启用的路由（用于下拉选择）
-     */
-    public List<RouteDTO> getEnabledRoutes() {
-        List<Route> routes = routeRepository.findByStatus(1);
-        return routes.stream()
-                .map(this::convertToDTO)
-                .toList();
-    }
-
-    /**
-     * 转换为DTO
-     */
-    private RouteDTO convertToDTO(Route route) {
-        RouteDTO dto = new RouteDTO();
-        dto.setId(route.getId());
-        dto.setName(route.getName());
-        dto.setRules(route.getRules());
-        dto.setPolicy(route.getPolicy());
-        dto.setOutboundTag(route.getOutboundTag());
-        dto.setOutboundProxyType(route.getOutboundProxyType());
-        dto.setOutboundProxyHost(route.getOutboundProxyHost());
-        dto.setOutboundProxyPort(route.getOutboundProxyPort());
-        dto.setOutboundProxyUsername(route.getOutboundProxyUsername());
-        dto.setOutboundProxyPassword(route.getOutboundProxyPassword());
-        dto.setOutboundProxyEncAlgo(route.getOutboundProxyEncAlgo());
-        dto.setOutboundProxyConfig(route.getOutboundProxyConfig());
-        dto.setStatus(route.getStatus());
-        dto.setNotes(route.getNotes());
-        dto.setCreatedAt(route.getCreatedAt());
-        dto.setUpdatedAt(route.getUpdatedAt());
-        return dto;
-    }
-
-    private void validateOutboundProxy(RoutePolicy policy,
-                                       ProtocolType outboundProxyType,
-                                       String outboundProxyHost,
-                                       Integer outboundProxyPort,
-                                       Map<String, Object> outboundProxyConfig) {
-        if (policy != RoutePolicy.OUTBOUND_PROXY || outboundProxyType != ProtocolType.VLESS_REALITY) {
+    public void ensureDefaultRouteExists() {
+        if (routeRepository.existsByName(DEFAULT_ROUTE_NAME)) {
             return;
         }
-        requireText(outboundProxyHost, "VLESS REALITY outboundProxyHost is required");
-        if (outboundProxyPort == null || outboundProxyPort < 1 || outboundProxyPort > 65535) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VLESS REALITY outboundProxyPort must be between 1 and 65535");
-        }
-        if (outboundProxyConfig == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VLESS REALITY outboundProxyConfig is required");
-        }
-        requireConfigText(outboundProxyConfig, "serverName", "VLESS REALITY serverName is required");
-        requireConfigText(outboundProxyConfig, "publicKey", "VLESS REALITY publicKey is required");
-        String shortId = requireConfigText(outboundProxyConfig, "shortId", "VLESS REALITY shortId is required");
-        if (!shortId.matches("^[0-9a-fA-F]{0,16}$") || shortId.length() % 2 != 0) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid REALITY shortId hex: " + shortId);
-        }
-        String uuid = requireConfigText(outboundProxyConfig, "uuid", "VLESS REALITY uuid is required");
-        try {
-            UUID.fromString(uuid);
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid VLESS uuid: " + uuid, e);
-        }
+        Outbound direct = outboundRepository.findByBuiltinKey(OutboundService.BUILTIN_DIRECT)
+                .orElseThrow(() -> new IllegalStateException("缺少内置直连出站"));
+        Route route = new Route();
+        route.setStatus(1);
+        route.setName(DEFAULT_ROUTE_NAME);
+        route.setNotes("兜底直连路由规则，误删除");
+        RouteRule routeRule = new RouteRule();
+        routeRule.setConditionType(RouteConditionType.DOMAIN);
+        routeRule.setOp(MatchOp.IN);
+        routeRule.setValue("*");
+        route.setRules(Collections.singletonList(routeRule));
+        route.setAction(RouteAction.FORWARD);
+        route.setOutboundId(direct.getId());
+        route.setPolicy(RoutePolicy.DIRECT);
+        routeRepository.save(route);
     }
 
-    private String requireConfigText(Map<String, Object> config, String key, String message) {
-        Object value = config.get(key);
-        return requireText(value == null ? null : String.valueOf(value), message);
+    private Route require(Long id) {
+        return routeRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "路由不存在"));
     }
 
-    private String requireText(String value, String message) {
-        if (value == null || value.trim().isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
+    private void apply(Route route, RouteRequest request) {
+        RouteAction action = request.getAction();
+        List<RouteRule> rules = request.getRules() == null ? List.of() : request.getRules();
+        Integer status = request.getStatus() != null ? request.getStatus()
+                : route.getStatus() != null ? route.getStatus() : 1;
+        Long outboundId = null;
+        Long rewriteTableId = null;
+        String targetHost = null;
+        Integer targetPort = null;
+        OutboundKind outboundKind = OutboundKind.DIRECT;
+        switch (action) {
+            case FORWARD -> {
+                requireRules(rules);
+                if (request.getOutboundId() == null) throw badRequest("转发路由必须选择出站");
+                Outbound outbound = outboundRepository.findById(request.getOutboundId())
+                        .orElseThrow(() -> badRequest("出站不存在: " + request.getOutboundId()));
+                outboundId = outbound.getId();
+                outboundKind = outbound.getKind();
+            }
+            case REWRITE_DESTINATION -> {
+                // Workers connect overrides directly, so the outbound is pinned to the built-in DIRECT.
+                outboundId = outboundRepository.findByBuiltinKey(OutboundService.BUILTIN_DIRECT)
+                        .orElseThrow(() -> new IllegalStateException("缺少内置直连出站")).getId();
+                if (request.getRewriteTableId() != null) {
+                    if (!rules.isEmpty()) throw badRequest("引用改写表的路由不能再配置条件，表中的域名即匹配条件");
+                    if (request.getRewriteTargetHost() != null && !request.getRewriteTargetHost().isBlank()) {
+                        throw badRequest("改写表与固定目标只能二选一");
+                    }
+                    if (!rewriteTableRepository.existsById(request.getRewriteTableId())) {
+                        throw badRequest("改写表不存在: " + request.getRewriteTableId());
+                    }
+                    rewriteTableId = request.getRewriteTableId();
+                } else {
+                    requireRules(rules);
+                    targetHost = requireText(request.getRewriteTargetHost(), "目标改写必须填写改写目标或选择改写表");
+                    targetPort = request.getRewriteTargetPort();
+                    if (targetPort == null || targetPort < 1 || targetPort > 65535) {
+                        throw badRequest("改写端口必须在 1-65535 之间");
+                    }
+                }
+            }
+            case REWRITE_DNS -> {
+                requireRules(rules);
+                targetHost = requireText(request.getRewriteTargetHost(), "DNS 改写必须填写应答 IP");
+                if (!InetAddresses.isInetAddress(targetHost)) throw badRequest("DNS 改写的应答必须是 IP 地址: " + targetHost);
+            }
         }
+        validateAdBlockConditionDisabled(rules);
+        validateRuleSetReferences(rules, status);
+
+        route.setName(request.getName().trim());
+        route.setRules(new ArrayList<>(rules));
+        route.setAction(action);
+        route.setOutboundId(outboundId);
+        route.setRewriteTableId(rewriteTableId);
+        route.setRewriteTargetHost(targetHost);
+        route.setRewriteTargetPort(targetPort);
+        route.setPolicy(RouteCompiler.policyOf(action, outboundKind));
+        route.setStatus(status);
+        route.setNotes(request.getNotes());
+    }
+
+    private List<RouteView> toViews(List<Route> routes) {
+        Map<Long, Outbound> outbounds = outboundRepository.findAllById(routes.stream()
+                        .map(Route::getOutboundId).filter(Objects::nonNull).distinct().toList()).stream()
+                .collect(Collectors.toMap(Outbound::getId, Function.identity()));
+        Map<Long, RewriteTable> tables = rewriteTableRepository.findAllById(routes.stream()
+                        .map(Route::getRewriteTableId).filter(Objects::nonNull).distinct().toList()).stream()
+                .collect(Collectors.toMap(RewriteTable::getId, Function.identity()));
+        return routes.stream().map(route -> {
+            RouteView view = new RouteView();
+            view.setId(route.getId());
+            view.setName(route.getName());
+            view.setRules(route.getRules());
+            view.setAction(route.getAction());
+            view.setOutboundId(route.getOutboundId());
+            Outbound outbound = outbounds.get(route.getOutboundId());
+            if (outbound != null) {
+                view.setOutboundName(outbound.getName());
+                view.setOutboundKind(outbound.getKind());
+            }
+            view.setRewriteTableId(route.getRewriteTableId());
+            RewriteTable table = tables.get(route.getRewriteTableId());
+            if (table != null) {
+                view.setRewriteTableName(table.getName());
+                view.setRewriteEntryCount(rewriteEntryRepository.countByTableId(table.getId()));
+            }
+            view.setRewriteTargetHost(route.getRewriteTargetHost());
+            view.setRewriteTargetPort(route.getRewriteTargetPort());
+            view.setPolicy(route.getPolicy());
+            view.setOutboundTag(route.getOutboundTag());
+            view.setStatus(route.getStatus());
+            view.setNotes(route.getNotes());
+            view.setCreatedAt(route.getCreatedAt());
+            view.setUpdatedAt(route.getUpdatedAt());
+            return view;
+        }).toList();
+    }
+
+    private static void requireRules(List<RouteRule> rules) {
+        if (rules.isEmpty()) throw badRequest("路由规则不能为空");
+    }
+
+    private static String requireText(String value, String message) {
+        if (value == null || value.trim().isEmpty()) throw badRequest(message);
         return value.trim();
     }
 
-
-    public void ensureDefaultRouteExists() {
-        if (!routeRepository.existsByName("兜底直连路由规则")) {
-            Route route = new Route();
-            route.setStatus(1);
-            route.setName("兜底直连路由规则");
-            route.setNotes("兜底直连路由规则，误删除");
-            RouteRule routeRule = new RouteRule();
-            routeRule.setConditionType(RouteConditionType.DOMAIN);
-            routeRule.setOp(MatchOp.IN);
-            routeRule.setValue("*");
-            route.setRules(Collections.singletonList(routeRule));
-            route.setPolicy(RoutePolicy.DIRECT);
-            route.setOutboundTag(null);
-            route.setOutboundProxyType(null);
-            route.setOutboundProxyHost(null);
-            route.setOutboundProxyPort(null);
-            route.setOutboundProxyUsername(null);
-            route.setOutboundProxyPassword(null);
-            route.setOutboundProxyEncAlgo(null);
-            route.setOutboundProxyConfig(null);
-            route.setCreatedAt(null);
-            route.setUpdatedAt(null);
-            routeRepository.save(route);
-        }
+    private static ResponseStatusException badRequest(String message) {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
     }
 
     private void validateRuleSetReferences(List<RouteRule> rules, Integer routeStatus) {
@@ -366,35 +327,6 @@ public class RouteService {
             if (rule != null && rule.getConditionType() == RouteConditionType.AD_BLOCK) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "AD_BLOCK 路由条件已下线，请使用 RULE_SET 规则集替代");
             }
-        }
-    }
-
-    private void validateShadowsocksRoute(ProtocolType outboundProxyType, ProxyEncAlgo outboundProxyEncAlgo, String outboundProxyPassword) {
-        if (outboundProxyType != ProtocolType.SHADOW_SOCKS) {
-            return;
-        }
-        if (outboundProxyEncAlgo == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 出站必须指定加密算法");
-        }
-        if (!outboundProxyEncAlgo.isShadowSocks2022()) {
-            return;
-        }
-        if (outboundProxyPassword == null || outboundProxyPassword.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 2022 出站必须填写 Base64 预共享密钥");
-        }
-        try {
-            String[] keys = outboundProxyPassword.split(":");
-            for (String key : keys) {
-                byte[] decoded = Base64.getDecoder().decode(key.trim());
-                if (decoded.length != outboundProxyEncAlgo.getPskLength()) {
-                    throw new ResponseStatusException(
-                            HttpStatus.BAD_REQUEST,
-                            "Shadowsocks 2022 每段预共享密钥都需要是 " + outboundProxyEncAlgo.getPskLength() + " 字节 Base64 数据"
-                    );
-                }
-            }
-        } catch (IllegalArgumentException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Shadowsocks 2022 预共享密钥必须是有效的 Base64 字符串，支持 iPSK:uPSK 形式");
         }
     }
 }

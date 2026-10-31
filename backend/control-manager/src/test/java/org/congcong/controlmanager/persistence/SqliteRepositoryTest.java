@@ -50,7 +50,6 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -99,13 +98,11 @@ class SqliteRepositoryTest {
         rule.setOp(MatchOp.IN);
         rule.setValue("example.com");
         route.setRules(List.of(rule));
-        route.setOutboundProxyConfig(Map.of("sni", "a.example", "port", 443));
         routes.saveAndFlush(route);
 
         Route loaded = routes.findById(route.getId()).orElseThrow();
         assertThat(loaded.getRules()).hasSize(1);
         assertThat(loaded.getRules().get(0).getValue()).isEqualTo("example.com");
-        assertThat(loaded.getOutboundProxyConfig()).containsEntry("sni", "a.example").containsEntry("port", 443);
         assertThat(routes.existsByName("direct")).isTrue();
         assertThat(routes.findByConditions("IRECT", null, null, PageRequest.of(0, 10)).getContent()).hasSize(1);
         assertThat(jdbc.queryForObject("SELECT rules_json FROM routes WHERE id = ?", String.class, route.getId()))

@@ -3,15 +3,13 @@ package org.congcong.controlmanager.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 import org.congcong.common.dto.RouteRule;
-import org.congcong.common.enums.ProtocolType;
-import org.congcong.common.enums.ProxyEncAlgo;
 import org.congcong.common.enums.RoutePolicy;
+import org.congcong.controlmanager.enums.RouteAction;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @Data
 @Entity
@@ -36,28 +34,22 @@ public class Route {
     private String outboundTag;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "outbound_proxy_type")
-    private ProtocolType outboundProxyType;
+    @Column(length = 32)
+    private RouteAction action;
 
-    @Column(name = "outbound_proxy_host", length = 255)
-    private String outboundProxyHost;
+    /** FORWARD 引用的出站；REWRITE_DESTINATION 固定为内置直连；REWRITE_DNS 为空。 */
+    @Column(name = "outbound_id")
+    private Long outboundId;
 
-    @Column(name = "outbound_proxy_port")
-    private Integer outboundProxyPort;
+    /** 引用改写表时规则为空，表中的域名模式即匹配条件。 */
+    @Column(name = "rewrite_table_id")
+    private Long rewriteTableId;
 
-    @Column(name = "outbound_proxy_username", length = 64)
-    private String outboundProxyUsername;
+    @Column(name = "rewrite_target_host", length = 255)
+    private String rewriteTargetHost;
 
-    @Column(name = "outbound_proxy_password", length = 255)
-    private String outboundProxyPassword;
-
-    @Enumerated(EnumType.STRING)
-    @Column(name = "outbound_proxy_enc_algo")
-    private ProxyEncAlgo outboundProxyEncAlgo;
-
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "outbound_proxy_config_json", columnDefinition = "JSON")
-    private Map<String, Object> outboundProxyConfig;
+    @Column(name = "rewrite_target_port")
+    private Integer rewriteTargetPort;
 
     @Column(nullable = false)
     private Integer status = 1; // 1=enabled, 0=disabled

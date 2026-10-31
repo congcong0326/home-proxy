@@ -17,6 +17,10 @@ public interface RouteRepository extends JpaRepository<Route, Long> {
     List<Route> findByPolicy(RoutePolicy policy);
     
     boolean existsByName(String name);
+
+    List<Route> findByOutboundId(Long outboundId);
+
+    List<Route> findByRewriteTableId(Long rewriteTableId);
     
     boolean existsByNameAndIdNot(String name, Long id);
     

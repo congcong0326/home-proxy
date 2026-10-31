@@ -98,6 +98,11 @@ public class WorkerConfigDependencyResolver {
                 .toList();
     }
 
+    public boolean isFallbackRoute(Long routeId) {
+        return inboundConfigRepository.findAll().stream()
+                .anyMatch(inbound -> routeId.equals(inbound.getFallbackRouteId()));
+    }
+
     public boolean isRuleSetReferenced(String key) {
         return !resolveAffectedWorkerIds("ruleSet", key).isEmpty();
     }
@@ -108,6 +113,10 @@ public class WorkerConfigDependencyResolver {
         }
         validateEnabledUsers(resolveUserIds(List.of(inbound)));
         List<Route> routes = validateEnabledRoutes(resolveRouteIds(List.of(inbound)));
+        if (routes.stream().anyMatch(route -> route.getId().equals(inbound.getFallbackRouteId())
+                && route.getRewriteTableId() != null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "兜底路由不能引用改写表");
+        }
         for (String ruleSetKey : resolveRuleSetKeys(routes)) {
             if (!ruleSetRepository.existsByRuleKeyAndEnabledTrueAndPublishedTrue(ruleSetKey)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "路由引用的规则集不存在、未启用或未发布: " + ruleSetKey);

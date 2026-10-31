@@ -1,4 +1,5 @@
 import { ProxyEncAlgo } from './proxyEncAlgo';
+import { OutboundKind } from './outbound';
 
 // 路由条件类型（与后端保持一致）
 export enum RouteConditionType {
@@ -99,59 +100,64 @@ export const ROUTE_STATUS_COLORS = {
   [RouteStatus.ENABLED]: 'green'
 };
 
-// 路由DTO类型
+// 路由动作（与后端 RouteAction 一致）
+export enum RouteAction {
+  FORWARD = 'FORWARD',
+  REWRITE_DESTINATION = 'REWRITE_DESTINATION',
+  REWRITE_DNS = 'REWRITE_DNS'
+}
+
+export const ROUTE_ACTION_LABELS = {
+  [RouteAction.FORWARD]: '转发到出站',
+  [RouteAction.REWRITE_DESTINATION]: '目标改写',
+  [RouteAction.REWRITE_DNS]: 'DNS 应答改写'
+};
+
+// 管理台路由视图；policy 为编译出的下发策略，只读
 export interface RouteDTO {
   id: number;
   name: string;
   rules: RouteRule[];
+  action?: RouteAction;
+  outboundId?: number;
+  outboundName?: string;
+  outboundKind?: OutboundKind;
+  rewriteTableId?: number;
+  rewriteTableName?: string;
+  rewriteEntryCount?: number;
+  rewriteTargetHost?: string;
+  rewriteTargetPort?: number;
   policy: RoutePolicy;
   outboundTag?: string;
-  outboundProxyType?: ProtocolType;
-  outboundProxyHost?: string;
-  outboundProxyPort?: number;
-  outboundProxyUsername?: string;
-  outboundProxyPassword?: string;
-  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
-  outboundProxyConfig?: Record<string, unknown>;
   status: number;
   notes?: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
-// 创建路由请求类型
-export interface CreateRouteRequest {
+/** 路由去向：转发显示出站名，改写显示改写表或固定目标。 */
+export const describeRouteTarget = (route: RouteDTO): string => {
+  if (route.action === RouteAction.FORWARD) return route.outboundName || '-';
+  if (route.rewriteTableId) return `改写表：${route.rewriteTableName ?? route.rewriteTableId}（${route.rewriteEntryCount ?? 0} 条）`;
+  if (route.action === RouteAction.REWRITE_DNS) return route.rewriteTargetHost || '-';
+  return route.rewriteTargetHost ? `${route.rewriteTargetHost}:${route.rewriteTargetPort}` : '-';
+};
+
+// 创建／更新路由请求（整体替换）
+export interface RouteRequest {
   name: string;
   rules: RouteRule[];
-  policy: RoutePolicy;
-  outboundTag?: string;
-  outboundProxyType?: ProtocolType;
-  outboundProxyHost?: string;
-  outboundProxyPort?: number;
-  outboundProxyUsername?: string;
-  outboundProxyPassword?: string;
-  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
-  outboundProxyConfig?: Record<string, unknown>;
+  action: RouteAction;
+  outboundId?: number;
+  rewriteTableId?: number;
+  rewriteTargetHost?: string;
+  rewriteTargetPort?: number;
   status?: number;
   notes?: string;
 }
 
-// 更新路由请求类型
-export interface UpdateRouteRequest {
-  name?: string;
-  rules?: RouteRule[];
-  policy?: RoutePolicy;
-  outboundTag?: string;
-  outboundProxyType?: ProtocolType;
-  outboundProxyHost?: string;
-  outboundProxyPort?: number;
-  outboundProxyUsername?: string;
-  outboundProxyPassword?: string;
-  outboundProxyEncAlgo?: OutboundProxyEncAlgo;
-  outboundProxyConfig?: Record<string, unknown>;
-  status?: number;
-  notes?: string;
-}
+export type CreateRouteRequest = RouteRequest;
+export type UpdateRouteRequest = RouteRequest;
 
 // 路由查询参数类型
 export interface RouteQueryParams {

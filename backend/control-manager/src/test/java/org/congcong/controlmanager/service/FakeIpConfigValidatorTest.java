@@ -1,9 +1,13 @@
 package org.congcong.controlmanager.service;
 
 import org.congcong.common.enums.ProtocolType;
-import org.congcong.common.enums.RoutePolicy;
 import org.congcong.controlmanager.entity.InboundConfig;
+import org.congcong.controlmanager.entity.Outbound;
 import org.congcong.controlmanager.entity.Route;
+import org.congcong.controlmanager.enums.OutboundKind;
+import org.congcong.controlmanager.enums.RouteAction;
+import org.congcong.controlmanager.repository.OutboundRepository;
+import org.congcong.controlmanager.repository.RewriteEntryRepository;
 import org.congcong.controlmanager.repository.RouteRepository;
 import org.junit.jupiter.api.Test;
 
@@ -15,7 +19,9 @@ import static org.mockito.Mockito.*;
 
 class FakeIpConfigValidatorTest {
     private final RouteRepository routes = mock(RouteRepository.class);
-    private final FakeIpConfigValidator validator = new FakeIpConfigValidator(routes);
+    private final OutboundRepository outbounds = mock(OutboundRepository.class);
+    private final FakeIpConfigValidator validator = new FakeIpConfigValidator(routes,
+            new RouteCompiler(outbounds, mock(RewriteEntryRepository.class)));
 
     @Test
     void rejectsDuplicateEnabledInboundsEvenWhenFakeIpIsOff() {
@@ -35,15 +41,21 @@ class FakeIpConfigValidatorTest {
                 () -> validator.validate(List.of(dns))).getMessage().contains("透明代理"));
 
         Route fallback = new Route();
-        fallback.setPolicy(RoutePolicy.OUTBOUND_PROXY);
-        fallback.setOutboundProxyType(ProtocolType.DNS_SERVER);
-        fallback.setOutboundProxyHost("resolver.example");
-        fallback.setOutboundProxyPort(53);
+        fallback.setId(9L);
+        fallback.setAction(RouteAction.FORWARD);
+        fallback.setOutboundId(2L);
+        Outbound upstream = new Outbound();
+        upstream.setId(2L);
+        upstream.setKind(OutboundKind.DNS_UPSTREAM);
+        upstream.setProxyType(ProtocolType.DNS_SERVER);
+        upstream.setHost("resolver.example");
+        upstream.setPort(53);
         when(routes.findById(9L)).thenReturn(Optional.of(fallback));
+        when(outbounds.findById(2L)).thenReturn(Optional.of(upstream));
         InboundConfig transparent = inbound(ProtocolType.TP_PROXY, false);
         assertTrue(assertThrows(IllegalArgumentException.class,
                 () -> validator.validate(List.of(dns, transparent))).getMessage().contains("IP 字面量"));
-        fallback.setOutboundProxyHost("1.1.1.1");
+        upstream.setHost("1.1.1.1");
         assertDoesNotThrow(() -> validator.validate(List.of(dns, transparent)));
     }
 

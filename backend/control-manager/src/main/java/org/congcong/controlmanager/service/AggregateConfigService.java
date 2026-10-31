@@ -20,8 +20,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,7 +31,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class AggregateConfigService {
     private final InboundConfigService inboundConfigService;
-    private final RouteService routeService;
+    private final RouteCompiler routeCompiler;
     private final UserService userService;
     private final RuleSetService ruleSetService;
     private final InboundConfigRepository inboundConfigRepository;
@@ -53,21 +55,23 @@ public class AggregateConfigService {
                 .filter(route -> route.getStatus() != null && route.getStatus() == 1)
                 .sorted(Comparator.comparing(Route::getId))
                 .toList();
-        Set<Long> enabledRouteIds = routeEntities.stream().map(Route::getId).collect(Collectors.toSet());
+        Map<Long, List<RouteDTO>> compiledRoutes = routeCompiler.compile(routeEntities);
         List<InboundConfigDTO> inbounds = inboundConfigService.getEnabledInboundConfigsForWorker(workerId).stream()
-                .map(inbound -> toRuntimeInbound(inbound, enabledRouteIds))
+                .map(inbound -> toRuntimeInbound(inbound, compiledRoutes))
                 .toList();
+        List<RouteDTO> routes = compiledRoutes.values().stream()
+                .flatMap(List::stream)
+                .sorted(Comparator.comparing(RouteDTO::getId))
+                .toList();
+        Map<Long, RouteDTO> routesById = routes.stream()
+                .collect(Collectors.toMap(RouteDTO::getId, Function.identity()));
         // Validate the effective snapshot, without changing persisted inbound bindings.
         fakeIpConfigValidator.validate(inbounds.stream().map(inbound -> {
             InboundConfig copy = new InboundConfig();
             BeanUtils.copyProperties(inbound, copy);
             return copy;
-        }).toList());
+        }).toList(), routesById::get);
 
-        List<RouteDTO> routes = routeService.getEnabledRoutes().stream()
-                .filter(route -> enabledRouteIds.contains(route.getId()))
-                .sorted(Comparator.comparing(RouteDTO::getId))
-                .toList();
         List<UserDtoWithCredential> users = userService.findUserDTOWithCredentialByStatus(1).stream()
                 .filter(user -> userIds.contains(user.getId()))
                 .sorted(Comparator.comparing(UserDtoWithCredential::getId))
@@ -110,10 +114,16 @@ public class AggregateConfigService {
         return response;
     }
 
-    private InboundConfigDTO toRuntimeInbound(InboundConfigDTO inbound, Set<Long> enabledRouteIds) {
+    /**
+     * Drops disabled routes from the bindings and replaces each rewrite table route with the IDs of its
+     * expanded entries, in place, so workers see the same match order.
+     */
+    private InboundConfigDTO toRuntimeInbound(InboundConfigDTO inbound, Map<Long, List<RouteDTO>> compiledRoutes) {
         InboundConfigDTO copy = new InboundConfigDTO();
         BeanUtils.copyProperties(inbound, copy);
-        if (inbound.getFallbackRouteId() != null && !enabledRouteIds.contains(inbound.getFallbackRouteId())) {
+        List<RouteDTO> fallback = inbound.getFallbackRouteId() == null ? null : compiledRoutes.get(inbound.getFallbackRouteId());
+        if (inbound.getFallbackRouteId() != null && (fallback == null || fallback.size() != 1
+                || !inbound.getFallbackRouteId().equals(fallback.get(0).getId()))) {
             copy.setFallbackRouteId(null);
             // Existing workers require a DNS forwarding fallback whenever Fake IP is enabled.
             if (inbound.getProtocol() == ProtocolType.DNS_SERVER) {
@@ -127,7 +137,10 @@ public class AggregateConfigService {
                         InboundRouteBinding bindingCopy = new InboundRouteBinding();
                         bindingCopy.setUserIds(binding.getUserIds() == null ? null : new ArrayList<>(binding.getUserIds()));
                         bindingCopy.setRouteIds(binding.getRouteIds() == null ? List.of()
-                                : binding.getRouteIds().stream().filter(enabledRouteIds::contains).toList());
+                                : binding.getRouteIds().stream()
+                                .flatMap(id -> compiledRoutes.getOrDefault(id, List.of()).stream())
+                                .map(RouteDTO::getId)
+                                .toList());
                         return bindingCopy;
                     }).toList());
         }
