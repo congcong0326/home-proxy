@@ -52,14 +52,15 @@ make docker-up-worker
 
 worker 使用 `network_mode: host`，因此控制面下发的入站端口会直接监听在宿主机网络栈，不需要在 compose 里重复配置 `ports`。默认还会在宿主机的 `18444` 端口启动 WSS 管理端；请在 worker 的防火墙中放行该端口，使 controller 能访问它。
 
-每台 worker 必须有独立的 ID：
+worker 同样不需要 `.env`：服务器上的 compose 只需写死两项——每台独立的 `WORKER_ID`（与管理台节点一致），以及按机器内存设置的 `JAVA_OPTS`（`-Xms/-Xmx` 与 `-XX:MaxDirectMemorySize`）。其余固化在镜像或 JAR 内：时区 `Asia/Shanghai`、OOM 退出与堆转储（写到 `/data/proxy-worker/java_pid1.hprof`，已存在时不覆盖，排查后请删除）、配置轮询间隔、内置 GeoIP 库、只输出到控制台的日志（由 compose 的 `logging` 轮转，`docker logs` 查看）。
 
-```bash
-WORKER_ID=shanghai-01
-WORKER_MANAGEMENT_PORT=18444
-```
+管理端监听地址与端口通过 `WORKER_MANAGEMENT_HOST`（默认 `0.0.0.0`）和 `WORKER_MANAGEMENT_PORT`（默认 `18444`）配置。worker 使用 host 网络，compose 的 `ports` 不生效，只能用这两个变量控制；公网 VPS 上可绑定到内网/VPN 地址，或用防火墙只放行 controller 的来源地址。
 
-启动 worker 后，它会在持久卷的 `/data/proxy-worker/management.token` 首次生成随机 Token；容器重建和镜像升级都会复用该文件。查看并复制 Token：
+worker 不再主动访问控制面，因此不需要 `CONTROL_MANAGER_URL`、控制面证书、`extra_hosts` 或旧的 worker token 文件；旧部署中的这些配置可以直接删除。
+
+仓库里的 `deploy/docker/docker-compose.worker.yml` 用 `${WORKER_ID:-default}` 生成容器名，便于本机同时跑多个节点；单节点服务器可直接写死。
+
+也可以用 `WORKER_MANAGEMENT_TOKEN` 在 compose 里固定 Token（必须以 `hpw_` 开头，格式不对 worker 启动失败）；设置后 worker 不读写 Token 文件，换机或删卷后 Token 不变。未设置时，启动 worker 后，它会在持久卷的 `/data/proxy-worker/management.token` 首次生成随机 Token；容器重建和镜像升级都会复用该文件。查看并复制 Token：
 
 ```bash
 docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
@@ -75,11 +76,13 @@ docker compose --env-file /opt/home-proxy/workers/shanghai-01.env \
 controller 会主动建立 WSS 连接，worker 在该连接中轮询配置、上报心跳指标和批量日志；controller 不需要公网入站地址。
 
 本地临时节点可在 `deploy/docker/worker.env.local` 配置节点 ID 和管理端口，然后执行 `make docker-up-worker`。该文件不会提交；要使用其他环境文件时执行
-`make docker-up-worker WORKER_ENV_FILE=/opt/home-proxy/workers/shanghai-01.env`。
+`make docker-up-worker WORKER_ENV_FILE=/opt/home-proxy/workers/shanghai-01.env`（env 文件只需 `WORKER_ID`）。
 
 使用 host network 时，新增入站端口前需要确认宿主机没有同端口进程占用。Linux 原生 Docker 对该模式支持最好；Docker Desktop 的 host network 行为可能不同。
 
-worker WSS 使用启动时生成的自签名证书，worker 使用管理 Token 校验 controller 的连接。Token 不会写入启动日志；不要执行 `docker compose down -v`，该命令会删除 `proxy-worker-data` 卷及其中的 Token。
+worker WSS 使用启动时生成的自签名证书，worker 使用管理 Token 校验 controller 的连接。Token 不会写入启动日志；不要执行 `docker compose down -v`，该命令会删除 `proxy-worker-data` 卷及其中的 Token 和入站 TLS 自签证书。
+
+TLS 入站（非 Shadowsocks 且开启 TLS）默认使用持久化自签证书：首次需要时生成 `/data/proxy-worker/tls/tls.crt` 与 `tls.key`（私钥 `0600`），之后重启复用；客户端需跳过证书校验。只有设置了 `TLS_CERT_FILE`/`TLS_KEY_FILE` 才改用外部证书，文件不可读时 TLS 入站直接失败，不回退自签。旧的 `TLS_ALLOW_SELF_SIGNED` 已移除。
 
 worker 配置优先级为：
 
@@ -116,10 +119,3 @@ volumes:
 ```
 
 也可以通过 `GEOIP_MMDB_PATH` 指向其他挂载路径，或通过 `GEOIP_DATA_DIR` 指向包含 `GeoLite2-City.mmdb` 的目录。未找到 mmdb 时，服务仍可启动，但 GeoIP 路由和日志城市解析会降级。
-
-TLS 证书可挂载到容器内，并通过环境变量指定：
-
-```bash
-TLS_CERT_FILE=/etc/nas-proxy/certs/s-proxy-ca.crt
-TLS_KEY_FILE=/etc/nas-proxy/certs/s-proxy-ca.key
-```

@@ -21,6 +21,16 @@ public final class ManagementTokenStore {
     private ManagementTokenStore() {
     }
 
+    /**
+     * 显式配置的 Token（如 WORKER_MANAGEMENT_TOKEN）优先，且不落盘；未配置时回退到持久化文件。
+     */
+    public static String resolve(String configuredToken, String configuredPath) {
+        if (configuredToken != null && !configuredToken.isBlank()) {
+            return validate(configuredToken.trim());
+        }
+        return loadOrCreate(configuredPath);
+    }
+
     public static String loadOrCreate(String configuredPath) {
         if (configuredPath == null || configuredPath.isBlank()) {
             throw new IllegalStateException("worker.management.tokenFile 未配置");

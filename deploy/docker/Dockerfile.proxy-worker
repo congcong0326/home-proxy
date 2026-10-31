@@ -5,6 +5,11 @@ WORKDIR /app
 COPY backend/proxy-worker/target/proxy-worker-*.jar /app/proxy-worker.jar
 COPY data/geoip/ /app/data/geoip/
 
+# Management token, last-known-good config and the inbound TLS self-signed certificate live here.
+ENV TZ=Asia/Shanghai
 ENV JAVA_OPTS=""
+VOLUME /data/proxy-worker
 
-ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/proxy-worker.jar"]
+# OOM handling is fixed here; JAVA_OPTS only needs heap/direct-memory sizing. The container PID is 1,
+# so at most one java_pid1.hprof is kept (the JVM never overwrites an existing dump).
+ENTRYPOINT ["sh", "-c", "exec java -XX:+ExitOnOutOfMemoryError -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/data/proxy-worker $JAVA_OPTS -jar /app/proxy-worker.jar"]

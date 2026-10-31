@@ -10,8 +10,6 @@ DOCKER_UP_ARGS ?= -d --force-recreate
 DOCKER_IMAGE_TAR ?= home-proxy-images.tar
 CONTROL_IMAGE ?= home-proxy-control-manager:latest
 WORKER_IMAGE ?= home-proxy-worker:latest
-WORKER_BUILD_ID ?= image-build
-WORKER_BUILD_CONTROL_MANAGER_HOST_IP ?= 127.0.0.1
 MVN ?= mvn
 NPM ?= npm
 MAVEN_REPO ?= $(CURDIR)/.m2/repository
@@ -110,13 +108,13 @@ frontend-sync-static: frontend-build
 
 docker-build: package
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) build $(DOCKER_BUILD_ARGS) control-manager
-	WORKER_ID="$(WORKER_BUILD_ID)" CONTROL_MANAGER_HOST_IP="$(WORKER_BUILD_CONTROL_MANAGER_HOST_IP)" $(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
+	$(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
 
 docker-build-control: package
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) build $(DOCKER_BUILD_ARGS) control-manager
 
 docker-build-worker: worker-build
-	WORKER_ID="$(WORKER_BUILD_ID)" CONTROL_MANAGER_HOST_IP="$(WORKER_BUILD_CONTROL_MANAGER_HOST_IP)" $(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
+	$(DOCKER_COMPOSE) -f $(WORKER_COMPOSE) build $(DOCKER_BUILD_ARGS) proxy-worker
 
 docker-up-control: docker-build-control
 	$(DOCKER_COMPOSE) -f $(CONTROL_COMPOSE) up $(DOCKER_UP_ARGS)

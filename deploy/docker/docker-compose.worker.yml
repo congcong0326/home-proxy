@@ -6,30 +6,27 @@ services:
     build:
       context: ../..
       dockerfile: deploy/docker/Dockerfile.proxy-worker
-    container_name: home-proxy-worker-${WORKER_ID:?WORKER_ID is required}
+    container_name: home-proxy-worker-${WORKER_ID:-default}
     restart: unless-stopped
     network_mode: host
     environment:
-      CONTROL_MANAGER_URL: https://proxy-manager.internal:${CONTROL_HTTPS_HOST_PORT:-18443}
-      WORKER_ID: ${WORKER_ID:?WORKER_ID is required}
-      LAST_KNOWN_GOOD_CONFIG: /data/proxy-worker/last-known-good-config.json
-      OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-true}
-      OBSERVABILITY_AUTH_ENABLED: ${OBSERVABILITY_AUTH_ENABLED:-true}
-      OBSERVABILITY_BUFFER_CAPACITY: ${OBSERVABILITY_BUFFER_CAPACITY:-5000}
-      OBSERVABILITY_BUFFER_MAX_BYTES: ${OBSERVABILITY_BUFFER_MAX_BYTES:-4194304}
+      # Every worker needs its own ID; it must match the node created in the management console.
+      WORKER_ID: ${WORKER_ID:-default}
+      # Host network: the management WSS listens on the host directly, compose "ports" does not apply.
+      # Bind to a LAN/VPN address to keep it off the public interface.
+      WORKER_MANAGEMENT_HOST: ${WORKER_MANAGEMENT_HOST:-0.0.0.0}
       WORKER_MANAGEMENT_PORT: ${WORKER_MANAGEMENT_PORT:-18444}
-      WORKER_MANAGEMENT_TOKEN_FILE: /data/proxy-worker/management.token
-      WORKER_MANAGEMENT_POLL_INTERVAL_MS: ${WORKER_MANAGEMENT_POLL_INTERVAL_MS:-2000}
-      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
-      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
-      TLS_KEY_PASSWORD_FILE: ${TLS_KEY_PASSWORD_FILE:-}
-      TLS_ALLOW_SELF_SIGNED: ${TLS_ALLOW_SELF_SIGNED:-false}
-      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
-      GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
+      # Optional fixed management token (hpw_ prefix). Empty: generated once into the data volume and reused.
+      WORKER_MANAGEMENT_TOKEN: ${WORKER_MANAGEMENT_TOKEN:-}
+      # Size the heap and direct memory for the host; OOM flags are fixed in the image.
+      JAVA_OPTS: "-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m"
     volumes:
+      # Generated management token, last-known-good config and inbound TLS self-signed certificate.
       - proxy-worker-data:/data/proxy-worker
-    extra_hosts:
-      - "proxy-manager.internal:${CONTROL_MANAGER_HOST_IP:-127.0.0.1}"
+    logging:
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   proxy-worker-data:

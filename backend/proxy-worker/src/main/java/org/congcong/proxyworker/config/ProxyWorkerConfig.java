@@ -13,7 +13,7 @@ import java.util.Properties;
  * 代理工作节点配置类
  * 负责读取 Worker 标识、TLS 证书与 WSS 管理通道配置。
  * 旧版 HTTP 链路的属性（control.*、worker.tokenFile、worker.control.pollIntervalMs、
- * worker.management.enabled 等）不再读取，配置里残留这些条目会被直接忽略。
+ * worker.management.enabled、tls.allowSelfSigned 等）不再读取，配置里残留这些条目会被直接忽略。
  */
 public class ProxyWorkerConfig {
     private static final Logger log = LoggerFactory.getLogger(ProxyWorkerConfig.class);
@@ -26,9 +26,11 @@ public class ProxyWorkerConfig {
     private final String tlsKeyFile;
     private final String tlsKeyPassword;
     private final String tlsKeyPasswordFile;
-    private final boolean tlsAllowSelfSigned;
+    private final String tlsSelfSignedDir;
     private final String lastKnownGoodConfig;
+    private final String managementHost;
     private final int managementPort;
+    private final String managementToken;
     private final String managementTokenFile;
     private final long managementPollIntervalMs;
     
@@ -42,14 +44,16 @@ public class ProxyWorkerConfig {
         this.tlsKeyFile = props.getProperty("tls.keyFile", null);
         this.tlsKeyPassword = props.getProperty("tls.keyPassword", "");
         this.tlsKeyPasswordFile = trimToNull(props.getProperty("tls.keyPasswordFile"));
-        this.tlsAllowSelfSigned = Boolean.parseBoolean(props.getProperty("tls.allowSelfSigned", "false"));
+        this.tlsSelfSignedDir = props.getProperty("tls.selfSignedDir", "/data/proxy-worker/tls");
         this.lastKnownGoodConfig = props.getProperty("worker.lastKnownGoodConfig", "/data/proxy-worker/last-known-good-config.json");
         this.workerId = props.getProperty("worker.id", "default");
+        this.managementHost = props.getProperty("worker.management.host", "0.0.0.0");
         this.managementPort = Integer.parseInt(props.getProperty("worker.management.port", "18444"));
+        this.managementToken = trimToNull(props.getProperty("worker.management.token"));
         this.managementTokenFile = props.getProperty("worker.management.tokenFile", "/data/proxy-worker/management.token");
         this.managementPollIntervalMs = Long.parseLong(props.getProperty("worker.management.pollIntervalMs", "2000"));
         
-        log.info("代理工作节点配置加载完成 - workerId: {}, 管理端口: {}", workerId, managementPort);
+        log.info("代理工作节点配置加载完成 - workerId: {}, 管理地址: {}:{}", workerId, managementHost, managementPort);
     }
     
     public static synchronized ProxyWorkerConfig getInstance() {
@@ -105,10 +109,12 @@ public class ProxyWorkerConfig {
         overrideProperty(props, "tls.keyFile", "TLS_KEY_FILE");
         overrideProperty(props, "tls.keyPassword", "TLS_KEY_PASSWORD");
         overrideProperty(props, "tls.keyPasswordFile", "TLS_KEY_PASSWORD_FILE");
-        overrideProperty(props, "tls.allowSelfSigned", "TLS_ALLOW_SELF_SIGNED");
+        overrideProperty(props, "tls.selfSignedDir", "TLS_SELF_SIGNED_DIR");
         overrideProperty(props, "worker.id", "WORKER_ID");
         overrideProperty(props, "worker.lastKnownGoodConfig", "LAST_KNOWN_GOOD_CONFIG");
+        overrideProperty(props, "worker.management.host", "WORKER_MANAGEMENT_HOST");
         overrideProperty(props, "worker.management.port", "WORKER_MANAGEMENT_PORT");
+        overrideProperty(props, "worker.management.token", "WORKER_MANAGEMENT_TOKEN");
         overrideProperty(props, "worker.management.tokenFile", "WORKER_MANAGEMENT_TOKEN_FILE");
         overrideProperty(props, "worker.management.pollIntervalMs", "WORKER_MANAGEMENT_POLL_INTERVAL_MS");
     }
@@ -166,16 +172,30 @@ public class ProxyWorkerConfig {
         return tlsKeyPasswordFile;
     }
 
-    public boolean isTlsAllowSelfSigned() {
-        return tlsAllowSelfSigned;
+    /**
+     * 未配置外部证书时，自签证书的持久化目录。
+     */
+    public String getTlsSelfSignedDir() {
+        return tlsSelfSignedDir;
     }
 
     public String getLastKnownGoodConfig() {
         return lastKnownGoodConfig;
     }
 
+    public String getManagementHost() {
+        return managementHost;
+    }
+
     public int getManagementPort() {
         return managementPort;
+    }
+
+    /**
+     * 显式配置的管理 Token；为 null 时使用 tokenFile 中持久化（或首次生成）的 Token。
+     */
+    public String getManagementToken() {
+        return managementToken;
     }
 
     public String getManagementTokenFile() {

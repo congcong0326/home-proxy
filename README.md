@@ -154,17 +154,14 @@ services:
     restart: unless-stopped
     network_mode: host
     environment:
-      CONTROL_MANAGER_URL: ${CONTROL_MANAGER_URL:-https://127.0.0.1:18443}
-      WORKER_ID: ${WORKER_ID:-default}
-      WORKER_MANAGEMENT_PORT: ${WORKER_MANAGEMENT_PORT:-18444}
-      PROXY_WORKER_CONFIG: ${PROXY_WORKER_CONFIG:-}
-      TLS_CERT_FILE: ${TLS_CERT_FILE:-}
-      TLS_KEY_FILE: ${TLS_KEY_FILE:-}
-      TLS_KEY_PASSWORD: ${TLS_KEY_PASSWORD:-}
-      GEOIP_MMDB_PATH: ${GEOIP_MMDB_PATH:-}
-      GEOIP_DATA_DIR: ${GEOIP_DATA_DIR:-}
+      WORKER_ID: default                     # 每台 worker 唯一，与管理台节点一致
+      JAVA_OPTS: "-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m"
     volumes:
       - proxy-worker-data:/data/proxy-worker
+    logging:
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   proxy-worker-data:
@@ -250,15 +247,15 @@ HOME_PROXY_BACKUP_RETENTION    控制端定时备份保留份数，默认 7
 HOME_PROXY_BACKUP_CRON         控制端定时备份 cron（Spring 6 段格式），默认每天 03:30
 ```
 
-worker 常用变量：
+worker 只需要 `WORKER_ID` 和按机器内存设置的 `JAVA_OPTS`（堆与直接内存；OOM 退出与堆转储参数、时区 `Asia/Shanghai` 已固化在镜像内）。其余可选变量：
 
 ```text
-CONTROL_MANAGER_URL            worker 连接控制面的地址
-GEOIP_MMDB_PATH                GeoIP mmdb 文件路径
+WORKER_MANAGEMENT_HOST         WSS 管理端监听地址，默认 0.0.0.0（host 网络下 compose ports 不生效）
+WORKER_MANAGEMENT_PORT         WSS 管理端口，默认 18444
+WORKER_MANAGEMENT_TOKEN        固定管理 Token（hpw_ 前缀），设置后不读写卷内 Token 文件；默认首次启动生成并持久化
+GEOIP_MMDB_PATH                GeoIP mmdb 文件路径，默认使用镜像内置库
 GEOIP_DATA_DIR                 GeoIP 数据目录
-TLS_CERT_FILE                  worker TLS 证书路径
-TLS_KEY_FILE                   worker TLS 私钥路径
-TLS_KEY_PASSWORD               worker TLS 私钥密码，可为空
+TLS_CERT_FILE / TLS_KEY_FILE   外部入站 TLS 证书与私钥，默认不配置（使用自签证书）
 ```
 
 即使绑定了内网 IP，生产环境也建议在宿主机防火墙或云安全组中只允许可信 LAN/VPN 网段访问控制面端口。
@@ -270,14 +267,14 @@ volumes:
   - ./data/geoip/GeoLite2-City.mmdb:/app/data/geoip/GeoLite2-City.mmdb:ro
 ```
 
-如需让 worker 使用自己的 TLS 证书，可以在 `proxy-worker` 服务中增加挂载，并设置证书路径：
+TLS 入站默认使用自签证书：worker 首次需要时在数据卷生成 `/data/proxy-worker/tls/tls.{crt,key}`，之后重启复用，客户端需跳过证书校验。确需使用外部证书时再挂载并设置路径；一旦设置，文件不可读会直接报错，不会回退自签：
 
 ```yaml
 volumes:
-  - /etc/nas-proxy/certs:/etc/nas-proxy/certs:ro
+  - ./certs:/data/tls/inbound:ro
 environment:
-  TLS_CERT_FILE: /etc/nas-proxy/certs/s-proxy-ca.crt
-  TLS_KEY_FILE: /etc/nas-proxy/certs/s-proxy-ca.key
+  TLS_CERT_FILE: /data/tls/inbound/tls.crt
+  TLS_KEY_FILE: /data/tls/inbound/tls.key
 ```
 
 ### 数据库备份与恢复

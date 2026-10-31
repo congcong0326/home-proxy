@@ -83,7 +83,7 @@ public final class WorkerManagementWebSocketServer {
         this.config = ProxyWorkerConfig.getInstance();
         this.configService = configService;
         this.metricsCollector = new WorkerMetricsCollector(configService::getManagedPollingConfigHash);
-        this.token = ManagementTokenStore.loadOrCreate(config.getManagementTokenFile());
+        this.token = ManagementTokenStore.resolve(config.getManagementToken(), config.getManagementTokenFile());
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
         this.objectMapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -107,11 +107,11 @@ public final class WorkerManagementWebSocketServer {
                             channel.pipeline().addLast(new ManagementFrameHandler());
                         }
                     });
-            serverChannel = bootstrap.bind(config.getManagementPort()).syncUninterruptibly().channel();
+            serverChannel = bootstrap.bind(config.getManagementHost(), config.getManagementPort()).syncUninterruptibly().channel();
             long interval = Math.max(500L, config.getManagementPollIntervalMs());
             pollScheduler.scheduleWithFixedDelay(this::safeSendConfigPoll, 0, interval, TimeUnit.MILLISECONDS);
             telemetryScheduler.scheduleWithFixedDelay(this::safeSendTelemetry, 0, interval, TimeUnit.MILLISECONDS);
-            log.info("Worker WSS 管理端已启动, port={}, path={}", config.getManagementPort(), PATH);
+            log.info("Worker WSS 管理端已启动, host={}, port={}, path={}", config.getManagementHost(), config.getManagementPort(), PATH);
         } catch (RuntimeException e) {
             stop();
             throw e;

@@ -1,25 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <!-- 控制台输出 -->
+    <!-- 只输出到控制台：容器由 docker logs 轮转保存，不再在容器内另写文件。 -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS,Asia/Shanghai} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
-    <!-- 文件输出 -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>logs/proxy-worker.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/proxy-worker.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <timeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
-                <maxFileSize>10MB</maxFileSize>
-            </timeBasedFileNamingAndTriggeringPolicy>
-            <maxHistory>5</maxHistory>
-            <totalSizeCap>50MB</totalSizeCap>
-        </rollingPolicy>
-        <encoder>
-            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -31,17 +15,9 @@
         <appender-ref ref="CONSOLE" />
     </appender>
 
-    <appender name="ASYNC_FILE" class="ch.qos.logback.classic.AsyncAppender">
-        <queueSize>10240</queueSize>
-        <discardingThreshold>0</discardingThreshold>
-        <neverBlock>true</neverBlock>
-        <appender-ref ref="FILE" />
-    </appender>
-
     <!-- 根日志级别 -->
     <root level="INFO">
         <appender-ref ref="ASYNC_CONSOLE" />
-        <appender-ref ref="ASYNC_FILE" />
     </root>
 
     <!-- 应用和依赖日志继承 root，管理端动态调整统一生效。 -->

@@ -13,18 +13,22 @@ import org.congcong.proxyworker.protocol.RequestAppendHandler;
 import org.congcong.proxyworker.router.RouterService;
 import org.congcong.proxyworker.server.ProxyContext;
 import org.congcong.proxyworker.server.netty.ChannelAttributes;
-import org.junit.jupiter.api.AfterEach;
 import org.congcong.proxyworker.config.ProxyWorkerConfig;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Field;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.AfterEach;
+import java.nio.file.Path;
 
 class SocksServerInitializerTest {
 
+    @TempDir
+    Path tempDir;
+
     @AfterEach
-    void clearSelfSignedFlag() {
-        System.clearProperty("TLS_ALLOW_SELF_SIGNED");
+    void clearSelfSignedDir() {
+        System.clearProperty("TLS_SELF_SIGNED_DIR");
         resetWorkerConfig();
     }
     @AfterEach
@@ -34,7 +38,7 @@ class SocksServerInitializerTest {
 
     @Test
     void tlsEnabledSocksInboundInstallsSslBeforeProtocolAndRoutingHandlers() {
-        System.setProperty("TLS_ALLOW_SELF_SIGNED", "true");
+        System.setProperty("TLS_SELF_SIGNED_DIR", tempDir.resolve("tls").toString());
         resetWorkerConfig();
         UserConfig user = ProxyWorkerTestFixtures.user(1L, "alice", "secret", null);
         InboundConfig inbound = ProxyWorkerTestFixtures.socksInbound(user);

@@ -21,12 +21,14 @@ class ProxyWorkerConfigTest {
             "TLS_CERT_FILE",
             "TLS_KEY_FILE",
             "TLS_KEY_PASSWORD",
-            "TLS_ALLOW_SELF_SIGNED",
+            "TLS_SELF_SIGNED_DIR",
             "WORKER_ID",
             "WORKER_TOKEN_FILE",
             "LAST_KNOWN_GOOD_CONFIG",
             "WORKER_MANAGEMENT_ENABLED",
+            "WORKER_MANAGEMENT_HOST",
             "WORKER_MANAGEMENT_PORT",
+            "WORKER_MANAGEMENT_TOKEN",
             "WORKER_MANAGEMENT_TOKEN_FILE",
             "WORKER_MANAGEMENT_POLL_INTERVAL_MS"
     };
@@ -80,17 +82,22 @@ class ProxyWorkerConfigTest {
         ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
 
         assertEquals("default", config.getWorkerId());
+        assertEquals("0.0.0.0", config.getManagementHost());
     }
 
     @Test
     void managementChannelSettingsCanBeOverriddenAtRuntime() {
+        System.setProperty("WORKER_MANAGEMENT_HOST", "192.168.10.2");
         System.setProperty("WORKER_MANAGEMENT_PORT", "19444");
+        System.setProperty("WORKER_MANAGEMENT_TOKEN", "hpw_env-token");
         System.setProperty("WORKER_MANAGEMENT_TOKEN_FILE", "/state/management.token");
         System.setProperty("WORKER_MANAGEMENT_POLL_INTERVAL_MS", "2500");
 
         ProxyWorkerConfig config = ProxyWorkerConfig.getInstance();
 
+        assertEquals("192.168.10.2", config.getManagementHost());
         assertEquals(19444, config.getManagementPort());
+        assertEquals("hpw_env-token", config.getManagementToken());
         assertEquals("/state/management.token", config.getManagementTokenFile());
         assertEquals(2500L, config.getManagementPollIntervalMs());
     }
