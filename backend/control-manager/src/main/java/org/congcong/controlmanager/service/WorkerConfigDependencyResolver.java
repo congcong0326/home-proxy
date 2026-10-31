@@ -112,12 +112,16 @@ public class WorkerConfigDependencyResolver {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "节点不存在: " + inbound.getWorkerId());
         }
         validateEnabledUsers(resolveUserIds(List.of(inbound)));
-        List<Route> routes = validateEnabledRoutes(resolveRouteIds(List.of(inbound)));
+        List<Route> routes = validateExistingRoutes(resolveRouteIds(List.of(inbound)));
         if (routes.stream().anyMatch(route -> route.getId().equals(inbound.getFallbackRouteId())
                 && route.getRewriteTableId() != null)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "兜底路由不能引用改写表");
         }
-        for (String ruleSetKey : resolveRuleSetKeys(routes)) {
+        // 已禁用的路由下发时会被跳过，只校验启用路由引用的规则集
+        List<Route> enabledRoutes = routes.stream()
+                .filter(route -> route.getStatus() != null && route.getStatus() == 1)
+                .toList();
+        for (String ruleSetKey : resolveRuleSetKeys(enabledRoutes)) {
             if (!ruleSetRepository.existsByRuleKeyAndEnabledTrueAndPublishedTrue(ruleSetKey)) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "路由引用的规则集不存在、未启用或未发布: " + ruleSetKey);
             }
@@ -137,11 +141,12 @@ public class WorkerConfigDependencyResolver {
         }
     }
 
-    private List<Route> validateEnabledRoutes(Set<Long> routeIds) {
+    // 允许引用已禁用的路由（下发时跳过，等同暂时不生效），只拒绝已删除的路由
+    private List<Route> validateExistingRoutes(Set<Long> routeIds) {
         if (routeIds.isEmpty()) return List.of();
         List<Route> routes = routeRepository.findAllById(routeIds);
-        if (routes.size() != routeIds.size() || routes.stream().anyMatch(route -> route.getStatus() == null || route.getStatus() != 1)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "入站引用的路由不存在或未启用");
+        if (routes.size() != routeIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "入站引用的路由不存在");
         }
         return routes;
     }

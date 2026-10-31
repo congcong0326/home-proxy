@@ -1,11 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Empty, Select, Space, Tag, Typography } from 'antd';
+import { Button, Empty, Select, Space, Tag, Tooltip, Typography } from 'antd';
 import { DeleteOutlined, MenuOutlined, PlusOutlined } from '@ant-design/icons';
 
 interface RouteSelectOption {
   value: number;
   label: string;
   disabled?: boolean;
+  // 列表行展示用：路由名称与出站目标；未提供时回退为 label
+  name?: string;
+  target?: string;
+  missing?: boolean;
 }
 
 interface RouteOrderEditorProps {
@@ -36,6 +40,7 @@ const RouteOrderEditor: React.FC<RouteOrderEditorProps> = ({ routeOptions, value
         optionMap.set(routeId, {
           value: routeId,
           label: `历史路由 #${routeId}（已删除或不可用）`,
+          missing: true,
         });
       }
     });
@@ -45,11 +50,11 @@ const RouteOrderEditor: React.FC<RouteOrderEditorProps> = ({ routeOptions, value
 
   const selectedRouteOptions = useMemo(() => {
     const optionMap = new Map(mergedRouteOptions.map((option) => [option.value, option] as const));
-    return routeIds.map((routeId) => ({
+    return routeIds.map((routeId) => optionMap.get(routeId) ?? {
       value: routeId,
-      label: optionMap.get(routeId)?.label ?? `历史路由 #${routeId}`,
-      disabled: optionMap.get(routeId)?.disabled ?? false,
-    }));
+      label: `历史路由 #${routeId}`,
+      missing: true,
+    });
   }, [mergedRouteOptions, routeIds]);
 
   const addableRouteOptions = useMemo(
@@ -84,6 +89,8 @@ const RouteOrderEditor: React.FC<RouteOrderEditorProps> = ({ routeOptions, value
       {selectedRouteOptions.length ? (
         selectedRouteOptions.map((option, index) => {
           const isActiveDropTarget = dragOverIndex === index && draggingIndex !== index;
+          const inactive = option.disabled || option.missing;
+          const title = option.name ?? option.label;
 
           return (
             <div
@@ -109,7 +116,7 @@ const RouteOrderEditor: React.FC<RouteOrderEditorProps> = ({ routeOptions, value
                 padding: '10px 12px',
                 borderRadius: 10,
                 border: isActiveDropTarget ? '1px solid #1677ff' : '1px solid #d9d9d9',
-                background: isActiveDropTarget ? '#e6f4ff' : '#fafafa',
+                background: isActiveDropTarget ? '#e6f4ff' : inactive ? '#f5f5f5' : '#fafafa',
                 transition: 'all 0.2s ease',
               }}
             >
@@ -138,14 +145,24 @@ const RouteOrderEditor: React.FC<RouteOrderEditorProps> = ({ routeOptions, value
                 {index + 1}
               </Tag>
 
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <Typography.Text strong ellipsis={{ tooltip: option.label }} style={{ display: 'block' }}>
-                  {option.label}
+              <div style={{ flex: 1, minWidth: 0, opacity: inactive ? 0.55 : 1 }}>
+                <Typography.Text strong delete={inactive} ellipsis={{ tooltip: title }} style={{ display: 'block' }}>
+                  {title}
                 </Typography.Text>
-                <Typography.Text type="secondary">路由 ID: {option.value}</Typography.Text>
+                <Typography.Text type="secondary" ellipsis={{ tooltip: true }} style={{ display: 'block' }}>
+                  {option.target ? `→ ${option.target} · ` : ''}ID {option.value}
+                </Typography.Text>
               </div>
 
-              {option.disabled ? <Tag color="default">已禁用</Tag> : null}
+              {option.missing ? (
+                <Tooltip title="该路由已被删除，保存前请移除">
+                  <Tag color="red" style={{ marginInlineEnd: 0 }}>已删除</Tag>
+                </Tooltip>
+              ) : option.disabled ? (
+                <Tooltip title="该路由已禁用，下发时会被跳过；启用后自动恢复生效">
+                  <Tag color="orange" style={{ marginInlineEnd: 0 }}>已禁用 · 不生效</Tag>
+                </Tooltip>
+              ) : null}
 
               <Button
                 size="small"

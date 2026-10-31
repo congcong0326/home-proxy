@@ -42,6 +42,9 @@ import './InboundManagement.css';
 
 const { Title } = Typography;
 
+// 弹窗加宽，绑定组按 8/16 左右排布，让路由顺序有足够宽度展示名称和出站目标
+const INBOUND_MODAL_WIDTH = 960;
+
 interface PageState {
   loading: boolean;
   inbounds: InboundConfigDTO[];
@@ -207,6 +210,8 @@ const InboundManagement: React.FC = () => {
       value: r.id,
       label: `${r.name} → ${describeRouteTarget(r)}${r.status === 1 ? '' : '（已禁用）'}`,
       disabled: r.status !== 1,
+      name: r.name,
+      target: describeRouteTarget(r),
     }))
   ), [routeOptions]);
 
@@ -633,6 +638,8 @@ const InboundManagement: React.FC = () => {
             onCancel={() => setCreateVisible(false)}
             onOk={handleCreate}
             okText="创建"
+            width={INBOUND_MODAL_WIDTH}
+            style={{ maxWidth: '95vw' }}
           >
         <Form form={createForm} layout="vertical" initialValues={{ protocol: ProtocolType.SOCKS5, tlsEnabled: false, fakeIpEnabled: false, status: 1, inboundRouteBindings: [{ userIds: [], routeIds: [] }] }}>
           <Row gutter={16}>
@@ -675,10 +682,10 @@ const InboundManagement: React.FC = () => {
                   </Row>
                   <Card size="small" title="绑定关系">
                     <Row gutter={16}>
-                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
+                      <Col span={8}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
                         <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                       </Form.Item></Col>
-                      <Col span={12}>
+                      <Col span={16}>
                         <Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
                           <RouteOrderEditor routeOptions={routeSelectOptions} />
                         </Form.Item>
@@ -693,10 +700,10 @@ const InboundManagement: React.FC = () => {
                       {fields.map(({ key, name }) => (
                         <Card key={key} size="small" title={`绑定组 #${name + 1}`} extra={<Button size="small" danger onClick={() => remove(name)}>移除</Button>} style={{ marginBottom: 12 }}>
                           <Row gutter={16}>
-                            <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
+                            <Col span={8}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
                               <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
                             </Form.Item></Col>
-                            <Col span={12}>
+                            <Col span={16}>
                               <Form.Item name={[name, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
                                 <RouteOrderEditor routeOptions={routeSelectOptions} />
                               </Form.Item>
@@ -723,6 +730,8 @@ const InboundManagement: React.FC = () => {
         onCancel={() => { setEditVisible(false); setEditingItem(null); }}
         onOk={handleUpdate}
         okText="保存"
+        width={INBOUND_MODAL_WIDTH}
+        style={{ maxWidth: '95vw' }}
       >
         <Form form={editForm} layout="vertical">
           <Row gutter={16}>
@@ -766,10 +775,10 @@ const InboundManagement: React.FC = () => {
                   </Row>
                   <Card size="small" title="绑定关系">
                     <Row gutter={16}>
-                      <Col span={12}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
+                      <Col span={8}><Form.Item name={['inboundRouteBindings', 0, 'userIds']} label="绑定用户(仅1个)" rules={[{ required: true }]}> 
                         <Select mode="multiple" maxTagCount={1} maxCount={1} placeholder="选择用户" options={userSelectOptions} />
                       </Form.Item></Col>
-                      <Col span={12}>
+                      <Col span={16}>
                         <Form.Item name={['inboundRouteBindings', 0, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
                           <RouteOrderEditor routeOptions={routeSelectOptions} />
                         </Form.Item>
@@ -784,10 +793,10 @@ const InboundManagement: React.FC = () => {
                       {fields.map(({ key, name }) => (
                         <Card key={key} size="small" title={`绑定组 #${name + 1}`} extra={<Button size="small" danger onClick={() => remove(name)}>移除</Button>} style={{ marginBottom: 12 }}>
                           <Row gutter={16}>
-                            <Col span={12}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
+                            <Col span={8}><Form.Item name={[name, 'userIds']} label="用户" rules={[{ required: true }]}> 
                               <Select mode="multiple" placeholder="选择用户" options={userSelectOptions} />
                             </Form.Item></Col>
-                            <Col span={12}>
+                            <Col span={16}>
                               <Form.Item name={[name, 'routeIds']} label="路由顺序" rules={routeOrderRules}>
                                 <RouteOrderEditor routeOptions={routeSelectOptions} />
                               </Form.Item>
