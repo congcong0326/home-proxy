@@ -138,17 +138,37 @@ class OverviewServiceTest {
         assertEquals("0", service.live(q).get("count"));
     }
     @Test
-    void staleOrTruncatedMetricsNeverAppearAsZeroConnections() throws Exception {
+    void latestSampleRemainsAvailableWhenOldOrAheadOfControllerClock() throws Exception {
+        var metrics = new WorkerMetricsDTO();
+        for (Instant sampledAt : List.of(Instant.now().minusSeconds(86400), Instant.now().plusSeconds(30))) {
+            metrics.setEstablishedConnectionsV1(new EstablishedConnectionsV1("instance", sampledAt,
+                    Map.of(TrafficCategory.EXTERNAL, 42L),
+                    List.of(new EstablishedConnectionsV1.Group(TrafficCategory.EXTERNAL, "alice", "192.168.1.2", 1L, 7)), false));
+            install(metrics);
+            var result = service.live(query());
+            assertEquals(true, result.get("available"));
+            assertEquals("42", result.get("count"));
+            assertEquals(sampledAt.toString(), result.get("sampledAt"));
+            assertFalse(result.containsKey("reason"));
+            var filtered = query();
+            filtered.setUsername("alice");
+            assertEquals("7", service.live(filtered).get("count"));
+        }
+        verifyNoInteractions(client, store);
+    }
+    @Test
+    void missingSamplesDoNotInventZeroConnections() throws Exception {
+        assertEquals(Map.of("available", false, "reason", "UNSUPPORTED"), service.live(query()));
+        install(new WorkerMetricsDTO());
+        assertEquals(Map.of("available", false, "reason", "UNSUPPORTED"), service.live(query()));
+    }
+    @Test
+    void truncatedSamplesKeepCategoryTotalsButCannotProvideCompleteSourceCounts() throws Exception {
         var metrics = new WorkerMetricsDTO();
         metrics.setEstablishedConnectionsV1(
                 new EstablishedConnectionsV1(
-                        "instance", Instant.now().minusSeconds(60), Map.of(), List.of(), false));
-        install(metrics);
-        assertEquals("STALE", service.live(query()).get("reason"));
-        metrics.setEstablishedConnectionsV1(
-                new EstablishedConnectionsV1(
                         "instance",
-                        Instant.now(),
+                        Instant.now().minusSeconds(60),
                         Map.of(TrafficCategory.EXTERNAL, 300L),
                         List.of(),
                         true));

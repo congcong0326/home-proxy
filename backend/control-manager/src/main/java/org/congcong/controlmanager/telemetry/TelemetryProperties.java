@@ -16,7 +16,10 @@ public class TelemetryProperties {
     private long flushMaxDelayMs = 120000;
     private int bufferCapacity = 20000;
     private long bufferMaxBytes = 67108864;
-    /** Retention in days per table; null keeps facts forever (see {@link TelemetryStore#purgeExpired()}). */
+    /** Global limits across all fact tables. Calendar days are UTC and include today. */
+    private int retentionDays = 90;
+    private long maxRecords = 100_000_000L;
+    /** Optional shorter per-table retention; null inherits the global limit. */
     private Integer sessionRetentionDays;
     private Integer dnsRetentionDays;
     private Integer authRetentionDays;

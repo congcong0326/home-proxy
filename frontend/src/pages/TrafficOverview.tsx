@@ -37,7 +37,7 @@ const bytes = (value?: string | number) => {
 };
 const count = (value?: string) => (value || '0').replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 const localInput = (date: Date) => new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-const clock = (value: string) => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+const sampleTime = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '时间未知';
 const GROUP = 'traffic-overview-v1';
 
 function ResultSelect({ label, value, onChange, kinds = ['SUCCESS', 'FAILURE', 'BLOCKED', 'CANCELLED', 'UNKNOWN'] }: {
@@ -118,6 +118,7 @@ export function TrafficOverview() {
   const [connectionView, setConnectionView] = useState('concurrency');
   const [data, setData] = useState<OverviewData | null>(null);
   const [live, setLive] = useState<LiveConnections | null>(null);
+  const [liveRefreshFailed, setLiveRefreshFailed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
@@ -161,12 +162,19 @@ export function TrafficOverview() {
     const load = () => {
       const id = ++sequence;
       apiService.getObservabilityLive(query).then(result => {
-        if (active && id === sequence) setLive(result);
+        if (active && id === sequence) {
+          setLive(result);
+          setLiveRefreshFailed(false);
+        }
       }).catch(() => {
-        if (active && id === sequence) setLive({ available: false, reason: 'STALE' });
+        if (active && id === sequence) {
+          setLive(previous => previous?.available ? previous : { available: false, reason: 'REQUEST_FAILED' });
+          setLiveRefreshFailed(true);
+        }
       });
     };
     setLive(null);
+    setLiveRefreshFailed(false);
     load();
     const timer = window.setInterval(load, 5000);
     return () => { window.clearInterval(timer); active = false; };
@@ -215,7 +223,16 @@ export function TrafficOverview() {
 
     <div className="ov-summary-grid">
       <div className="ov-summary ov-blue"><div className="ov-summary-label"><GlobalOutlined /> {selectedLabel}流量 <span>所选范围</span></div><strong>{empty ? '—' : bytes(data?.traffic.total)}</strong><div className="ov-summary-footer"><span><ArrowUpOutlined /> {empty ? '—' : bytes(data?.traffic.upload)}</span><span><ArrowDownOutlined /> {empty ? '—' : bytes(data?.traffic.download)}</span></div></div>
-      <div className="ov-summary ov-purple"><div className="ov-summary-label"><ApiOutlined /> 当前并发 <span>每 5 秒更新</span></div><strong>{live?.available ? count(live.count) : '—'}<small> 条</small></strong><div className="ov-summary-footer">{!live ? '加载中' : live.available ? `采样于 ${clock(live.sampledAt!)}` : live.reason === 'STALE' ? '节点离线或采样已过期' : live.reason === 'GROUPS_TRUNCATED' ? '来源分组过多，当前筛选不可用' : '等待新版节点上报已建立连接'}</div></div>
+      <div className="ov-summary ov-purple">
+        <div className="ov-summary-label"><ApiOutlined /> 当前并发 <span>每 5 秒刷新</span></div>
+        <strong>{live?.available ? count(live.count) : '—'}<small> 条</small></strong>
+        <div className="ov-summary-footer">
+          {!live ? '加载中' : live.available
+            ? `${liveRefreshFailed ? '刷新失败，显示上次数据 · ' : ''}最近采集 ${sampleTime(live.sampledAt)}`
+            : live.reason === 'REQUEST_FAILED' ? '并发数据刷新失败，等待重试'
+              : live.reason === 'GROUPS_TRUNCATED' ? '来源分组过多，当前筛选不可用' : '等待新版节点上报已建立连接'}
+        </div>
+      </div>
       <div className="ov-summary ov-teal"><div className="ov-summary-label"><CloudOutlined /> DNS 查询 <span>{dnsOrigin === 'CLIENT' ? '客户端' : dnsOrigin === 'PROXY_RESOLVE' ? '内部解析' : '全部查询'}</span></div><strong>{empty ? '—' : count(data?.dns.total)}<small> 次</small></strong><div className="ov-summary-footer">成功 {empty ? '—' : count(data?.dns.totals.SUCCESS)}<span>失败 {empty ? '—' : count(data?.dns.totals.FAILURE)}</span></div></div>
       <div className="ov-summary ov-amber"><div className="ov-summary-label"><SafetyCertificateOutlined /> 认证尝试 <span>凭据认证</span></div><strong>{empty ? '—' : count(data?.auth.total)}<small> 次</small></strong><div className="ov-summary-footer">成功 {empty ? '—' : count(data?.auth.totals.SUCCESS)}<span>失败 {empty ? '—' : count(data?.auth.totals.FAILURE)}</span></div></div>
     </div>

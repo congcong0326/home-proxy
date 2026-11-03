@@ -315,7 +315,9 @@ make docker-save-offline   # 同 docker-save（控制面已不依赖第三方镜
 
 管理端接收新版四类日志后先进入有界内存队列并返回 ACK；ACK 表示内存接收，管理端异常退出可能丢失尚未落库的数据。每类日志独立累计 1000 条或最早等待 120 秒后在一个事务内批量写入 SQLite 遥测库 `/data/telemetry.db`，页面只显示已经落库的日志。同一条日志（Worker、实例、记录 ID 相同）重发时只保留首次写入。正常关闭会尽力 flush，写入失败保留内存队列重试。
 
-日志默认永久保留；可用 `OBSERVABILITY_SESSION_RETENTION_DAYS`、`OBSERVABILITY_DNS_RETENTION_DAYS`、`OBSERVABILITY_AUTH_RETENTION_DAYS` 分别设置保留天数，控制端每小时分批删除过期记录并回收空间。
+日志默认保留最近 **90 个 UTC 自然日（含当天）**，会话、DNS、认证三类日志跨所有节点**合计最多 1 亿条**。控制端启动 60 秒后首次清理，之后每小时检查：先删除保留期外的整天数据；合计条数仍超限时，从最早的 UTC 日期开始，删除该日期在三张表中的全部日志，逐天重复直到不超过上限（允许少于 1 亿条；如果当天单日就超限，也会清理当天）。两次检查之间新写入的日志可能暂时超限。
+
+可通过 `OBSERVABILITY_RETENTION_DAYS=90`、`OBSERVABILITY_MAX_RECORDS=100000000` 调整全局限制，两者都必须为正数；`OBSERVABILITY_RETENTION_CHECK_MS=3600000`、`OBSERVABILITY_RETENTION_INITIAL_DELAY_MS=60000` 分别控制检查间隔与启动延迟。原有 `OBSERVABILITY_SESSION_RETENTION_DAYS`、`OBSERVABILITY_DNS_RETENTION_DAYS`、`OBSERVABILITY_AUTH_RETENTION_DAYS` 可设置更短的单类保留期，不能延长全局保留期。已有遥测数据库同样生效，无需迁移或重建表。每个删除事务最多 5000 条，释放的页可复用，并尝试增量回收空间；清理日志记录删除量、剩余量和生效的限制。历史流量统计与日志共用事实表，清理后仅统计保留范围内的数据。
 
 可通过 `OBSERVABILITY_FLUSH_BATCH_SIZE`、`OBSERVABILITY_FLUSH_MAX_DELAY_MS` 调整攒批；管理端总容量默认 `OBSERVABILITY_BUFFER_CAPACITY=20000`、字节预算 `OBSERVABILITY_BUFFER_MAX_BYTES=67108864`。容量满整批拒绝，Worker 保留重试。`/api/observability/v1/status` 返回 `acknowledgement=MANAGER_MEMORY_QUEUE` 与 `managerBuffer` 状态。
 

@@ -28,7 +28,7 @@ export interface LiveConnections {
   available: boolean;
   count?: string;
   sampledAt?: string;
-  reason?: 'UNSUPPORTED' | 'STALE' | 'GROUPS_TRUNCATED';
+  reason?: 'UNSUPPORTED' | 'REQUEST_FAILED' | 'GROUPS_TRUNCATED';
 }
 export type HistoricalConcurrency = {
   available: true;

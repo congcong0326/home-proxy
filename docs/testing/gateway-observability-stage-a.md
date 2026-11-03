@@ -87,7 +87,7 @@ OBSERVABILITY_ENABLED=true WORKER_ID=home-01 \
 
 DTO 字段有独立 snake_case 列，空值不转 0；另存原始 JSON、SHA-256、管理端入队 received_at 和可空 analysis_json。时间为 UTC DateTime64(6)，UInt64 字节/耗时/ID/序号在 API 中使用十进制字符串。
 
-默认无新表 TTL。可在首次建表时用 observability.session/dns/event/auth-retention-days 分别指定正整数；既有表不自动改 TTL。E2E 不 DROP/TRUNCATE/清理任何日志表。
+早期 ClickHouse 阶段默认无新表 TTL。当前 SQLite 版本统一默认保留含当天的 90 个 UTC 自然日，三类事实跨所有节点合计最多 1 亿条；已有表同样应用，超限按最早整天跨表分批删除，配置和统计影响见 [README](../../README.md)。保留策略由真实 SQLite 的 `TelemetryRetentionTest` 验证；E2E 脚本本身不 DROP/TRUNCATE/主动清理生产日志表。
 
 ADMIN/SUPER_ADMIN 可查询 /api/observability/v1：
 

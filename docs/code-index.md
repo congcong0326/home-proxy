@@ -116,7 +116,7 @@
 
 1. controller 主动连接 worker 的 `/management/ws`，worker 在 `CONFIG_POLL` 帧中携带配置状态和心跳指标，旧访问／认证日志字段固定为空；V1 日志经独立 `TELEMETRY_BATCH` 上报。
 2. `control-manager` 的 telemetry ingest/writer 将新版三类日志写入遥测 SQLite 的独立表（`INSERT OR IGNORE`，重发只保留首次）；诊断事件已删除，旧 Worker 发来的事件接收后丢弃；认证全部结果均入库；配置与日志均走 WSS。旧 `access_log`/`auth_log` 链路（`/api/logs/**`、`LogService`、`logstore`）已整体删除。
-3. 看板／审计页面查询 `/api/observability/v1`；首页状态面板的用户流量（`UserTrafficStatsController`）与流量报表邮件（`TrafficReportMailHandler`）也读会话表；网关监控读取 WSS 心跳落库的 `worker_status`。保留期由 `TelemetryStore.purgeExpired` 每小时分批删除（`observability.*-retention-days`，默认不删）。
+3. 看板／审计页面查询 `/api/observability/v1`；首页状态面板的用户流量（`UserTrafficStatsController`）与流量报表邮件（`TrafficReportMailHandler`）也读会话表；网关监控读取 WSS 心跳落库的 `worker_status`。`TelemetryStore.purgeExpired` 启动 60 秒后、此后每小时清理，默认保留含当天的 90 个 UTC 自然日、三表跨节点合计最多 1 亿条（`observability.retention-days` / `max-records`）；先按保留期、再按总量从最早一天跨表整天删除，每个事务最多 5000 条。单表 `*-retention-days` 只能缩短保留期；真实 SQLite 边界验证见 `TelemetryRetentionTest`。
 
 认证链路：
 

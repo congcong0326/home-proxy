@@ -277,9 +277,10 @@ class TelemetrySqliteQueryTest {
     @Test
     void retentionDeletesOnlyExpiredFactsOfConfiguredTables() throws Exception {
         db.properties.setDnsRetentionDays(1);
-        db.ingest(WORKER, dns(Instant.now(), "ANSWERED", true));
+        Instant now = T0.plusSeconds(2 * 86400);
+        db.ingest(WORKER, dns(now, "ANSWERED", true));
         assertEquals(4, db.count(TelemetrySchema.DNS));
-        db.store.purgeExpired();
+        db.store.purgeExpired(now);
         assertEquals(1, db.count(TelemetrySchema.DNS));
         assertEquals(4, db.count(TelemetrySchema.SESSIONS));
         assertEquals("2", db.client.query("PRAGMA auto_vacuum").get(0).get("auto_vacuum").toString());

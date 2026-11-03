@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import apiService from '../services/api';
 import { TrafficOverview } from './TrafficOverview';
 import { OverviewData } from '../types/overview';
@@ -26,6 +26,7 @@ beforeEach(() => {
   (apiService.getObservabilityOverview as jest.Mock).mockResolvedValue(data());
   (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: true, count: '2', sampledAt: '2026-10-09T01:00:00Z' });
 });
+afterEach(() => { jest.useRealTimers(); });
 it('defaults to external traffic and shows four distinct charts without substituting legacy data', async () => {
   (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: false, reason: 'UNSUPPORTED' });
   render(<TrafficOverview />);
@@ -43,6 +44,40 @@ it('shows the live count without waiting for the historical overview query', asy
   render(<TrafficOverview />);
   expect(await screen.findByText('7')).toBeInTheDocument();
   expect(apiService.getObservabilityLive).toHaveBeenCalledWith(expect.objectContaining({ workerId: 'home-01', trafficCategory: 'EXTERNAL' }));
+});
+it('shows the latest sample with its full collection date and time', async () => {
+  const sampledAt = '2026-10-09T01:02:03Z';
+  (apiService.getObservabilityLive as jest.Mock).mockResolvedValue({ available: true, count: '17', sampledAt });
+  render(<TrafficOverview />);
+  expect(await screen.findByText('17')).toBeInTheDocument();
+  expect(screen.getByText(`最近采集 ${new Date(sampledAt).toLocaleString('zh-CN', { hour12: false })}`)).toBeInTheDocument();
+  expect(screen.queryByText('节点离线或采样已过期')).not.toBeInTheDocument();
+});
+it('keeps the last count and collection time during refresh failures and recovers on the next poll', async () => {
+  jest.useFakeTimers();
+  (apiService.getObservabilityLive as jest.Mock)
+    .mockResolvedValueOnce({ available: true, count: '17', sampledAt: '2026-10-09T01:02:03Z' })
+    .mockRejectedValueOnce(new Error('network unavailable'))
+    .mockResolvedValue({ available: true, count: '19', sampledAt: '2026-10-09T01:03:04Z' });
+  render(<TrafficOverview />);
+  await screen.findByText('17');
+  await act(async () => { jest.advanceTimersByTime(5000); });
+  expect(screen.getByText('17')).toBeInTheDocument();
+  expect(screen.getByText(/刷新失败，显示上次数据 · 最近采集/)).toHaveTextContent(
+    new Date('2026-10-09T01:02:03Z').toLocaleString('zh-CN', { hour12: false }));
+  await act(async () => { jest.advanceTimersByTime(5000); });
+  expect(screen.getByText('19')).toBeInTheDocument();
+  expect(screen.queryByText(/刷新失败，显示上次数据/)).not.toBeInTheDocument();
+});
+it('does not reuse another node sample when the new node query fails', async () => {
+  (apiService.getObservabilityLive as jest.Mock)
+    .mockResolvedValueOnce({ available: true, count: '17', sampledAt: '2026-10-09T01:02:03Z' })
+    .mockRejectedValue(new Error('network unavailable'));
+  render(<TrafficOverview />);
+  await screen.findByText('17');
+  fireEvent.change(screen.getByLabelText('代理节点'), { target: { value: 'edge-a' } });
+  expect(await screen.findByText('并发数据刷新失败，等待重试')).toBeInTheDocument();
+  expect(screen.queryByText('17')).not.toBeInTheDocument();
 });
 it('plots upload and download independently when their volumes differ substantially', async () => {
   const result = data('1100');

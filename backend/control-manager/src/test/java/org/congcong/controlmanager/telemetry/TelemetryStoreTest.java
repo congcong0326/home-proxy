@@ -253,8 +253,10 @@ class TelemetryStoreTest {
     void retentionDaysMapToTheirOwnTables() {
         properties.setSessionRetentionDays(11);
         properties.setDnsRetentionDays(22);
-        Instant before = Instant.now();
-        store.purgeExpired();
+        when(client.query(startsWith("SELECT SUM(n)"), any(Object[].class)))
+                .thenReturn(List.of(Map.of("total", 0L)));
+        Instant now = Instant.parse("2026-10-31T12:34:56Z");
+        store.purgeExpired(now);
         var cutoffs = new java.util.HashMap<String, Instant>();
         var sql = org.mockito.ArgumentCaptor.forClass(String.class);
         var params = org.mockito.ArgumentCaptor.forClass(Object[].class);
@@ -266,10 +268,10 @@ class TelemetryStoreTest {
                         (Instant) params.getAllValues().get(i)[0]);
             }
         }
-        // Authentication has no retention configured, so its table is never purged.
-        assertEquals(java.util.Set.of("proxy_session_log_v1", "dns_query_log_v1"), cutoffs.keySet());
-        assertEquals(11, java.time.Duration.between(cutoffs.get("proxy_session_log_v1"), before).plusMinutes(1).toDays());
-        assertEquals(22, java.time.Duration.between(cutoffs.get("dns_query_log_v1"), before).plusMinutes(1).toDays());
+        assertEquals(java.util.Set.of("proxy_session_log_v1", "dns_query_log_v1", "credential_auth_log_v1"), cutoffs.keySet());
+        assertEquals(Instant.parse("2026-10-21T00:00:00Z"), cutoffs.get("proxy_session_log_v1"));
+        assertEquals(Instant.parse("2026-10-10T00:00:00Z"), cutoffs.get("dns_query_log_v1"));
+        assertEquals(Instant.parse("2026-08-03T00:00:00Z"), cutoffs.get("credential_auth_log_v1"));
     }
 
     private TelemetryBatchV1 batch() {

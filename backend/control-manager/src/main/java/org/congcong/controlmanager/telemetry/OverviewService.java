@@ -178,17 +178,14 @@ public class OverviewService {
         return ConcurrencyTimeline.fromBuckets(request.getFrom(), request.getTo(), bucket, rows);
     }
 
-    /** Reads the worker heartbeat (same source as the gateway monitor), never the telemetry store. */
+    /** Returns the latest received heartbeat sample, independent of its age and worker clock skew. */
     public Map<String, Object> live(OverviewQuery request) {
         var status = workers.findById(request.getWorkerId()).orElse(null);
         if (status == null || status.getMetricsJson() == null) return Map.of("available", false, "reason", "UNSUPPORTED");
         try {
             var metrics = mapper.readValue(status.getMetricsJson(), WorkerMetricsDTO.class);
             var sample = metrics.getEstablishedConnectionsV1();
-            if (sample == null) return Map.of("available", false, "reason", "UNSUPPORTED");
-            Instant now = Instant.now();
-            if (sample.sampledAt() == null || sample.sampledAt().isBefore(now.minusSeconds(15))
-                    || sample.sampledAt().isAfter(now.plusSeconds(10))) return Map.of("available", false, "reason", "STALE");
+            if (sample == null || sample.sampledAt() == null) return Map.of("available", false, "reason", "UNSUPPORTED");
             boolean filtered = hasText(request.getUsername()) || hasText(request.getClientIp());
             if (filtered && sample.groupsTruncated()) return Map.of("available", false, "reason", "GROUPS_TRUNCATED");
             long count = filtered ? sample.groups().stream()

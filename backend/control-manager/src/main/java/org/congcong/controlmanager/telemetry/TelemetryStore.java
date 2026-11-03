@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
@@ -96,6 +97,9 @@ public class TelemetryStore implements ApplicationRunner {
 
     private synchronized void initialize() {
         if (ready) return;
+        if (properties.getRetentionDays() <= 0 || properties.getMaxRecords() <= 0) {
+            throw new IllegalArgumentException("Telemetry retention days and max records must be positive");
+        }
         for (TelemetrySchema schema : TelemetrySchema.values()) {
             Integer days = schema.retentionDays(properties);
             if (days != null && days <= 0) throw new IllegalArgumentException("Retention must be positive");
@@ -114,28 +118,69 @@ public class TelemetryStore implements ApplicationRunner {
         ready = true;
     }
 
-    /** Retention replaces the ClickHouse TTL: bounded deletes keep each write transaction short. */
+    /** UTC calendar-day retention across all workers; bounded deletes keep write transactions short. */
     @Scheduled(fixedDelayString = "${observability.retention-check-ms:3600000}", initialDelayString = "${observability.retention-initial-delay-ms:60000}")
     public void purgeExpired() {
+        purgeExpired(Instant.now());
+    }
+
+    void purgeExpired(Instant now) {
         if (!properties.isIngestEnabled() && !properties.isQueryEnabled()) return;
         try {
             initialize();
-            boolean deleted = false;
+            long deleted = 0;
             for (TelemetrySchema schema : TelemetrySchema.values()) {
-                Integer days = schema.retentionDays(properties);
-                if (days == null) continue;
-                Instant cutoff = Instant.now().minus(java.time.Duration.ofDays(days));
-                int removed;
-                do {
-                    removed = client.execute("DELETE FROM " + schema.table + " WHERE rowid IN (SELECT rowid FROM "
-                            + schema.table + " WHERE occurred_at < ? LIMIT " + RETENTION_DELETE_BATCH + ")", cutoff);
-                    deleted |= removed > 0;
-                } while (removed >= RETENTION_DELETE_BATCH);
+                Integer override = schema.retentionDays(properties);
+                int days = override == null ? properties.getRetentionDays()
+                        : Math.min(override, properties.getRetentionDays());
+                Instant cutoff = now.truncatedTo(ChronoUnit.DAYS).minus(days - 1L, ChronoUnit.DAYS);
+                deleted += deleteBefore(schema, cutoff);
             }
-            if (deleted) client.execute("PRAGMA incremental_vacuum");
+            long remaining = totalRecords();
+            while (remaining > properties.getMaxRecords()) {
+                Instant oldest = null;
+                for (TelemetrySchema schema : TelemetrySchema.values()) {
+                    Instant first = TelemetryJdbcClient.instant(client.query("SELECT MIN(occurred_at) AS first FROM "
+                            + schema.table).get(0).get("first"));
+                    if (first != null && (oldest == null || first.isBefore(oldest))) oldest = first;
+                }
+                if (oldest == null) break;
+                Instant cutoff = oldest.truncatedTo(ChronoUnit.DAYS).plus(1, ChronoUnit.DAYS);
+                long removed = 0;
+                // Delete the same oldest calendar day from every table, even if the limit is met mid-day.
+                for (TelemetrySchema schema : TelemetrySchema.values()) removed += deleteBefore(schema, cutoff);
+                if (removed == 0) throw new IllegalStateException("Telemetry retention made no progress");
+                deleted += removed;
+                remaining -= removed;
+                // Recheck concurrent writes once the estimated total reaches the limit.
+                if (remaining <= properties.getMaxRecords()) remaining = totalRecords();
+            }
+            if (deleted > 0) {
+                client.execute("PRAGMA incremental_vacuum(1000)");
+            }
+            log.info("Telemetry retention complete: removed={}, remaining={}, retentionDays={}, maxRecords={} (UTC days)",
+                    deleted, remaining, properties.getRetentionDays(), properties.getMaxRecords());
         } catch (RuntimeException e) {
             log.warn("Telemetry retention cleanup failed: {}", e.toString());
         }
+    }
+
+    private long deleteBefore(TelemetrySchema schema, Instant cutoff) {
+        long total = 0;
+        int removed;
+        do {
+            removed = client.execute("DELETE FROM " + schema.table + " WHERE rowid IN (SELECT rowid FROM "
+                    + schema.table + " WHERE occurred_at < ? ORDER BY occurred_at LIMIT " + RETENTION_DELETE_BATCH + ")", cutoff);
+            total += removed;
+        } while (removed >= RETENTION_DELETE_BATCH);
+        return total;
+    }
+
+    private long totalRecords() {
+        String counts = Arrays.stream(TelemetrySchema.values())
+                .map(schema -> "SELECT COUNT(*) AS n FROM " + schema.table)
+                .collect(java.util.stream.Collectors.joining(" UNION ALL "));
+        return ((Number) client.query("SELECT SUM(n) AS total FROM (" + counts + ")").get(0).get("total")).longValue();
     }
 
     /** ACK means the complete batch is frozen in manager memory, not yet stored in the telemetry database. */
